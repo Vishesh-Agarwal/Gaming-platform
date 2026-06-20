@@ -1,6 +1,7 @@
 // Login / signup screen.
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { APP_NAME } from '../config.js';
 
 export default function Login() {
   const { login, signup } = useAuth();
@@ -27,7 +28,7 @@ export default function Login() {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
-        <h1>🎮 Game Platform</h1>
+        <h1>🎮 {APP_NAME}</h1>
         <p className="subtitle">
           {mode === 'login' ? 'Welcome back' : 'Create your account'}
         </p>

@@ -1,7 +1,15 @@
-// Chat conversation with the selected friend.
+// Chat conversation with the selected friend. Header has a Back button that
+// returns to the friends list.
 import { useEffect, useRef, useState } from 'react';
 
-export default function ChatPanel({ friend, messages, currentUserId, onSend }) {
+export default function ChatPanel({
+  friend,
+  online,
+  messages,
+  currentUserId,
+  onSend,
+  onBack,
+}) {
   const [text, setText] = useState('');
   const endRef = useRef(null);
 
@@ -27,7 +35,15 @@ export default function ChatPanel({ friend, messages, currentUserId, onSend }) {
 
   return (
     <div className="chat-panel">
-      <header className="chat-header">Chat with {friend.username}</header>
+      <header className="chat-header">
+        {onBack && (
+          <button className="icon-btn back" onClick={onBack} aria-label="Back to friends">
+            ‹
+          </button>
+        )}
+        <span className={`dot ${online ? 'online' : 'offline'}`} />
+        <span className="chat-title">{friend.username}</span>
+      </header>
       <div className="chat-messages">
         {messages.length === 0 && <p className="muted">No messages yet. Say hi!</p>}
         {messages.map((m) => (

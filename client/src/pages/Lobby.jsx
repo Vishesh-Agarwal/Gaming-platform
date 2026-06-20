@@ -1,11 +1,18 @@
 // Main page: top bar, games grid (center), narrow chat (right).
 // Clicking a game opens the invite/add-friend modal.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { availableGames } from '../games/registry.js';
+import { APP_NAME } from '../config.js';
 import GameCard from '../components/GameCard.jsx';
 import InviteModal from '../components/InviteModal.jsx';
 import FriendsChat from '../components/FriendsChat.jsx';
 import Modal from '../components/Modal.jsx';
+
+// Chat panel width: default bumped +10% again (352 -> 387), user-resizable + persisted.
+const CHAT_WIDTH_KEY = 'gp-chat-width-v2';
+const DEFAULT_CHAT_WIDTH = 387;
+const MIN_CHAT_WIDTH = 300;
+const MAX_CHAT_WIDTH = 680;
 
 export default function Lobby({
   friends,
@@ -23,6 +30,7 @@ export default function Lobby({
   onAcceptInvite,
   onDeclineInvite,
   onSelectFriend,
+  onBack,
   onSendChat,
   onLogout,
 }) {
@@ -30,6 +38,31 @@ export default function Lobby({
   const [showAdd, setShowAdd] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [addName, setAddName] = useState('');
+
+  const [chatWidth, setChatWidth] = useState(() => {
+    const saved = Number(localStorage.getItem(CHAT_WIDTH_KEY));
+    return saved >= MIN_CHAT_WIDTH && saved <= MAX_CHAT_WIDTH ? saved : DEFAULT_CHAT_WIDTH;
+  });
+  useEffect(() => {
+    localStorage.setItem(CHAT_WIDTH_KEY, String(chatWidth));
+  }, [chatWidth]);
+
+  // Drag the divider to resize the chat panel (it's anchored to the right edge).
+  const startResize = (e) => {
+    e.preventDefault();
+    const onMove = (ev) => {
+      const next = window.innerWidth - ev.clientX;
+      setChatWidth(Math.min(MAX_CHAT_WIDTH, Math.max(MIN_CHAT_WIDTH, next)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const submitAdd = (e) => {
     e.preventDefault();
@@ -62,7 +95,7 @@ export default function Lobby({
       )}
 
       <header className="topbar">
-        <span className="brand">🎮 Game Platform</span>
+        <span className="brand">🎮 {APP_NAME}</span>
         <span className="spacer" />
         <button className="ghost" onClick={() => setShowAdd(true)}>
           + Add friend
@@ -79,7 +112,7 @@ export default function Lobby({
 
       {notice && <div className="notice">{notice}</div>}
 
-      <div className="app-body">
+      <div className="app-body" style={{ '--chat-w': `${chatWidth}px` }}>
         <main className="games-area">
           <h2>Games</h2>
           <p className="muted">Pick a game, then invite a friend to play.</p>
@@ -90,6 +123,14 @@ export default function Lobby({
           </div>
         </main>
 
+        <div
+          className="resizer"
+          onMouseDown={startResize}
+          title="Drag to resize chat"
+          role="separator"
+          aria-orientation="vertical"
+        />
+
         <aside className="chat-side">
           <FriendsChat
             friends={friends}
@@ -97,6 +138,7 @@ export default function Lobby({
             unread={unread}
             selectedFriendId={selectedFriendId}
             onSelectFriend={onSelectFriend}
+            onBack={onBack}
             conversations={conversations}
             currentUser={currentUser}
             onSendChat={onSendChat}

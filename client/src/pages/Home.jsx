@@ -126,6 +126,7 @@ export default function Home() {
       flash(e.message);
     }
   };
+  const onBackToFriends = () => setSelectedFriendId(null);
   const onSendChat = async (body) => {
     const to = selectedFriendId;
     const res = await emitAck('chat:send', { to, body });
@@ -195,6 +196,7 @@ export default function Home() {
       onAcceptInvite={onAcceptInvite}
       onDeclineInvite={onDeclineInvite}
       onSelectFriend={onSelectFriend}
+      onBack={onBackToFriends}
       onSendChat={onSendChat}
       onLogout={onLogout}
     />

@@ -1,7 +1,9 @@
-# 🎮 Game Platform
+# 🎮 Playverse
 
 An extensible multiplayer game platform. Sign up, add friends, chat, and invite each
 other to games played live across devices. First game: **Tic-Tac-Toe**.
+
+The product name lives in one place — `client/src/config.js` (`APP_NAME`).
 
 - **Backend:** Node + Express + Socket.IO + SQLite (`better-sqlite3`)
 - **Frontend:** React + Vite + Socket.IO client

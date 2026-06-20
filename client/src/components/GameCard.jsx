@@ -9,8 +9,12 @@ export default function GameCard({ game, onClick }) {
     >
       <div className="game-thumb">
         {Thumb ? <Thumb /> : <div className="game-thumb-fallback">🎮</div>}
+        <span className="play-cta">▶ Play</span>
       </div>
-      <div className="game-name">{game.name}</div>
+      <div className="game-name">
+        <span>{game.name}</span>
+        <span className="players-tag">1v1</span>
+      </div>
     </button>
   );
 }

@@ -6,7 +6,7 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 
 import authRouter, { socketAuth } from './auth.js';
-import friendsRouter from './friends.js';
+import createFriendsRouter from './friends.js';
 import chatRouter from './chat.js';
 import { listGames } from './games/registry.js';
 import { initSockets } from './socketHandlers.js';
@@ -20,15 +20,16 @@ const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN }));
 app.use(express.json());
 
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
-app.get('/api/games', (_req, res) => res.json({ games: listGames() }));
-app.use('/api/auth', authRouter);
-app.use('/api/friends', friendsRouter);
-app.use('/api/chat', chatRouter);
-
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: CLIENT_ORIGIN } });
 io.use(socketAuth);
+
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/games', (_req, res) => res.json({ games: listGames() }));
+app.use('/api/auth', authRouter);
+app.use('/api/friends', createFriendsRouter(io));
+app.use('/api/chat', chatRouter);
+
 initSockets(io);
 
 server.listen(PORT, () => {

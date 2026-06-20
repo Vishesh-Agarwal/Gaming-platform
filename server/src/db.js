@@ -89,6 +89,10 @@ export function createFriendRequest(requesterId, addresseeId) {
   return db.prepare('SELECT * FROM friendships WHERE id = ?').get(info.lastInsertRowid);
 }
 
+export function getFriendshipById(id) {
+  return db.prepare('SELECT * FROM friendships WHERE id = ?').get(id);
+}
+
 export function acceptFriendRequest(requestId, addresseeId) {
   const info = db
     .prepare(

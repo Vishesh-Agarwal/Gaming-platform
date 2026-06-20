@@ -29,6 +29,9 @@ export function initSockets(io) {
     if (firstConnection) broadcastPresence(io, me.id, 'online');
     socket.emit('presence:init', { online: onlineFriendIds(me.id) });
 
+    // Client can re-pull online friends (e.g. right after a new friendship forms).
+    socket.on('presence:sync', (_payload, ack) => ack?.(onlineFriendIds(me.id)));
+
     // ---- Chat ----
     socket.on('chat:send', (payload, ack) => {
       const to = Number(payload?.to);

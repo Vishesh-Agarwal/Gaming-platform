@@ -1,8 +1,11 @@
-// The hub: friends list (with presence + invite), add-friend, pending requests,
-// incoming game invites, and the chat panel.
+// Main page: top bar, games grid (center), narrow chat (right).
+// Clicking a game opens the invite/add-friend modal.
 import { useState } from 'react';
-import ChatPanel from '../components/ChatPanel.jsx';
 import { availableGames } from '../games/registry.js';
+import GameCard from '../components/GameCard.jsx';
+import InviteModal from '../components/InviteModal.jsx';
+import FriendsChat from '../components/FriendsChat.jsx';
+import Modal from '../components/Modal.jsx';
 
 export default function Lobby({
   friends,
@@ -23,112 +26,120 @@ export default function Lobby({
   onSendChat,
   onLogout,
 }) {
+  const [pickedGame, setPickedGame] = useState(null); // game chosen to invite into
+  const [showAdd, setShowAdd] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
   const [addName, setAddName] = useState('');
-  const selectedFriend = friends.find((f) => f.id === selectedFriendId) || null;
-  const defaultGame = availableGames[0];
 
   const submitAdd = (e) => {
     e.preventDefault();
-    const name = addName.trim();
-    if (!name) return;
-    onAddFriend(name);
+    const n = addName.trim();
+    if (!n) return;
+    onAddFriend(n);
     setAddName('');
+    setShowAdd(false);
   };
 
   return (
-    <div className="lobby">
-      <aside className="sidebar">
-        <div className="me">
-          <span>
-            Signed in as <b>{currentUser.username}</b>
-          </span>
-          <button className="link" onClick={onLogout}>
-            Log out
-          </button>
-        </div>
-
-        <form className="add-friend" onSubmit={submitAdd}>
-          <input
-            value={addName}
-            onChange={(e) => setAddName(e.target.value)}
-            placeholder="Add friend by username"
-          />
-          <button type="submit">Add</button>
-        </form>
-
-        {requests.length > 0 && (
-          <section className="requests">
-            <h3>Friend requests</h3>
-            {requests.map((r) => (
-              <div key={r.requestId} className="request-row">
-                <span>{r.fromUsername}</span>
-                <button onClick={() => onAccept(r.requestId)}>Accept</button>
-              </div>
-            ))}
-          </section>
-        )}
-
-        <section className="friends">
-          <h3>Friends</h3>
-          {friends.length === 0 && <p className="muted">No friends yet.</p>}
-          {friends.map((f) => {
-            const online = onlineIds.has(f.id);
-            const count = unread[f.id] || 0;
-            return (
-              <div
-                key={f.id}
-                className={`friend-row ${f.id === selectedFriendId ? 'active' : ''}`}
-                onClick={() => onSelectFriend(f.id)}
-              >
-                <span className={`dot ${online ? 'online' : 'offline'}`} />
-                <span className="friend-name">{f.username}</span>
-                {count > 0 && <span className="badge">{count}</span>}
-                <button
-                  className="invite-btn"
-                  disabled={!online}
-                  title={online ? 'Invite to play' : 'Offline'}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onInvite(f.id, defaultGame.id);
-                  }}
-                >
-                  Play
+    <div className="app">
+      {/* Incoming game invites — float on top, hard to miss */}
+      {invites.length > 0 && (
+        <div className="invite-banner">
+          {invites.map((inv) => (
+            <div key={inv.inviteId} className="invite-card">
+              <span>
+                <b>{inv.from.username}</b> invited you to <b>{inv.gameName}</b>
+              </span>
+              <div className="invite-actions">
+                <button onClick={() => onAcceptInvite(inv.inviteId)}>Accept</button>
+                <button className="ghost" onClick={() => onDeclineInvite(inv.inviteId)}>
+                  Decline
                 </button>
               </div>
-            );
-          })}
-        </section>
-      </aside>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <main className="main">
-        {notice && <div className="notice">{notice}</div>}
+      <header className="topbar">
+        <span className="brand">🎮 Game Platform</span>
+        <span className="spacer" />
+        <button className="ghost" onClick={() => setShowAdd(true)}>
+          + Add friend
+        </button>
+        <button className="ghost requests-btn" onClick={() => setShowRequests(true)}>
+          Requests
+          {requests.length > 0 && <span className="badge">{requests.length}</span>}
+        </button>
+        <span className="username">{currentUser.username}</span>
+        <button className="link" onClick={onLogout}>
+          Log out
+        </button>
+      </header>
 
-        {invites.length > 0 && (
-          <div className="invites">
-            {invites.map((inv) => (
-              <div key={inv.inviteId} className="invite-card">
-                <span>
-                  <b>{inv.from.username}</b> invited you to{' '}
-                  <b>{inv.gameName}</b>
-                </span>
-                <div className="invite-actions">
-                  <button onClick={() => onAcceptInvite(inv.inviteId)}>Accept</button>
-                  <button className="ghost" onClick={() => onDeclineInvite(inv.inviteId)}>
-                    Decline
-                  </button>
-                </div>
-              </div>
+      {notice && <div className="notice">{notice}</div>}
+
+      <div className="app-body">
+        <main className="games-area">
+          <h2>Games</h2>
+          <p className="muted">Pick a game, then invite a friend to play.</p>
+          <div className="games-grid">
+            {availableGames.map((g) => (
+              <GameCard key={g.id} game={g} onClick={setPickedGame} />
             ))}
           </div>
-        )}
+        </main>
 
-        <ChatPanel
-          friend={selectedFriend}
-          messages={conversations[selectedFriendId] || []}
-          currentUserId={currentUser.id}
-          onSend={onSendChat}
+        <aside className="chat-side">
+          <FriendsChat
+            friends={friends}
+            onlineIds={onlineIds}
+            unread={unread}
+            selectedFriendId={selectedFriendId}
+            onSelectFriend={onSelectFriend}
+            conversations={conversations}
+            currentUser={currentUser}
+            onSendChat={onSendChat}
+          />
+        </aside>
+      </div>
+
+      {pickedGame && (
+        <InviteModal
+          game={pickedGame}
+          friends={friends}
+          onlineIds={onlineIds}
+          onInvite={onInvite}
+          onAddFriend={onAddFriend}
+          onClose={() => setPickedGame(null)}
         />
-      </main>
+      )}
+
+      {showAdd && (
+        <Modal title="Add a friend" onClose={() => setShowAdd(false)}>
+          <form className="add-friend modal-add" onSubmit={submitAdd}>
+            <input
+              autoFocus
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+              placeholder="Friend's username"
+            />
+            <button type="submit">Send request</button>
+          </form>
+        </Modal>
+      )}
+
+      {showRequests && (
+        <Modal title="Friend requests" onClose={() => setShowRequests(false)}>
+          {requests.length === 0 && <p className="muted">No pending requests.</p>}
+          {requests.map((r) => (
+            <div key={r.requestId} className="invite-row">
+              <span className="friend-name">{r.fromUsername}</span>
+              <button onClick={() => onAccept(r.requestId)}>Accept</button>
+            </div>
+          ))}
+        </Modal>
+      )}
     </div>
   );
 }

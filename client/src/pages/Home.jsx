@@ -40,6 +40,17 @@ export default function Home() {
     setRequests(r.requests);
   };
 
+  const syncPresence = async () => {
+    const ids = await emitAck('presence:sync', {});
+    if (Array.isArray(ids)) setOnlineIds(new Set(ids));
+  };
+
+  // Reload friends/requests and refresh who's online (after social changes).
+  const refreshSocial = async () => {
+    await loadFriends();
+    await syncPresence();
+  };
+
   // Connect socket + wire listeners once per session.
   useEffect(() => {
     if (!token) return;
@@ -64,6 +75,10 @@ export default function Home() {
         setUnread((prev) => ({ ...prev, [fid]: (prev[fid] || 0) + 1 }));
       }
     });
+
+    // Friend request arrived / was accepted — refresh lists + presence live.
+    socket.on('friend:request', () => refreshSocial());
+    socket.on('friend:accepted', () => refreshSocial());
 
     socket.on('game:invited', (inv) =>
       setInvites((prev) => [...prev.filter((i) => i.inviteId !== inv.inviteId), inv])
@@ -94,7 +109,7 @@ export default function Home() {
   const onAccept = async (requestId) => {
     try {
       await api.acceptFriendRequest(token, requestId);
-      await loadFriends();
+      await refreshSocial();
     } catch (e) {
       flash(e.message);
     }

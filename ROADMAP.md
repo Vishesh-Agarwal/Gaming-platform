@@ -108,3 +108,30 @@ Today it's **LAN-only** (server on a private IP). To play across the internet:
 5. Persistence/reconnection hardening before a "real" public launch.
 
 None of this is wasted rework — it's the evolution the registry was built to absorb.
+
+---
+
+## Appendix: Game distribution models (why Playverse is browser-based)
+
+Key fact: **any game your device renders must have its code/assets on the device to run.**
+The differences are *how much* you download, *where it runs*, and *whether it persists*.
+"Online game" can mean two very different things:
+
+| Model | What you download | Where it runs | Notes |
+|---|---|---|---|
+| **Installed** (Steam / console / mobile app) | Full **client** (never the server) | Your device | Permanent install; updates as patches/deltas. Multiplayer logic stays on company servers. |
+| **Browser** (← Playverse) | Small client code → browser **cache** | Your device, in the browser sandbox | Feels instant, but it *is* downloading. No install; cache-temporary. Server rules never download. |
+| **Cloud streaming** (GeForce NOW, Xbox Cloud) | **Nothing** of the game | Remote server | Streams video frames; sends inputs back. True "no download," but needs low-latency internet + a server GPU per player. |
+
+**"Play without downloading anything"** in the strict sense = **cloud streaming** only: the
+game runs remotely and you receive a video stream. Browser games still download code — it's
+just small, automatic, and discarded.
+
+**Where Playverse sits:** the **browser model**. Players download a lightweight client (made
+lighter per-game by [#1 code-splitting](#1-per-game-code-splitting-lazy-loading--do-before-the-2nd3rd-game)),
+it runs in their browser, and the **server stays authoritative** (players never receive
+server-side game rules). This is the right choice for board/2D/casual games: instant,
+cross-platform, no installs.
+
+**When cloud streaming would matter:** only if hosting genuinely heavy 3D games without
+players downloading them — huge infrastructure cost, unnecessary for anything on this roadmap.

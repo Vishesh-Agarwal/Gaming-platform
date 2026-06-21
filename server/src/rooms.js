@@ -117,6 +117,32 @@ export function makeMove(roomId, userId, move) {
   return out;
 }
 
+// ---- Realtime games (e.g. Ghost Rider) ----
+
+// The other player's id in a room, for relaying position updates.
+export function getOpponentId(roomId, userId) {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  const opp = room.players.find((p) => p.user.id !== userId);
+  return opp ? opp.user.id : null;
+}
+
+// First player to report finishing wins. Returns { room, players } or { error } or
+// { already: true } if the race was already decided.
+export function recordFinish(roomId, userId) {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Game not found.' };
+  if (room.status !== 'playing') return { already: true };
+  const player = room.players.find((p) => p.user.id === userId);
+  if (!player) return { error: 'You are not in this game.' };
+
+  room.status = 'over';
+  room.result = { over: true, winner: player.index, draw: false };
+  const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id) };
+  endRoom(room);
+  return out;
+}
+
 // A user left/disconnected: opponent wins by forfeit. Returns affected info or null.
 export function forfeit(userId) {
   const roomId = userRooms.get(userId);

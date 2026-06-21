@@ -11,6 +11,7 @@
 //   applyMove(state, playerIndex, move)        -> { state, error }
 //   getResult(state)                           -> { over, winner|null, draw }
 import tictactoe from './tictactoe.js';
+import ghostrider from './ghostrider.js';
 
 const games = new Map();
 
@@ -33,3 +34,4 @@ export function listGames() {
 }
 
 register(tictactoe);
+register(ghostrider);

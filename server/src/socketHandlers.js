@@ -17,6 +17,8 @@ import {
   getInvite,
   makeMove,
   forfeit,
+  getOpponentId,
+  recordFinish,
 } from './rooms.js';
 
 export function initSockets(io) {
@@ -105,6 +107,24 @@ export function initSockets(io) {
         for (const pid of result.players) {
           emitToUser(io, pid, 'game:over', { room: result.room });
         }
+      }
+      ack?.({ ok: true });
+    });
+
+    // ---- Realtime gameplay (Ghost Rider) ----
+    // Relay this player's car position to the opponent (no server-side physics).
+    socket.on('game:rt:state', (payload) => {
+      const oppId = getOpponentId(payload?.roomId, me.id);
+      if (oppId) emitToUser(io, oppId, 'game:rt:ghost', { from: me.id, s: payload?.s });
+    });
+
+    // First to report finishing wins; reuse the normal game:over flow.
+    socket.on('game:rt:finish', (payload, ack) => {
+      const res = recordFinish(payload?.roomId, me.id);
+      if (res.error) return ack?.({ error: res.error });
+      if (res.already) return ack?.({ ok: true, late: true });
+      for (const pid of res.players) {
+        emitToUser(io, pid, 'game:over', { room: res.room });
       }
       ack?.({ ok: true });
     });

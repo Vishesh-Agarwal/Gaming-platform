@@ -2,6 +2,7 @@
 // build its server module (rules) and a React component (+ a Thumbnail export),
 // then register it here with a name, accent colour, and thumbnail.
 import TicTacToe, { Thumbnail as TicTacToeThumb } from './TicTacToe.jsx';
+import GhostRider, { Thumbnail as GhostRiderThumb } from './GhostRider.jsx';
 
 const registry = {
   tictactoe: {
@@ -9,6 +10,12 @@ const registry = {
     Component: TicTacToe,
     thumbnail: TicTacToeThumb,
     accent: '#5b8cff',
+  },
+  ghostrider: {
+    name: 'Ghost Rider',
+    Component: GhostRider,
+    thumbnail: GhostRiderThumb,
+    accent: '#ff7a3c',
   },
 };
 

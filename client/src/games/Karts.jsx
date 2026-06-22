@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { getSocket } from '../socket.js';
+import { createScene } from './karts/scene.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -45,55 +46,13 @@ export default function Karts({ room, youAreIndex }) {
     const socket = getSocket();
     const mount = mountRef.current;
     const cfg = room.state || {};
-    const arena = cfg.arena || { w: 80, d: 80 };
     const colors = cfg.colors || COLORS;
     const playerCount = room.players.length;
     const names = room.players.map((p) => p.username);
     const roomId = room.id;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    mount.appendChild(renderer.domElement);
-    Object.assign(renderer.domElement.style, { width: '100%', height: '100%', display: 'block' });
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#0a0813');
-    scene.fog = new THREE.Fog('#0a0813', 70, 170);
-    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
-    camera.position.set(0, 16, 28);
-
-    scene.add(new THREE.HemisphereLight('#9fb4ff', '#1a1626', 0.95));
-    const dir = new THREE.DirectionalLight('#ffffff', 1.1);
-    dir.position.set(30, 50, 20);
-    dir.castShadow = true;
-    dir.shadow.mapSize.set(1024, 1024);
-    Object.assign(dir.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60 });
-    scene.add(dir);
-
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(arena.w, arena.d),
-      new THREE.MeshStandardMaterial({ color: '#15182a', roughness: 0.95 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-    const grid = new THREE.GridHelper(arena.w, arena.w / 4, '#3a3460', '#241f3d');
-    grid.position.y = 0.02;
-    scene.add(grid);
-
-    const wallMat = new THREE.MeshStandardMaterial({ color: '#2a2450', emissive: '#1b1640', roughness: 0.6 });
-    const wallH = 3, tk = 1.5;
-    for (const [w, h, dd, x, y, z] of [
-      [arena.w + tk, wallH, tk, 0, wallH / 2, -arena.d / 2],
-      [arena.w + tk, wallH, tk, 0, wallH / 2, arena.d / 2],
-      [tk, wallH, arena.d + tk, -arena.w / 2, wallH / 2, 0],
-      [tk, wallH, arena.d + tk, arena.w / 2, wallH / 2, 0],
-    ]) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), wallMat);
-      wall.position.set(x, y, z);
-      scene.add(wall);
-    }
+    const arena = cfg.arena || { w: 80, d: 80 };
+    const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, arena);
 
     // karts (with a shield bubble child)
     const makeKart = (color) => {
@@ -220,9 +179,7 @@ export default function Karts({ room, youAreIndex }) {
 
     const resize = () => {
       const r = mount.getBoundingClientRect();
-      if (!r.width || !r.height) return;
-      renderer.setSize(r.width, r.height, false);
-      camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+      resizeView(r.width, r.height);
     };
     resize();
     window.addEventListener('resize', resize);
@@ -291,7 +248,7 @@ export default function Karts({ room, youAreIndex }) {
         if (b.t >= 1) { scene.remove(b.m); b.m.geometry.dispose(); b.m.material.dispose(); blasts.splice(i, 1); }
       }
 
-      renderer.render(scene, camera);
+      render();
     };
     raf = requestAnimationFrame(loop);
 
@@ -304,12 +261,7 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
       socket?.off('game:rt:snap', onSnap);
-      renderer.dispose();
-      if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
-      scene.traverse((o) => {
-        if (o.geometry) o.geometry.dispose();
-        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
-      });
+      disposeView();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

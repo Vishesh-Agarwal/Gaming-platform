@@ -517,7 +517,7 @@ export default function GhostRider({ room }) {
 
       if (car.crashed) {
         ctx.fillStyle = '#ff5d6c';
-        ctx.font = '800 46px Orbitron, sans-serif';
+        ctx.font = '800 46px "Chakra Petch", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('CRASHED!', W / 2, H / 2);
         ctx.font = '600 16px Inter, sans-serif';
@@ -531,7 +531,7 @@ export default function GhostRider({ room }) {
         ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#fff';
-        ctx.font = '800 80px Orbitron, sans-serif';
+        ctx.font = '800 80px "Chakra Petch", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(String(Math.ceil(remaining / 1000)), W / 2, H / 2);
         ctx.font = '600 18px Inter, sans-serif';
@@ -539,7 +539,7 @@ export default function GhostRider({ room }) {
         ctx.textAlign = 'left';
       } else if (remaining > -800) {
         ctx.fillStyle = '#22e0ff';
-        ctx.font = '800 64px Orbitron, sans-serif';
+        ctx.font = '800 64px "Chakra Petch", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('GO!', W / 2, H / 2);
         ctx.textAlign = 'left';

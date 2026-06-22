@@ -13,6 +13,19 @@ const ADJ = {
   6: [3, 7, 4], 7: [6, 8, 4], 8: [5, 7, 4],
 };
 
+const LINES = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6],
+];
+const winningCells = (board) => {
+  for (const ln of LINES) {
+    const [a, b, c] = ln;
+    if (board[a] !== null && board[a] === board[b] && board[a] === board[c]) return ln;
+  }
+  return [];
+};
+
 // Card artwork for the lobby games grid.
 export function Thumbnail() {
   return (
@@ -58,6 +71,7 @@ export default function TicTacToe({ room, youAreIndex, onMove }) {
   useEffect(() => setSelected(null), [room.state]); // clear on any state update
 
   const targets = selected != null ? ADJ[selected].filter((i) => board[i] === null) : [];
+  const winCells = room.status === 'over' ? winningCells(board) : [];
 
   const handleClick = (i) => {
     if (!myTurn) return;
@@ -86,7 +100,8 @@ export default function TicTacToe({ room, youAreIndex, onMove }) {
 
   const cellClass = (v, i) => {
     const cls = ['ttt-cell'];
-    if (v !== null) cls.push('filled');
+    if (v !== null) cls.push('filled', v === 0 ? 'mark-x' : 'mark-o');
+    if (winCells.includes(i)) cls.push('win');
     if (!movePhase && myTurn && v === null && !(mode === 'shifting' && myCount >= PIECES_PER_PLAYER)) {
       cls.push('playable');
     }
@@ -124,7 +139,9 @@ export default function TicTacToe({ room, youAreIndex, onMove }) {
             onClick={() => handleClick(i)}
             disabled={cellDisabled(v, i)}
           >
-            {v === null ? (targets.includes(i) ? '•' : '') : SYMBOLS[v]}
+            {v === null
+              ? (targets.includes(i) ? <span className="ttt-dot" /> : null)
+              : <span className="ttt-mark" key={`${i}-${v}`}>{SYMBOLS[v]}</span>}
           </button>
         ))}
       </div>

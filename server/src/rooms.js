@@ -103,6 +103,11 @@ export function acceptInvite(inviteId, acceptingUserId) {
     status: 'playing',
     result: null,
   };
+  // server-authoritative realtime games carry a live sim + per-player input buffer
+  if (typeof game.createSim === 'function') {
+    room.sim = game.createSim(room.players);
+    room.inputs = {};
+  }
   rooms.set(room.id, room);
   for (const p of room.players) userRooms.set(p.user.id, room.id);
   return { room: publicRoom(room) };
@@ -115,6 +120,36 @@ export function getRoom(roomId) {
 
 export function getRoomIdForUser(userId) {
   return userRooms.get(userId);
+}
+
+// ---- Server-authoritative realtime (e.g. Smash Karts) ----
+
+export function isRealtimeRoom(roomId) {
+  const room = rooms.get(roomId);
+  return !!room && typeof room.game.step === 'function';
+}
+
+// Buffer a player's latest input for the next tick.
+export function setInput(roomId, userId, input) {
+  const room = rooms.get(roomId);
+  if (!room || !room.inputs) return;
+  const player = room.players.find((p) => p.user.id === userId);
+  if (!player) return;
+  room.inputs[player.index] = {
+    throttle: Math.max(-1, Math.min(1, Number(input?.throttle) || 0)),
+    steer: Math.max(-1, Math.min(1, Number(input?.steer) || 0)),
+  };
+}
+
+// Advance one tick; returns { players:[ids], data } to broadcast, or null.
+export function stepRoom(roomId, dt) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing' || !room.sim) return null;
+  room.game.step(room.sim, room.inputs, dt);
+  return {
+    players: room.players.map((p) => p.user.id),
+    data: { t: Date.now(), ...room.game.snapshot(room.sim) },
+  };
 }
 
 function endRoom(room) {

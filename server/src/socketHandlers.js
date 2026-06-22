@@ -19,7 +19,11 @@ import {
   forfeit,
   getOpponentId,
   recordFinish,
+  isRealtimeRoom,
+  setInput,
+  getRoomIdForUser,
 } from './rooms.js';
+import { startMatch, stopMatch } from './realtime.js';
 
 export function initSockets(io) {
   io.on('connection', (socket) => {
@@ -81,6 +85,8 @@ export function initSockets(io) {
       }
       // Let the inviter know their invite was accepted (clears pending UI).
       if (invite) emitToUser(io, invite.from.id, 'game:invite:resolved', { inviteId });
+      // Kick off the server tick loop for realtime games.
+      if (isRealtimeRoom(room.id)) startMatch(io, room.id);
       ack?.({ ok: true, roomId: room.id });
     });
 
@@ -118,6 +124,12 @@ export function initSockets(io) {
       if (oppId) emitToUser(io, oppId, 'game:rt:ghost', { from: me.id, s: payload?.s });
     });
 
+    // Server-authoritative realtime (Smash Karts): buffer the player's input.
+    socket.on('game:rt:input', (payload) => {
+      const roomId = payload?.roomId || getRoomIdForUser(me.id);
+      if (roomId) setInput(roomId, me.id, payload?.input);
+    });
+
     // First to report finishing wins; reuse the normal game:over flow.
     socket.on('game:rt:finish', (payload, ack) => {
       const res = recordFinish(payload?.roomId, me.id);
@@ -144,8 +156,10 @@ export function initSockets(io) {
 }
 
 function endGameByForfeit(io, userId) {
+  const roomId = getRoomIdForUser(userId);
   const res = forfeit(userId);
   if (!res) return;
+  if (roomId) stopMatch(roomId); // halt the realtime tick loop, if any
   for (const pid of res.players) {
     emitToUser(io, pid, 'game:over', { room: res.room });
   }

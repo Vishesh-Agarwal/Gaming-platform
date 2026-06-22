@@ -5,6 +5,7 @@ import TicTacToe, { Thumbnail as TicTacToeThumb } from './TicTacToe.jsx';
 import GhostRider, { Thumbnail as GhostRiderThumb } from './GhostRider.jsx';
 import Artillery, { Thumbnail as ArtilleryThumb } from './Artillery.jsx';
 import Hangman, { Thumbnail as HangmanThumb } from './Hangman.jsx';
+import Karts, { Thumbnail as KartsThumb } from './Karts.jsx';
 
 const registry = {
   tictactoe: {
@@ -35,6 +36,12 @@ const registry = {
     thumbnail: HangmanThumb,
     accent: '#b388ff',
     options: [{ key: 'rounds', label: 'Rounds', min: 1, max: 10, default: 3 }],
+  },
+  karts: {
+    name: 'Smash Karts',
+    Component: Karts,
+    thumbnail: KartsThumb,
+    accent: '#ff5d6c',
   },
 };
 

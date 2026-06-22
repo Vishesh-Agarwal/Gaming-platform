@@ -14,6 +14,7 @@ import tictactoe from './tictactoe.js';
 import ghostrider from './ghostrider.js';
 import artillery from './artillery.js';
 import hangman from './hangman.js';
+import karts from './karts.js';
 
 const games = new Map();
 
@@ -39,3 +40,4 @@ register(tictactoe);
 register(ghostrider);
 register(artillery);
 register(hangman);
+register(karts);

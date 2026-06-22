@@ -489,6 +489,8 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
 }
 .overlay-card h3 { margin: 0; font-family: var(--display); font-size: 24px; }
+.overlay-scores { margin: 0; color: var(--muted); font-size: 15px; }
+.overlay-scores b { color: var(--text); font-family: var(--display); }
 
 /* ---- Ghost Rider ---- */
 .gr-wrap { width: min(920px, 100%); display: flex; flex-direction: column; align-items: center; gap: 14px; }

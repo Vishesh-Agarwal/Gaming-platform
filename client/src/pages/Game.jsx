@@ -1,10 +1,19 @@
 // Hosts the active game's component (from the client registry) and the
 // game-over overlay. Server is authoritative; this only renders + emits.
+import { useEffect, useState } from 'react';
 import { getGame } from '../games/registry.js';
 
 export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
   const def = getGame(room.gameId);
   const opponent = room.players.find((p) => p.index !== youAreIndex);
+
+  // Let the final play/animation finish before the result overlay appears.
+  const [showResult, setShowResult] = useState(false);
+  useEffect(() => {
+    if (room.status !== 'over') { setShowResult(false); return; }
+    const t = setTimeout(() => setShowResult(true), 2000);
+    return () => clearTimeout(t);
+  }, [room.status]);
 
   if (!def) {
     return (
@@ -41,10 +50,16 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
 
       <Component room={room} youAreIndex={youAreIndex} onMove={onMove} />
 
-      {room.status === 'over' && (
+      {room.status === 'over' && showResult && (
         <div className="overlay">
           <div className="overlay-card">
             <h3>{resultMessage()}</h3>
+            {room.result?.scores && (
+              <p className="overlay-scores">
+                Your score: <b>{room.result.scores[youAreIndex]}</b> ·{' '}
+                {opponent?.username || 'Opponent'}: <b>{room.result.scores[opponent?.index]}</b>
+              </p>
+            )}
             <button onClick={onLeave}>Back to lobby</button>
           </div>
         </div>

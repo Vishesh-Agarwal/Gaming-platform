@@ -242,9 +242,10 @@ function applyMove(state, playerIndex, move) {
 
 function getResult(state) {
   const [s0, s1] = state.scores;
-  if (s0 >= state.roundsToWin) return { over: true, winner: 0, draw: false };
-  if (s1 >= state.roundsToWin) return { over: true, winner: 1, draw: false };
-  return { over: false, winner: null, draw: false };
+  const scores = state.scores;
+  if (s0 >= state.roundsToWin) return { over: true, winner: 0, draw: false, scores };
+  if (s1 >= state.roundsToWin) return { over: true, winner: 1, draw: false, scores };
+  return { over: false, winner: null, draw: false, scores };
 }
 
 export default {

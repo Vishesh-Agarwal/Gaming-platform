@@ -79,31 +79,69 @@ function pickWind() {
   return Math.round((Math.random() * 2 - 1) * MAX_WIND * 1000) / 1000;
 }
 
-function createInitialState() {
+const ROUNDS_TO_WIN = 2; // best of 3
+
+// Per-round playfield (terrain + tanks reset). starter = who fires first.
+function freshRound(starter) {
   const seed = Math.floor(Math.random() * 1e9);
   return {
     seed,
-    W,
-    H,
-    step: STEP,
     ground: makeGround(seed),
-    maxHp: MAX_HP,
-    blast: BLAST,
-    moveBudget: MOVE_BUDGET,
     tanks: [
       { x: Math.round(W * 0.12), hp: MAX_HP },
       { x: Math.round(W * 0.88), hp: MAX_HP },
     ],
-    turn: 0,
+    turn: starter,
+    starter,
     wind: pickWind(),
     lastShot: null,
-    seq: 0,
   };
 }
 
-// move = { angle: 1..89 (degrees above horizontal), power: 5..100 }
+function createInitialState() {
+  return {
+    W,
+    H,
+    step: STEP,
+    maxHp: MAX_HP,
+    blast: BLAST,
+    moveBudget: MOVE_BUDGET,
+    roundsToWin: ROUNDS_TO_WIN,
+    scores: [0, 0],
+    round: 1,
+    phase: 'playing',
+    roundResult: null,
+    seq: 0,
+    ...freshRound(0),
+  };
+}
+
+// Start the next round, preserving match score; loser opens (alternate on a draw).
+function advanceRound(state) {
+  const starter =
+    state.roundResult && state.roundResult.winner != null
+      ? 1 - state.roundResult.winner
+      : 1 - state.starter;
+  return {
+    ...state,
+    round: state.round + 1,
+    phase: 'playing',
+    roundResult: null,
+    seq: (state.seq || 0) + 1,
+    ...freshRound(starter),
+  };
+}
+
+// move = { angle: 1..89, power: 5..100, x? } to fire, or { next: true } between rounds.
 function applyMove(state, playerIndex, move) {
   if (getResult(state).over) return { error: 'Game is already over.' };
+
+  // between rounds: either player advances to the next round (idempotent)
+  if (state.phase === 'roundover') {
+    if (move?.next) return { state: advanceRound(state) };
+    return { error: 'Round over — waiting for the next round.' };
+  }
+
   if (state.turn !== playerIndex) return { error: 'Not your turn.' };
 
   let angle = Number(move?.angle);
@@ -174,26 +212,38 @@ function applyMove(state, playerIndex, move) {
     crater = { x: impact.x, y: impact.y, r: CRATER_R };
   }
 
-  return {
-    state: {
-      ...state,
-      tanks,
-      ground,
-      turn: playerIndex === 0 ? 1 : 0,
-      wind: pickWind(),
-      lastShot: { by: playerIndex, angle, power, path, impact, crater, blast: BLAST },
-      seq: (state.seq || 0) + 1,
-    },
+  const next = {
+    ...state,
+    tanks,
+    ground,
+    turn: playerIndex === 0 ? 1 : 0,
+    wind: pickWind(),
+    lastShot: { by: playerIndex, angle, power, path, impact, crater, blast: BLAST },
+    seq: (state.seq || 0) + 1,
   };
+
+  // resolve the round if a tank died
+  const ad = tanks[0].hp <= 0;
+  const bd = tanks[1].hp <= 0;
+  if (ad || bd) {
+    const winner = ad && bd ? null : ad ? 1 : 0; // null = draw round
+    const scores = state.scores.slice();
+    if (winner != null) scores[winner] += 1;
+    next.scores = scores;
+    // match decided? leave phase 'playing' so getResult reports it; else pause.
+    if (winner == null || scores[winner] < state.roundsToWin) {
+      next.phase = 'roundover';
+      next.roundResult = { winner, scores };
+    }
+  }
+
+  return { state: next };
 }
 
 function getResult(state) {
-  const [a, b] = state.tanks;
-  const ad = a.hp <= 0;
-  const bd = b.hp <= 0;
-  if (ad && bd) return { over: true, winner: null, draw: true };
-  if (bd) return { over: true, winner: 0, draw: false };
-  if (ad) return { over: true, winner: 1, draw: false };
+  const [s0, s1] = state.scores;
+  if (s0 >= state.roundsToWin) return { over: true, winner: 0, draw: false };
+  if (s1 >= state.roundsToWin) return { over: true, winner: 1, draw: false };
   return { over: false, winner: null, draw: false };
 }
 
@@ -206,4 +256,5 @@ export default {
   createInitialState,
   applyMove,
   getResult,
+  advanceRound,
 };

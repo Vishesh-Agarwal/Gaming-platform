@@ -101,8 +101,13 @@ export default function Artillery({ room, youAreIndex, onMove }) {
   const [power, setPower] = useState(60);
   const [busy, setBusy] = useState(false);
   const [moved, setMoved] = useState(0);
+  const [countdown, setCountdown] = useState(null);
 
-  const myTurn = room.status === 'playing' && room.state.turn === youAreIndex;
+  const phase = room.state.phase || 'playing';
+  const scores = room.state.scores || [0, 0];
+  const roundsToWin = room.state.roundsToWin || 2;
+  const roundResult = room.state.roundResult;
+  const myTurn = room.status === 'playing' && phase === 'playing' && room.state.turn === youAreIndex;
   const canFire = myTurn && !busy;
   const budget = room.state.moveBudget ?? 150;
   const fuelLeft = Math.max(0, budget - moved);
@@ -130,6 +135,8 @@ export default function Artillery({ room, youAreIndex, onMove }) {
   const debrisRef = useRef([]);
   const dustRef = useRef([]);
   const smokeTickRef = useRef(0);
+  const lastRoundRef = useRef(room.state.round || 1);
+  const nextSentRef = useRef(false);
 
   stateRef.current = room.state;
   uiRef.current = { angle, power, you: youAreIndex, myTurn };
@@ -183,6 +190,49 @@ export default function Artillery({ room, youAreIndex, onMove }) {
     }
     wasMyTurnRef.current = myTurn;
   }, [myTurn, room.state, youAreIndex]);
+
+  // advance to the next round (idempotent on the server; guard one emit per client)
+  const advance = () => {
+    if (nextSentRef.current) return;
+    nextSentRef.current = true;
+    onMoveRef.current({ next: true });
+  };
+
+  // a new round arrived -> reset all local render state
+  useEffect(() => {
+    const st = room.state;
+    if ((st.round || 1) !== lastRoundRef.current) {
+      lastRoundRef.current = st.round || 1;
+      groundRef.current = st.ground.slice();
+      displayHpRef.current = st.tanks.map((t) => t.hp);
+      hpTargetRef.current = st.tanks.map((t) => t.hp);
+      localXRef.current = st.tanks[youAreIndex].x;
+      driveVelRef.current = 0;
+      movedRef.current = 0;
+      setMoved(0);
+      debrisRef.current = [];
+      dustRef.current = [];
+      animRef.current = { active: false };
+      lastSeqRef.current = st.seq ?? 0;
+      nextSentRef.current = false;
+      setCountdown(null);
+      setBusy(false);
+    }
+  }, [room.state, youAreIndex]);
+
+  // round-over -> once the kill has finished animating, count down then advance
+  useEffect(() => {
+    if (phase !== 'roundover' || busy || nextSentRef.current) return;
+    let n = 3;
+    setCountdown(n);
+    const id = setInterval(() => {
+      n -= 1;
+      if (n <= 0) { clearInterval(id); setCountdown(0); advance(); }
+      else setCountdown(n);
+    }, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, busy]);
 
   // keyboard controls
   useEffect(() => {
@@ -310,14 +360,49 @@ export default function Artillery({ room, youAreIndex, onMove }) {
   const press = (dir) => () => { if (canFireRef.current) heldDirRef.current = dir; };
   const release = () => { heldDirRef.current = 0; };
 
-  const statusLabel = room.status === 'over' ? 'CEASE FIRE' : busy ? 'INCOMING' : myTurn ? 'YOUR SHOT' : 'OPPONENT';
+  const statusLabel =
+    room.status === 'over' ? 'CEASE FIRE'
+    : phase === 'roundover' ? 'ROUND OVER'
+    : busy ? 'INCOMING'
+    : myTurn ? 'YOUR SHOT' : 'OPPONENT';
+
+  const pips = (count) =>
+    Array.from({ length: roundsToWin }, (_, i) => (
+      <span key={i} className={`art-pip ${i < count ? 'on' : ''}`} />
+    ));
+  const roundOverText =
+    roundResult == null ? ''
+    : roundResult.winner == null ? 'ROUND DRAW'
+    : roundResult.winner === youAreIndex ? 'YOU WIN THE ROUND' : 'OPPONENT WINS THE ROUND';
 
   return (
     <div className="art-wrap">
-      <canvas ref={canvasRef} className="art-canvas" />
+      <div className="art-stage">
+        <canvas ref={canvasRef} className="art-canvas" />
+        {phase === 'roundover' && !busy && room.status !== 'over' && (
+          <div className="art-roundover">
+            <div className="art-ro-card">
+              <div className="art-ro-round">ROUND {room.state.round}</div>
+              <div className="art-ro-result">{roundOverText}</div>
+              <div className="art-ro-score">
+                You {scores[youAreIndex]} <span>–</span> {scores[1 - youAreIndex]} Opp
+              </div>
+              <div className="art-ro-count">
+                {countdown != null ? `Next round in ${countdown}…` : 'Next round…'}
+              </div>
+              <button className="art-skip" type="button" onClick={advance}>Skip ▶</button>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="art-console">
         <div className="art-console-head">
           <span className="art-title">⌖ FIRE CONTROL</span>
+          <span className="art-score">
+            <span className="art-score-pips">{pips(scores[youAreIndex])}</span>
+            <span className="art-score-label">RND {room.state.round} · BO{roundsToWin * 2 - 1}</span>
+            <span className="art-score-pips opp">{pips(scores[1 - youAreIndex])}</span>
+          </span>
           <span className={`art-badge ${myTurn && !busy ? 'live' : ''}`}>{statusLabel}</span>
         </div>
         <div className="art-grid">

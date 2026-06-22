@@ -551,6 +551,26 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   padding: 4px 10px;
 }
 .art-badge.live { color: #1a1d12; background: #d9a441; border-color: #d9a441; font-weight: 700; }
+
+/* match score pips in the console header */
+.art-score { display: flex; align-items: center; gap: 10px; }
+.art-score-pips { display: flex; gap: 4px; }
+.art-pip { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #6a6a48; background: transparent; }
+.art-score-pips:not(.opp) .art-pip.on { background: #5cc8ff; border-color: #5cc8ff; box-shadow: 0 0 8px rgba(92, 200, 255, 0.6); }
+.art-score-pips.opp .art-pip.on { background: #ff8a4c; border-color: #ff8a4c; box-shadow: 0 0 8px rgba(255, 138, 76, 0.6); }
+.art-score-label { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.12em; color: #9a9476; }
+
+/* round-over overlay (over the canvas, not the whole page) */
+.art-stage { position: relative; width: 100%; }
+.art-roundover { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 6, 0.62); border-radius: 16px; backdrop-filter: blur(3px); }
+.art-ro-card { text-align: center; padding: 24px 36px; background: linear-gradient(180deg, #20231a, #14160e); border: 1px solid #d9a441; border-radius: 14px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6); }
+.art-ro-round { font-family: var(--display); font-size: 13px; letter-spacing: 0.24em; color: #9a9476; }
+.art-ro-result { font-family: var(--display); font-size: 26px; letter-spacing: 0.08em; color: #d9a441; margin: 8px 0 12px; }
+.art-ro-score { font-family: ui-monospace, Menlo, monospace; font-size: 20px; color: #ece7d2; }
+.art-ro-score span { color: #6a6a48; margin: 0 4px; }
+.art-ro-count { color: #9a9476; margin: 12px 0 16px; font-size: 14px; }
+.art-skip { padding: 8px 22px; font-family: var(--display); letter-spacing: 0.08em; background: #23261a; border: 1px solid #3a3f24; color: #ece7d2; box-shadow: none; }
+.art-skip:hover { border-color: #d9a441; background: #2d3120; }
 .art-grid {
   display: flex;
   align-items: flex-end;

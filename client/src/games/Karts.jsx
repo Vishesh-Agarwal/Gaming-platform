@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { getSocket } from '../socket.js';
 import { createScene } from './karts/scene.js';
+import { makeKart, updateKart } from './karts/kartModel.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -55,34 +56,13 @@ export default function Karts({ room, youAreIndex }) {
     const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, arena);
 
     // karts (with a shield bubble child)
-    const makeKart = (color) => {
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1, 3.4),
-        new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.5 }));
-      body.position.y = 0.8; body.castShadow = true; g.add(body);
-      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.9, 1.5),
-        new THREE.MeshStandardMaterial({ color: '#15131f', roughness: 0.4 }));
-      cabin.position.set(0, 1.5, -0.2); g.add(cabin);
-      const wheelGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.5, 12);
-      const wheelMat = new THREE.MeshStandardMaterial({ color: '#0d0d14' });
-      for (const [wx, wz] of [[-1.2, 1.1], [1.2, 1.1], [-1.2, -1.1], [1.2, -1.1]]) {
-        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-        wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.6, wz); g.add(wheel);
-      }
-      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 8),
-        new THREE.MeshStandardMaterial({ color: '#fff', emissive: color, emissiveIntensity: 0.4 }));
-      nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.9, 1.9); g.add(nose);
-      const shield = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12),
-        new THREE.MeshBasicMaterial({ color: '#22e0ff', transparent: true, opacity: 0.22 }));
-      shield.position.y = 1; shield.visible = false; g.add(shield);
-      g.userData.shield = shield;
-      return g;
-    };
     const karts = [];
     for (let i = 0; i < playerCount; i++) {
       const k = makeKart(colors[i % colors.length]);
       scene.add(k); karts.push(k);
     }
+    // Per-kart previous render transform, to derive speed/turn for wheel spin + bank.
+    const prevT = karts.map(() => ({ x: 0, z: 0, h: 0, init: false }));
 
     // crate meshes (one per pad, recolored/shown by snapshot)
     const crateMeshes = [];
@@ -199,7 +179,15 @@ export default function Karts({ room, youAreIndex }) {
           g.visible = visible;
           g.position.set(ks.x, 0, ks.z);
           g.rotation.y = ks.h;
-          g.userData.shield.visible = visible && meta?.shield;
+          // derive speed/turn from the interpolated transform delta
+          const pt = prevT[ks.i];
+          let speed = 0, turn = 0;
+          if (pt.init) {
+            speed = Math.hypot(ks.x - pt.x, ks.z - pt.z);
+            turn = ((ks.h - pt.h + Math.PI) % (Math.PI * 2)) - Math.PI;
+          }
+          pt.x = ks.x; pt.z = ks.z; pt.h = ks.h; pt.init = true;
+          updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
           // death explosion on alive->dead transition
           if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) spawnBlast(ks.x, ks.z, colors[ks.i % colors.length]);
           if (meta) prevAlive[ks.i] = meta.alive;

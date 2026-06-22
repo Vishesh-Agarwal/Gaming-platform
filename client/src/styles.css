@@ -1,20 +1,24 @@
 :root {
-  --bg: #070710;
-  --panel: rgba(20, 22, 42, 0.55);
-  --panel-solid: #13152a;
+  --bg: #08060f;
+  --panel: rgba(22, 18, 38, 0.55);
+  --panel-solid: #120e1f;
   --border: rgba(255, 255, 255, 0.10);
+  --glass: rgba(255, 255, 255, 0.04);
   --text: #eef0f8;
   --muted: #9aa0bd;
   --cyan: #22e0ff;
   --purple: #8b5cff;
   --pink: #ff4d8d;
+  --amber: #ffd24a;
   --green: #27e0a3;
   --red: #ff5d6c;
   --accent: #8b5cff;
   --grad: linear-gradient(120deg, #22e0ff, #8b5cff, #ff4d8d);
   --grad-2: linear-gradient(120deg, #22e0ff, #8b5cff);
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --display: 'Orbitron', var(--font);
+  --display: 'Chakra Petch', 'Orbitron', var(--font);
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 0.18s;
 }
 
 * { box-sizing: border-box; }
@@ -25,11 +29,46 @@ body {
   color: var(--text);
   min-height: 100vh;
   background:
-    radial-gradient(900px 600px at 10% -8%, rgba(139, 92, 255, 0.22), transparent 60%),
-    radial-gradient(800px 600px at 102% -2%, rgba(34, 224, 255, 0.16), transparent 55%),
-    radial-gradient(900px 700px at 50% 116%, rgba(255, 77, 141, 0.16), transparent 55%),
+    radial-gradient(900px 600px at 10% -8%, rgba(139, 92, 255, 0.20), transparent 60%),
+    radial-gradient(800px 600px at 102% -2%, rgba(34, 224, 255, 0.14), transparent 55%),
+    radial-gradient(900px 700px at 50% 116%, rgba(255, 77, 141, 0.14), transparent 55%),
     var(--bg);
   background-attachment: fixed;
+}
+
+/* ambient backdrop: drifting neon blobs + faint perspective grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side, rgba(139, 92, 255, 0.30), transparent) 12% 18% / 46vw 46vw no-repeat,
+    radial-gradient(closest-side, rgba(34, 224, 255, 0.22), transparent) 84% 12% / 40vw 40vw no-repeat,
+    radial-gradient(closest-side, rgba(255, 77, 141, 0.20), transparent) 70% 88% / 44vw 44vw no-repeat;
+  filter: blur(40px);
+  animation: drift 26s var(--ease) infinite alternate;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 35%, transparent 78%);
+  mask-image: radial-gradient(120% 80% at 50% 0%, #000 35%, transparent 78%);
+}
+@keyframes drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to { transform: translate3d(3%, 2%, 0) scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 
 /* ---- Buttons / inputs ---- */
@@ -134,13 +173,15 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 }
 .brand {
   font-family: var(--display);
-  font-weight: 800;
-  font-size: 20px;
-  letter-spacing: 0.5px;
+  font-weight: 700;
+  font-size: 21px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
   background: var(--grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  filter: drop-shadow(0 0 14px rgba(139, 92, 255, 0.45));
 }
 .spacer { flex: 1; }
 .username { font-size: 14px; color: var(--muted); }
@@ -185,13 +226,28 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   overflow: hidden;
   backdrop-filter: blur(10px);
   box-shadow: none;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  transform: perspective(820px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 0.3s var(--ease), box-shadow 0.25s var(--ease), border-color 0.25s var(--ease);
+  will-change: transform;
+}
+/* cursor-following neon highlight */
+.game-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--card-accent) 28%, transparent), transparent 60%);
+  transition: opacity 0.25s var(--ease);
 }
 .game-card:hover {
-  transform: translateY(-6px) scale(1.015);
+  transform: perspective(820px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-6px);
   border-color: var(--card-accent);
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5), 0 8px 36px -8px var(--card-accent);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.55), 0 10px 40px -8px var(--card-accent);
 }
+.game-card:hover::before { opacity: 1; }
 .game-thumb { position: relative; aspect-ratio: 1 / 1; line-height: 0; }
 .game-thumb::after {
   content: '';

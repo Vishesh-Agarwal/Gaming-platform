@@ -21,7 +21,8 @@ function publicRoom(room) {
 }
 
 // Create an invite from one user to a friend. Returns { invite } or { error }.
-export function createInvite(fromUserId, toUserId, gameId) {
+// options may carry a game mode (validated against the game's declared modes).
+export function createInvite(fromUserId, toUserId, gameId, options) {
   const game = getGame(gameId);
   if (!game) return { error: 'Unknown game.' };
   if (fromUserId === toUserId) return { error: "You can't invite yourself." };
@@ -29,10 +30,17 @@ export function createInvite(fromUserId, toUserId, gameId) {
   if (userRooms.has(fromUserId)) return { error: 'You are already in a game.' };
   if (userRooms.has(toUserId)) return { error: 'That player is already in a game.' };
 
+  // resolve an optional game mode (falls back to the first declared mode)
+  let mode = null;
+  if (game.modes?.length) {
+    mode = game.modes.find((m) => m.id === options?.mode) || game.modes[0];
+  }
+
   const invite = {
     id: nanoid(10),
     gameId,
-    gameName: game.name,
+    gameName: mode ? `${game.name} · ${mode.name}` : game.name,
+    options: mode ? { mode: mode.id } : null,
     from: publicUser(getUserById(fromUserId)),
     to: toUserId,
     createdAt: Date.now(),
@@ -72,7 +80,7 @@ export function acceptInvite(inviteId, acceptingUserId) {
       { index: 0, user: getUserById(invite.from.id) },
       { index: 1, user: getUserById(acceptingUserId) },
     ],
-    state: game.createInitialState(),
+    state: game.createInitialState(invite.options || undefined),
     status: 'playing',
     result: null,
   };

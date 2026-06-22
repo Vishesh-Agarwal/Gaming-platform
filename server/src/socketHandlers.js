@@ -59,7 +59,7 @@ export function initSockets(io) {
       const gameId = String(payload?.gameId || '');
       if (!isOnline(toUserId)) return ack?.({ error: 'That friend is offline.' });
 
-      const { invite, error } = createInvite(me.id, toUserId, gameId);
+      const { invite, error } = createInvite(me.id, toUserId, gameId, payload?.options);
       if (error) return ack?.({ error });
       emitToUser(io, toUserId, 'game:invited', {
         inviteId: invite.id,

@@ -138,8 +138,8 @@ export default function Home() {
   };
 
   // ---- Game invites + play ----
-  const onInvite = async (friendId, gameId) => {
-    const res = await emitAck('game:invite', { toUserId: friendId, gameId });
+  const onInvite = async (friendId, gameId, options) => {
+    const res = await emitAck('game:invite', { toUserId: friendId, gameId, options });
     flash(res.error ? res.error : 'Invite sent!');
   };
   const onAcceptInvite = async (inviteId) => {

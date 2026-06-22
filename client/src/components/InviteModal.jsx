@@ -11,13 +11,16 @@ export default function InviteModal({
   onClose,
 }) {
   const [name, setName] = useState('');
+  const [mode, setMode] = useState(game.modes?.[0]?.id || null);
   const online = friends.filter((f) => onlineIds.has(f.id));
   const offline = friends.filter((f) => !onlineIds.has(f.id));
 
   const invite = (friendId) => {
-    onInvite(friendId, game.id);
+    onInvite(friendId, game.id, mode ? { mode } : undefined);
     onClose();
   };
+
+  const selectedMode = game.modes?.find((m) => m.id === mode);
 
   const submitAdd = (e) => {
     e.preventDefault();
@@ -30,6 +33,25 @@ export default function InviteModal({
   return (
     <Modal title={`Play ${game.name}`} onClose={onClose}>
       <p className="muted">Invite a friend to play with you.</p>
+
+      {game.modes?.length > 1 && (
+        <div className="mode-picker">
+          <span className="mode-label">Mode</span>
+          <div className="mode-options">
+            {game.modes.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className={`mode-chip ${mode === m.id ? 'active' : ''}`}
+                onClick={() => setMode(m.id)}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+          {selectedMode?.hint && <p className="mode-hint muted">{selectedMode.hint}</p>}
+        </div>
+      )}
 
       {friends.length === 0 && (
         <p className="muted">You have no friends yet — add one below to get started.</p>

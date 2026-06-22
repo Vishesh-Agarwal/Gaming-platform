@@ -40,7 +40,9 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
     <div className="game-page">
       <header className="game-header">
         <h2>{def.name}</h2>
-        <span className="vs">vs {opponent?.username || 'opponent'}</span>
+        <span className="vs">
+          {room.players.length > 2 ? `${room.players.length} players` : `vs ${opponent?.username || 'opponent'}`}
+        </span>
         <button className="ghost" onClick={onLeave}>
           {room.status === 'over' ? 'Back to lobby' : 'Leave (forfeit)'}
         </button>
@@ -55,10 +57,24 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
           <div className="overlay-card">
             <h3>{resultMessage()}</h3>
             {room.result?.scores && (
-              <p className="overlay-scores">
-                Your score: <b>{room.result.scores[youAreIndex]}</b> ·{' '}
-                {opponent?.username || 'Opponent'}: <b>{room.result.scores[opponent?.index]}</b>
-              </p>
+              room.players.length > 2 ? (
+                <div className="overlay-standings">
+                  {room.players
+                    .map((p) => ({ idx: p.index, name: p.index === youAreIndex ? 'You' : p.username, s: room.result.scores[p.index] ?? 0 }))
+                    .sort((a, b) => b.s - a.s)
+                    .map((row, i) => (
+                      <div key={row.idx} className={`overlay-rank ${row.idx === youAreIndex ? 'you' : ''}`}>
+                        <span>{i + 1}. {row.name}</span>
+                        <b>{row.s}</b>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="overlay-scores">
+                  Your score: <b>{room.result.scores[youAreIndex]}</b> ·{' '}
+                  {opponent?.username || 'Opponent'}: <b>{room.result.scores[opponent?.index]}</b>
+                </p>
+              )
             )}
             <button onClick={onLeave}>Back to lobby</button>
           </div>

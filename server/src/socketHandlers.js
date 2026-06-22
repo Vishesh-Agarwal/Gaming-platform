@@ -23,6 +23,7 @@ import {
   setInput,
   getRoomIdForUser,
   createRoom,
+  dropFromRealtime,
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
 import {
@@ -212,8 +213,8 @@ export function initSockets(io) {
       ack?.({ ok: true });
     });
 
-    // Leaving a game forfeits it.
-    socket.on('game:leave', () => endGameByForfeit(io, me.id));
+    // Leaving a game: realtime N-player drops out; turn-based/1v1 forfeits.
+    socket.on('game:leave', () => handleLeave(io, me.id));
 
     // ---- Disconnect ----
     socket.on('disconnect', () => {
@@ -221,11 +222,26 @@ export function initSockets(io) {
       if (!lob.closed && lob.lobby) broadcastLobby(lob.lobby);
       const nowOffline = offline(me.id);
       if (nowOffline) {
-        endGameByForfeit(io, me.id);
+        handleLeave(io, me.id);
         broadcastPresence(io, me.id, 'offline');
       }
     });
   });
+}
+
+// Realtime N-player rooms: dropping out marks the kart gone (match continues, or
+// ends if <2 remain). Other games forfeit to the opponent.
+function handleLeave(io, userId) {
+  const rid = getRoomIdForUser(userId);
+  if (rid && isRealtimeRoom(rid)) {
+    const res = dropFromRealtime(userId);
+    if (res.ended) {
+      stopMatch(res.roomId);
+      for (const pid of res.players) emitToUser(io, pid, 'game:over', { room: res.room });
+    }
+    return;
+  }
+  endGameByForfeit(io, userId);
 }
 
 function endGameByForfeit(io, userId) {

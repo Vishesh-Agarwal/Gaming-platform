@@ -167,15 +167,47 @@ export function setInput(roomId, userId, input) {
   };
 }
 
-// Advance one tick; returns { players:[ids], data } to broadcast, or null.
+// Advance one tick; returns { players, data, over?, room? } or null.
 export function stepRoom(roomId, dt) {
   const room = rooms.get(roomId);
   if (!room || room.status !== 'playing' || !room.sim) return null;
-  room.game.step(room.sim, room.inputs, dt);
-  return {
-    players: room.players.map((p) => p.user.id),
-    data: { t: Date.now(), ...room.game.snapshot(room.sim) },
-  };
+  const now = Date.now();
+  room.game.step(room.sim, room.inputs, dt, now);
+  const players = room.players.map((p) => p.user.id);
+  const data = { t: now, ...room.game.snapshot(room.sim, now) };
+  if (room.sim.over && typeof room.game.result === 'function') {
+    room.status = 'over';
+    room.result = room.game.result(room.sim);
+    const snap = publicRoom(room);
+    endRoom(room);
+    return { players, data, over: true, room: snap };
+  }
+  return { players, data };
+}
+
+// A player left a realtime N-player match: mark their kart gone. If fewer than 2
+// remain, end the match. Returns { handled, ended, roomId?, room?, players? }.
+export function dropFromRealtime(userId) {
+  const roomId = userRooms.get(userId);
+  if (!roomId) return { handled: false };
+  const room = rooms.get(roomId);
+  if (!room || !room.sim || typeof room.game.dropPlayer !== 'function') return { handled: false };
+  const player = room.players.find((p) => p.user.id === userId);
+  userRooms.delete(userId);
+  if (!player) return { handled: true, ended: false };
+  const remaining = room.game.dropPlayer(room.sim, player.index);
+  if (remaining < 2) {
+    room.status = 'over';
+    room.result = room.game.result
+      ? room.game.result(room.sim)
+      : { over: true, winner: null, draw: true };
+    const snap = publicRoom(room);
+    const players = room.players.map((p) => p.user.id);
+    for (const p of room.players) userRooms.delete(p.user.id);
+    rooms.delete(room.id);
+    return { handled: true, ended: true, roomId, room: snap, players };
+  }
+  return { handled: true, ended: false, roomId };
 }
 
 function endRoom(room) {

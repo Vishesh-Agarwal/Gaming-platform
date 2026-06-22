@@ -555,6 +555,11 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .overlay-card h3 { margin: 0; font-family: var(--display); font-size: 24px; }
 .overlay-scores { margin: 0; color: var(--muted); font-size: 15px; }
 .overlay-scores b { color: var(--text); font-family: var(--display); }
+.overlay-standings { display: flex; flex-direction: column; gap: 4px; min-width: 200px; }
+.overlay-rank { display: flex; justify-content: space-between; gap: 18px; color: var(--muted); font-size: 15px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.overlay-rank.you { color: var(--text); }
+.overlay-rank.you b { color: var(--amber); }
+.overlay-rank b { font-family: var(--display); color: var(--text); }
 
 /* ---- Ghost Rider ---- */
 .gr-wrap { width: min(920px, 100%); display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -827,7 +832,8 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 
 /* ---- Smash Karts ---- */
 .kt-wrap { width: min(1000px, 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.kt-canvas {
+.kt-stage {
+  position: relative;
   width: 100%;
   height: 64vh;
   max-height: 620px;
@@ -838,6 +844,32 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
   touch-action: none;
 }
+.kt-canvas { width: 100%; height: 100%; }
+.kt-hud { position: absolute; inset: 0; pointer-events: none; padding: 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.kt-timer {
+  font-family: var(--display);
+  font-size: 30px;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(34, 224, 255, 0.6);
+}
+.kt-scores { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.kt-score {
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(8, 6, 15, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.kt-score.gone { opacity: 0.4; }
+.kt-dot { width: 9px; height: 9px; border-radius: 50%; }
+.kt-name { color: var(--text); }
+.kt-kills { font-family: var(--display); color: var(--amber); font-size: 15px; min-width: 14px; text-align: right; }
+.kt-myhud { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.kt-hpbar { width: 220px; height: 12px; background: rgba(8, 6, 15, 0.7); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.kt-hpbar span { display: block; height: 100%; background: linear-gradient(90deg, #ff5d6c, #5fd17a); transition: width 0.15s; }
+.kt-weapon { font-size: 14px; color: var(--text); background: rgba(8, 6, 15, 0.6); border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; }
 .kt-hint { text-align: center; }
 
 @media (max-width: 720px) {
@@ -845,5 +877,5 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   .resizer { display: none; }
   .chat-side { border-left: none; border-top: 1px solid var(--border); }
   .gr-canvas { height: 52vh; }
-  .kt-canvas { height: 56vh; }
+  .kt-stage { height: 56vh; }
 }

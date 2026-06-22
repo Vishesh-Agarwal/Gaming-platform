@@ -1,12 +1,14 @@
-// Smash Karts (vertical slice) — Three.js client. Server-authoritative: we send
-// inputs (throttle/steer) ~30Hz and render karts from server snapshots, buffered
-// and interpolated ~100ms in the past for smoothness. Driving only, no combat.
-import { useEffect, useRef } from 'react';
+// Smash Karts — Three.js client (combat). Server-authoritative: we send inputs
+// (throttle/steer/fire) ~30Hz and render from server snapshots. Kart transforms
+// are interpolated ~100ms in the past; crates/projectiles/HUD use the latest snap.
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { getSocket } from '../socket.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
+const WEAPON_COLOR = { mg: '#22e0ff', rocket: '#ff7a3c', mine: '#ffd24a', shield: '#8bd450' };
+const WEAPON_LABEL = { mg: 'Machine gun', rocket: 'Rockets', mine: 'Mines', shield: 'Shield' };
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const lerpAngle = (a, b, t) => {
@@ -37,6 +39,7 @@ export function Thumbnail() {
 
 export default function Karts({ room, youAreIndex }) {
   const mountRef = useRef(null);
+  const [hud, setHud] = useState({ phase: 'countdown', countdown: 3, timeLeft: 90, players: [], me: null });
 
   useEffect(() => {
     const socket = getSocket();
@@ -45,35 +48,29 @@ export default function Karts({ room, youAreIndex }) {
     const arena = cfg.arena || { w: 80, d: 80 };
     const colors = cfg.colors || COLORS;
     const playerCount = room.players.length;
+    const names = room.players.map((p) => p.username);
     const roomId = room.id;
 
-    // --- renderer / scene / camera ---
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     mount.appendChild(renderer.domElement);
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
-    renderer.domElement.style.display = 'block';
+    Object.assign(renderer.domElement.style, { width: '100%', height: '100%', display: 'block' });
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#0a0813');
-    scene.fog = new THREE.Fog('#0a0813', 60, 160);
-
+    scene.fog = new THREE.Fog('#0a0813', 70, 170);
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
     camera.position.set(0, 16, 28);
 
-    // --- lights ---
-    scene.add(new THREE.HemisphereLight('#9fb4ff', '#1a1626', 0.9));
+    scene.add(new THREE.HemisphereLight('#9fb4ff', '#1a1626', 0.95));
     const dir = new THREE.DirectionalLight('#ffffff', 1.1);
     dir.position.set(30, 50, 20);
     dir.castShadow = true;
     dir.shadow.mapSize.set(1024, 1024);
-    dir.shadow.camera.left = -60; dir.shadow.camera.right = 60;
-    dir.shadow.camera.top = 60; dir.shadow.camera.bottom = -60;
+    Object.assign(dir.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60 });
     scene.add(dir);
 
-    // --- arena ---
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(arena.w, arena.d),
       new THREE.MeshStandardMaterial({ color: '#15182a', roughness: 0.95 })
@@ -81,72 +78,96 @@ export default function Karts({ room, youAreIndex }) {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
-
     const grid = new THREE.GridHelper(arena.w, arena.w / 4, '#3a3460', '#241f3d');
     grid.position.y = 0.02;
     scene.add(grid);
 
     const wallMat = new THREE.MeshStandardMaterial({ color: '#2a2450', emissive: '#1b1640', roughness: 0.6 });
-    const wallH = 3, t = 1.5;
-    const walls = [
-      [arena.w + t, wallH, t, 0, wallH / 2, -arena.d / 2],
-      [arena.w + t, wallH, t, 0, wallH / 2, arena.d / 2],
-      [t, wallH, arena.d + t, -arena.w / 2, wallH / 2, 0],
-      [t, wallH, arena.d + t, arena.w / 2, wallH / 2, 0],
-    ];
-    for (const [w, h, d, x, y, z] of walls) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+    const wallH = 3, tk = 1.5;
+    for (const [w, h, dd, x, y, z] of [
+      [arena.w + tk, wallH, tk, 0, wallH / 2, -arena.d / 2],
+      [arena.w + tk, wallH, tk, 0, wallH / 2, arena.d / 2],
+      [tk, wallH, arena.d + tk, -arena.w / 2, wallH / 2, 0],
+      [tk, wallH, arena.d + tk, arena.w / 2, wallH / 2, 0],
+    ]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), wallMat);
       wall.position.set(x, y, z);
       scene.add(wall);
     }
 
-    // --- karts ---
+    // karts (with a shield bubble child)
     const makeKart = (color) => {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(2.4, 1, 3.4),
-        new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.5 })
-      );
-      body.position.y = 0.8; body.castShadow = true;
-      g.add(body);
-      const cabin = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5, 0.9, 1.5),
-        new THREE.MeshStandardMaterial({ color: '#15131f', roughness: 0.4 })
-      );
-      cabin.position.set(0, 1.5, -0.2); cabin.castShadow = true;
-      g.add(cabin);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1, 3.4),
+        new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.5 }));
+      body.position.y = 0.8; body.castShadow = true; g.add(body);
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.9, 1.5),
+        new THREE.MeshStandardMaterial({ color: '#15131f', roughness: 0.4 }));
+      cabin.position.set(0, 1.5, -0.2); g.add(cabin);
       const wheelGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.5, 12);
       const wheelMat = new THREE.MeshStandardMaterial({ color: '#0d0d14' });
       for (const [wx, wz] of [[-1.2, 1.1], [1.2, 1.1], [-1.2, -1.1], [1.2, -1.1]]) {
         const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(wx, 0.6, wz);
-        wheel.castShadow = true;
-        g.add(wheel);
+        wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.6, wz); g.add(wheel);
       }
-      // a little nose marker so facing is readable
-      const nose = new THREE.Mesh(
-        new THREE.ConeGeometry(0.35, 0.8, 8),
-        new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: color, emissiveIntensity: 0.4 })
-      );
-      nose.rotation.x = Math.PI / 2;
-      nose.position.set(0, 0.9, 1.9);
-      g.add(nose);
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 8),
+        new THREE.MeshStandardMaterial({ color: '#fff', emissive: color, emissiveIntensity: 0.4 }));
+      nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.9, 1.9); g.add(nose);
+      const shield = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12),
+        new THREE.MeshBasicMaterial({ color: '#22e0ff', transparent: true, opacity: 0.22 }));
+      shield.position.y = 1; shield.visible = false; g.add(shield);
+      g.userData.shield = shield;
       return g;
     };
     const karts = [];
     for (let i = 0; i < playerCount; i++) {
       const k = makeKart(colors[i % colors.length]);
-      scene.add(k);
-      karts.push(k);
+      scene.add(k); karts.push(k);
     }
 
-    // --- snapshot buffer + interpolation ---
-    const buffer = []; // { ct, karts:[{i,x,z,h}] }
+    // crate meshes (one per pad, recolored/shown by snapshot)
+    const crateMeshes = [];
+    const ensureCrates = (list) => {
+      while (crateMeshes.length < list.length) {
+        const c = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 2.2),
+          new THREE.MeshStandardMaterial({ color: '#888', emissive: '#000', emissiveIntensity: 0.6, transparent: true }));
+        c.castShadow = true; scene.add(c); crateMeshes.push(c);
+      }
+    };
+
+    // projectile pool keyed by id
+    const projMap = new Map();
+    const makeProj = (type) => {
+      if (type === 'mine') {
+        return new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.4, 16),
+          new THREE.MeshStandardMaterial({ color: '#ffd24a', emissive: '#ff5d6c', emissiveIntensity: 0.5 }));
+      }
+      if (type === 'rocket') {
+        return new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.4, 4, 8),
+          new THREE.MeshStandardMaterial({ color: '#ff7a3c', emissive: '#ff7a3c', emissiveIntensity: 0.7 }));
+      }
+      return new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8),
+        new THREE.MeshStandardMaterial({ color: '#fff7b0', emissive: '#ffe39a', emissiveIntensity: 0.9 }));
+    };
+
+    // death explosions
+    const blasts = [];
+    const spawnBlast = (x, z, color) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
+        new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.9 }));
+      m.position.set(x, 1.2, z); scene.add(m);
+      blasts.push({ m, t: 0 });
+    };
+    const prevAlive = karts.map(() => true);
+
+    // snapshots
+    const buffer = [];
+    const latest = { snap: null };
     const onSnap = (snap) => {
       if (!snap?.karts) return;
       buffer.push({ ct: performance.now(), karts: snap.karts });
       if (buffer.length > 10) buffer.shift();
+      latest.snap = snap;
     };
     socket?.on('game:rt:snap', onSnap);
 
@@ -165,54 +186,68 @@ export default function Karts({ room, youAreIndex }) {
       });
     };
 
-    // --- input ---
-    const input = { throttle: 0, steer: 0 };
+    // input
+    const input = { throttle: 0, steer: 0, fire: false };
     const keys = {};
-    const applyKeys = () => {
-      const up = keys['w'] || keys['arrowup'];
-      const down = keys['s'] || keys['arrowdown'];
-      const left = keys['a'] || keys['arrowleft'];
-      const right = keys['d'] || keys['arrowright'];
-      input.throttle = (up ? 1 : 0) + (down ? -1 : 0);
-      input.steer = (right ? 1 : 0) + (left ? -1 : 0);
+    const apply = () => {
+      input.throttle = ((keys['w'] || keys['arrowup']) ? 1 : 0) + ((keys['s'] || keys['arrowdown']) ? -1 : 0);
+      input.steer = ((keys['d'] || keys['arrowright']) ? 1 : 0) + ((keys['a'] || keys['arrowleft']) ? -1 : 0);
+      input.fire = !!keys[' '];
     };
-    const kd = (e) => {
-      const k = e.key.toLowerCase();
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
-        keys[k] = true; applyKeys(); e.preventDefault();
-      }
-    };
-    const ku = (e) => { keys[e.key.toLowerCase()] = false; applyKeys(); };
+    const driveKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '];
+    const kd = (e) => { const k = e.key.toLowerCase(); if (driveKeys.includes(k)) { keys[k] = true; apply(); e.preventDefault(); } };
+    const ku = (e) => { keys[e.key.toLowerCase()] = false; apply(); };
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup', ku);
+    const md = () => { keys[' '] = true; apply(); };
+    const mu = () => { keys[' '] = false; apply(); };
+    renderer.domElement.addEventListener('pointerdown', md);
+    window.addEventListener('pointerup', mu);
     const sendTimer = setInterval(() => {
-      socket?.emit('game:rt:input', { roomId, input: { throttle: input.throttle, steer: input.steer } });
+      socket?.emit('game:rt:input', { roomId, input: { throttle: input.throttle, steer: input.steer, fire: input.fire } });
     }, 33);
 
-    // --- resize ---
+    // HUD state pushed to React ~6/s
+    const hudTimer = setInterval(() => {
+      const s = latest.snap;
+      if (!s) return;
+      setHud({
+        phase: s.phase, countdown: s.countdown, timeLeft: s.timeLeft,
+        players: s.karts.map((k) => ({ i: k.i, name: names[k.i] || `P${k.i + 1}`, kills: k.kills, hp: k.hp, alive: k.alive, gone: k.gone, color: colors[k.i % colors.length] })),
+        me: s.karts.find((k) => k.i === youAreIndex) || null,
+      });
+    }, 160);
+
     const resize = () => {
       const r = mount.getBoundingClientRect();
       if (!r.width || !r.height) return;
       renderer.setSize(r.width, r.height, false);
-      camera.aspect = r.width / r.height;
-      camera.updateProjectionMatrix();
+      camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
     };
     resize();
     window.addEventListener('resize', resize);
 
-    // --- render loop ---
     let raf = 0;
     const camTarget = new THREE.Vector3();
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const sample = sampleAt(performance.now() - INTERP_MS);
-      if (sample) {
+      const snap = latest.snap;
+      if (sample && snap) {
         for (const ks of sample) {
           const g = karts[ks.i];
           if (!g) continue;
+          const meta = snap.karts.find((k) => k.i === ks.i);
+          const visible = meta ? meta.alive && !meta.gone : true;
+          g.visible = visible;
           g.position.set(ks.x, 0, ks.z);
           g.rotation.y = ks.h;
+          g.userData.shield.visible = visible && meta?.shield;
+          // death explosion on alive->dead transition
+          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) spawnBlast(ks.x, ks.z, colors[ks.i % colors.length]);
+          if (meta) prevAlive[ks.i] = meta.alive;
         }
+        // camera follows local kart
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
         if (me) {
           const fx = Math.sin(me.h), fz = Math.cos(me.h);
@@ -220,7 +255,42 @@ export default function Karts({ room, youAreIndex }) {
           camera.position.lerp(camTarget, 0.08);
           camera.lookAt(me.x, 1.5, me.z);
         }
+
+        // crates
+        ensureCrates(snap.crates);
+        snap.crates.forEach((c, i) => {
+          const mesh = crateMeshes[i];
+          if (!mesh) return;
+          if (c.type) {
+            mesh.visible = true;
+            mesh.position.set(c.x, 1.6 + Math.sin(performance.now() / 300 + i) * 0.25, c.z);
+            mesh.rotation.y += 0.03;
+            const col = new THREE.Color(WEAPON_COLOR[c.type] || '#fff');
+            mesh.material.color.copy(col); mesh.material.emissive.copy(col);
+          } else mesh.visible = false;
+        });
+
+        // projectiles (latest snap, no interpolation)
+        const seen = new Set();
+        for (const p of snap.proj) {
+          seen.add(p.id);
+          let mesh = projMap.get(p.id);
+          if (!mesh) { mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh); }
+          mesh.position.set(p.x, p.type === 'mine' ? 0.4 : 1.2, p.z);
+          if (p.type === 'rocket') mesh.rotation.set(Math.PI / 2, 0, -p.h);
+        }
+        for (const [id, mesh] of projMap) {
+          if (!seen.has(id)) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); projMap.delete(id); }
+        }
       }
+
+      // animate blasts
+      for (let i = blasts.length - 1; i >= 0; i--) {
+        const b = blasts[i];
+        b.t += 0.06; b.m.scale.setScalar(1 + b.t * 6); b.m.material.opacity = Math.max(0, 0.9 - b.t);
+        if (b.t >= 1) { scene.remove(b.m); b.m.geometry.dispose(); b.m.material.dispose(); blasts.splice(i, 1); }
+      }
+
       renderer.render(scene, camera);
     };
     raf = requestAnimationFrame(loop);
@@ -228,8 +298,10 @@ export default function Karts({ room, youAreIndex }) {
     return () => {
       cancelAnimationFrame(raf);
       clearInterval(sendTimer);
+      clearInterval(hudTimer);
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
+      window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
       socket?.off('game:rt:snap', onSnap);
       renderer.dispose();
@@ -242,12 +314,44 @@ export default function Karts({ room, youAreIndex }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const fmtTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
   return (
     <div className="kt-wrap">
-      <div ref={mountRef} className="kt-canvas" />
+      <div className="kt-stage">
+        <div ref={mountRef} className="kt-canvas" />
+
+        {/* HUD overlay */}
+        <div className="kt-hud">
+          <div className="kt-timer">
+            {hud.phase === 'countdown' ? (hud.countdown > 0 ? hud.countdown : 'GO!')
+              : hud.phase === 'over' ? "TIME!" : fmtTime(hud.timeLeft)}
+          </div>
+          <div className="kt-scores">
+            {hud.players.map((p) => (
+              <div key={p.i} className={`kt-score ${p.gone ? 'gone' : ''}`}>
+                <span className="kt-dot" style={{ background: p.color }} />
+                <span className="kt-name">{p.i === youAreIndex ? 'You' : p.name}</span>
+                <span className="kt-kills">{p.kills}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {hud.me && (
+          <div className="kt-myhud">
+            <div className="kt-hpbar"><span style={{ width: `${Math.max(0, hud.me.hp)}%` }} /></div>
+            <div className="kt-weapon">
+              {hud.me.weapon
+                ? <><b style={{ color: WEAPON_COLOR[hud.me.weapon] }}>{WEAPON_LABEL[hud.me.weapon]}</b> ×{hud.me.ammo}</>
+                : <span className="muted">No weapon — grab a crate</span>}
+            </div>
+          </div>
+        )}
+      </div>
       <p className="kt-hint muted">
-        <b>W/S</b> or <b>↑/↓</b> drive · <b>A/D</b> or <b>←/→</b> steer. Server-authoritative 3D —
-        weapons &amp; more players coming next.
+        <b>W/S</b> drive · <b>A/D</b> steer · <b>Space</b>/click fire. Grab crates for weapons —
+        most kills when the clock hits 0 wins.
       </p>
     </div>
   );

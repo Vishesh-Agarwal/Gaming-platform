@@ -19,6 +19,10 @@ export function startMatch(io, roomId) {
     const out = stepRoom(roomId, dt);
     if (!out) { stopMatch(roomId); return; }
     for (const pid of out.players) emitToUser(io, pid, 'game:rt:snap', out.data);
+    if (out.over) {
+      for (const pid of out.players) emitToUser(io, pid, 'game:over', { room: out.room });
+      stopMatch(roomId);
+    }
   }, TICK_MS);
   loops.set(roomId, entry);
 }

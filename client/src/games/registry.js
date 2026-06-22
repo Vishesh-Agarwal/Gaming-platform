@@ -4,6 +4,7 @@
 import TicTacToe, { Thumbnail as TicTacToeThumb } from './TicTacToe.jsx';
 import GhostRider, { Thumbnail as GhostRiderThumb } from './GhostRider.jsx';
 import Artillery, { Thumbnail as ArtilleryThumb } from './Artillery.jsx';
+import Hangman, { Thumbnail as HangmanThumb } from './Hangman.jsx';
 
 const registry = {
   tictactoe: {
@@ -28,6 +29,13 @@ const registry = {
     thumbnail: ArtilleryThumb,
     accent: '#8bd450',
   },
+  hangman: {
+    name: 'Hangman',
+    Component: Hangman,
+    thumbnail: HangmanThumb,
+    accent: '#b388ff',
+    options: [{ key: 'rounds', label: 'Rounds', min: 1, max: 10, default: 3 }],
+  },
 };
 
 export function getGame(id) {
@@ -40,4 +48,5 @@ export const availableGames = Object.entries(registry).map(([id, g]) => ({
   thumbnail: g.thumbnail,
   accent: g.accent,
   modes: g.modes || null,
+  options: g.options || null,
 }));

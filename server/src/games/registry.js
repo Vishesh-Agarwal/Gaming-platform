@@ -13,6 +13,7 @@
 import tictactoe from './tictactoe.js';
 import ghostrider from './ghostrider.js';
 import artillery from './artillery.js';
+import hangman from './hangman.js';
 
 const games = new Map();
 
@@ -37,3 +38,4 @@ export function listGames() {
 register(tictactoe);
 register(ghostrider);
 register(artillery);
+register(hangman);

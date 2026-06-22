@@ -10,11 +10,14 @@ const rooms = new Map();   // roomId  -> room
 const userRooms = new Map(); // userId -> roomId (a user is in at most one room)
 
 function publicRoom(room) {
+  // Strip private game state (e.g. Hangman's secret word) before it leaves the
+  // server, so opponents never receive hidden info.
+  const { secret, ...state } = room.state;
   return {
     id: room.id,
     gameId: room.gameId,
     players: room.players.map((p) => ({ index: p.index, ...publicUser(p.user) })),
-    state: room.state,
+    state,
     status: room.status, // 'playing' | 'over'
     result: room.result || null,
   };
@@ -30,17 +33,33 @@ export function createInvite(fromUserId, toUserId, gameId, options) {
   if (userRooms.has(fromUserId)) return { error: 'You are already in a game.' };
   if (userRooms.has(toUserId)) return { error: 'That player is already in a game.' };
 
-  // resolve an optional game mode (falls back to the first declared mode)
-  let mode = null;
+  // resolve optional game settings: a mode (existing) and/or a numeric optionsSpec
+  let resolved = null;
+  const labels = [];
+
   if (game.modes?.length) {
-    mode = game.modes.find((m) => m.id === options?.mode) || game.modes[0];
+    const mode = game.modes.find((m) => m.id === options?.mode) || game.modes[0];
+    resolved = { ...resolved, mode: mode.id };
+    labels.push(mode.name);
+  }
+  if (game.optionsSpec) {
+    resolved = resolved || {};
+    for (const [key, spec] of Object.entries(game.optionsSpec)) {
+      if (spec.type === 'int') {
+        let v = parseInt(options?.[key], 10);
+        if (!Number.isFinite(v)) v = spec.default;
+        v = Math.max(spec.min, Math.min(spec.max, v));
+        resolved[key] = v;
+        labels.push(`${v} ${(spec.label || key).toLowerCase()}`);
+      }
+    }
   }
 
   const invite = {
     id: nanoid(10),
     gameId,
-    gameName: mode ? `${game.name} · ${mode.name}` : game.name,
-    options: mode ? { mode: mode.id } : null,
+    gameName: labels.length ? `${game.name} · ${labels.join(' · ')}` : game.name,
+    options: resolved,
     from: publicUser(getUserById(fromUserId)),
     to: toUserId,
     createdAt: Date.now(),

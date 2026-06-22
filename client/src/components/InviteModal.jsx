@@ -12,11 +12,18 @@ export default function InviteModal({
 }) {
   const [name, setName] = useState('');
   const [mode, setMode] = useState(game.modes?.[0]?.id || null);
+  const [opts, setOpts] = useState(() =>
+    Object.fromEntries((game.options || []).map((o) => [o.key, o.default]))
+  );
   const online = friends.filter((f) => onlineIds.has(f.id));
   const offline = friends.filter((f) => !onlineIds.has(f.id));
 
+  const setOpt = (key, min, max, delta) =>
+    setOpts((o) => ({ ...o, [key]: Math.max(min, Math.min(max, o[key] + delta)) }));
+
   const invite = (friendId) => {
-    onInvite(friendId, game.id, mode ? { mode } : undefined);
+    const payload = { ...(mode ? { mode } : {}), ...opts };
+    onInvite(friendId, game.id, Object.keys(payload).length ? payload : undefined);
     onClose();
   };
 
@@ -52,6 +59,17 @@ export default function InviteModal({
           {selectedMode?.hint && <p className="mode-hint muted">{selectedMode.hint}</p>}
         </div>
       )}
+
+      {(game.options || []).map((o) => (
+        <div key={o.key} className="opt-stepper">
+          <span className="mode-label">{o.label}</span>
+          <div className="stepper">
+            <button type="button" onClick={() => setOpt(o.key, o.min, o.max, -1)} disabled={opts[o.key] <= o.min}>−</button>
+            <span className="stepper-val">{opts[o.key]}</span>
+            <button type="button" onClick={() => setOpt(o.key, o.min, o.max, 1)} disabled={opts[o.key] >= o.max}>+</button>
+          </div>
+        </div>
+      ))}
 
       {friends.length === 0 && (
         <p className="muted">You have no friends yet — add one below to get started.</p>

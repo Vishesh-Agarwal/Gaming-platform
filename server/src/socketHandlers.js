@@ -22,8 +22,18 @@ import {
   isRealtimeRoom,
   setInput,
   getRoomIdForUser,
+  createRoom,
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
+import {
+  createLobby,
+  joinLobby,
+  leaveLobby,
+  setReady,
+  startLobby,
+  getLobbyForUser,
+  publicLobby,
+} from './lobbies.js';
 
 export function initSockets(io) {
   io.on('connection', (socket) => {
@@ -101,6 +111,67 @@ export function initSockets(io) {
       ack?.({ ok: true });
     });
 
+    // ---- Multiplayer lobby (N-player games, e.g. Smash Karts) ----
+    const broadcastLobby = (lobby) => {
+      if (!lobby) return;
+      const data = publicLobby(lobby);
+      for (const m of lobby.members) emitToUser(io, m.id, 'lobby:update', { lobby: data });
+    };
+
+    socket.on('lobby:create', (payload, ack) => {
+      if (getRoomIdForUser(me.id)) return ack?.({ error: 'Finish your current game first.' });
+      const { lobby, error } = createLobby(me, String(payload?.gameId || ''), payload?.options);
+      if (error) return ack?.({ error });
+      ack?.({ ok: true, lobby: publicLobby(lobby) });
+    });
+
+    socket.on('lobby:join', (payload, ack) => {
+      if (getRoomIdForUser(me.id)) return ack?.({ error: 'Finish your current game first.' });
+      const { lobby, error } = joinLobby(payload?.lobbyId || payload?.code, me);
+      if (error) return ack?.({ error });
+      broadcastLobby(lobby);
+      ack?.({ ok: true, lobby: publicLobby(lobby) });
+    });
+
+    socket.on('lobby:invite', (payload, ack) => {
+      const toUserId = Number(payload?.toUserId);
+      const lobby = getLobbyForUser(me.id);
+      if (!lobby) return ack?.({ error: 'You are not in a lobby.' });
+      if (!isOnline(toUserId)) return ack?.({ error: 'That friend is offline.' });
+      emitToUser(io, toUserId, 'lobby:invited', {
+        lobbyId: lobby.id,
+        code: lobby.code,
+        gameName: lobby.gameName,
+        from: { id: me.id, username: me.username },
+      });
+      ack?.({ ok: true });
+    });
+
+    socket.on('lobby:ready', (payload, ack) => {
+      const { lobby, error } = setReady(me.id, payload?.ready);
+      if (error) return ack?.({ error });
+      broadcastLobby(lobby);
+      ack?.({ ok: true });
+    });
+
+    socket.on('lobby:leave', (_payload, ack) => {
+      const res = leaveLobby(me.id);
+      if (!res.closed) broadcastLobby(res.lobby);
+      ack?.({ ok: true });
+    });
+
+    socket.on('lobby:start', (_payload, ack) => {
+      const res = startLobby(me.id);
+      if (res.error) return ack?.({ error: res.error });
+      const { room, error } = createRoom(res.gameId, res.options, res.userIds);
+      if (error) return ack?.({ error });
+      for (const p of room.players) {
+        emitToUser(io, p.id, 'game:start', { room, youAreIndex: p.index });
+      }
+      if (isRealtimeRoom(room.id)) startMatch(io, room.id);
+      ack?.({ ok: true, roomId: room.id });
+    });
+
     // ---- Gameplay ----
     socket.on('game:move', (payload, ack) => {
       const roomId = String(payload?.roomId || '');
@@ -146,6 +217,8 @@ export function initSockets(io) {
 
     // ---- Disconnect ----
     socket.on('disconnect', () => {
+      const lob = leaveLobby(me.id);
+      if (!lob.closed && lob.lobby) broadcastLobby(lob.lobby);
       const nowOffline = offline(me.id);
       if (nowOffline) {
         endGameByForfeit(io, me.id);

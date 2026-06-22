@@ -113,6 +113,32 @@ export function acceptInvite(inviteId, acceptingUserId) {
   return { room: publicRoom(room) };
 }
 
+// Generic N-player room creation (used by the multiplayer lobby). userIds in
+// seat order. Returns { room } or { error }.
+export function createRoom(gameId, options, userIds) {
+  const game = getGame(gameId);
+  if (!game) return { error: 'Unknown game.' };
+  for (const uid of userIds) {
+    if (userRooms.has(uid)) return { error: 'A player is already in a game.' };
+  }
+  const room = {
+    id: nanoid(10),
+    gameId,
+    game,
+    players: userIds.map((uid, i) => ({ index: i, user: getUserById(uid) })),
+    state: game.createInitialState(options || undefined),
+    status: 'playing',
+    result: null,
+  };
+  if (typeof game.createSim === 'function') {
+    room.sim = game.createSim(room.players);
+    room.inputs = {};
+  }
+  rooms.set(room.id, room);
+  for (const p of room.players) userRooms.set(p.user.id, room.id);
+  return { room: publicRoom(room) };
+}
+
 export function getRoom(roomId) {
   const room = rooms.get(roomId);
   return room ? publicRoom(room) : null;

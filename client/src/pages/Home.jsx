@@ -24,6 +24,9 @@ export default function Home() {
   const [youAreIndex, setYouAreIndex] = useState(null);
   const [gameError, setGameError] = useState('');
 
+  const [lobby, setLobby] = useState(null);
+  const [lobbyInvites, setLobbyInvites] = useState([]);
+
   const selectedRef = useRef(null);
   useEffect(() => {
     selectedRef.current = selectedFriendId;
@@ -86,12 +89,24 @@ export default function Home() {
     socket.on('game:invite:declined', ({ by }) => flash(`${by} declined your invite.`));
     socket.on('game:start', ({ room, youAreIndex }) => {
       setInvites([]);
+      setLobby(null);
+      setLobbyInvites([]);
       setGameError('');
       setYouAreIndex(youAreIndex);
       setActiveRoom(room);
     });
     socket.on('game:state', ({ room }) => setActiveRoom(room));
     socket.on('game:over', ({ room }) => setActiveRoom(room));
+
+    // Multiplayer lobby
+    socket.on('lobby:update', ({ lobby }) => setLobby(lobby));
+    socket.on('lobby:invited', (inv) =>
+      setLobbyInvites((prev) => [...prev.filter((i) => i.lobbyId !== inv.lobbyId), inv])
+    );
+    socket.on('lobby:closed', () => {
+      setLobby(null);
+      flash('Lobby closed.');
+    });
 
     return () => disconnectSocket();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,6 +166,34 @@ export default function Home() {
     setInvites((prev) => prev.filter((i) => i.inviteId !== inviteId));
     await emitAck('game:invite:decline', { inviteId });
   };
+  // ---- Multiplayer lobby ----
+  const onCreateLobby = async (gameId, options) => {
+    const res = await emitAck('lobby:create', { gameId, options });
+    if (res.error) return flash(res.error);
+    setLobby(res.lobby);
+  };
+  const onJoinLobby = async ({ lobbyId, code }) => {
+    const res = await emitAck('lobby:join', { lobbyId, code });
+    if (res.error) return flash(res.error);
+    setLobby(res.lobby);
+    setLobbyInvites((prev) => prev.filter((i) => i.lobbyId !== res.lobby.id));
+  };
+  const onLeaveLobby = async () => {
+    await emitAck('lobby:leave', {});
+    setLobby(null);
+  };
+  const onLobbyReady = async (ready) => {
+    await emitAck('lobby:ready', { ready });
+  };
+  const onInviteToLobby = async (friendId) => {
+    const res = await emitAck('lobby:invite', { toUserId: friendId });
+    flash(res.error ? res.error : 'Lobby invite sent!');
+  };
+  const onStartLobby = async () => {
+    const res = await emitAck('lobby:start', {});
+    if (res.error) flash(res.error);
+  };
+
   const onMove = async (move) => {
     const res = await emitAck('game:move', { roomId: activeRoom.id, move });
     setGameError(res.error || '');
@@ -190,11 +233,19 @@ export default function Home() {
       unread={unread}
       currentUser={user}
       notice={notice}
+      lobby={lobby}
+      lobbyInvites={lobbyInvites}
       onAddFriend={onAddFriend}
       onAccept={onAccept}
       onInvite={onInvite}
       onAcceptInvite={onAcceptInvite}
       onDeclineInvite={onDeclineInvite}
+      onCreateLobby={onCreateLobby}
+      onJoinLobby={onJoinLobby}
+      onLeaveLobby={onLeaveLobby}
+      onLobbyReady={onLobbyReady}
+      onInviteToLobby={onInviteToLobby}
+      onStartLobby={onStartLobby}
       onSelectFriend={onSelectFriend}
       onBack={onBackToFriends}
       onSendChat={onSendChat}

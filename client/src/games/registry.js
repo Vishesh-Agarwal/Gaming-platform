@@ -42,6 +42,7 @@ const registry = {
     Component: Karts,
     thumbnail: KartsThumb,
     accent: '#ff5d6c',
+    maxPlayers: 4,
   },
 };
 
@@ -56,4 +57,5 @@ export const availableGames = Object.entries(registry).map(([id, g]) => ({
   accent: g.accent,
   modes: g.modes || null,
   options: g.options || null,
+  maxPlayers: g.maxPlayers || 2,
 }));

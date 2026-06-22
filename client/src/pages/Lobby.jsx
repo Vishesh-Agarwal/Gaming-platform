@@ -5,6 +5,7 @@ import { availableGames } from '../games/registry.js';
 import { APP_NAME } from '../config.js';
 import GameCard from '../components/GameCard.jsx';
 import InviteModal from '../components/InviteModal.jsx';
+import LobbyModal from '../components/LobbyModal.jsx';
 import FriendsChat from '../components/FriendsChat.jsx';
 import Modal from '../components/Modal.jsx';
 
@@ -24,11 +25,19 @@ export default function Lobby({
   unread,
   currentUser,
   notice,
+  lobby,
+  lobbyInvites,
   onAddFriend,
   onAccept,
   onInvite,
   onAcceptInvite,
   onDeclineInvite,
+  onCreateLobby,
+  onJoinLobby,
+  onLeaveLobby,
+  onLobbyReady,
+  onInviteToLobby,
+  onStartLobby,
   onSelectFriend,
   onBack,
   onSendChat,
@@ -37,7 +46,21 @@ export default function Lobby({
   const [pickedGame, setPickedGame] = useState(null); // game chosen to invite into
   const [showAdd, setShowAdd] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
+  const [showJoinCode, setShowJoinCode] = useState(false);
   const [addName, setAddName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+
+  // Clicking a game: multiplayer games open a lobby, 1v1 games open the invite modal.
+  const pickGame = (g) => (g.maxPlayers > 2 ? onCreateLobby(g.id) : setPickedGame(g));
+
+  const submitJoinCode = (e) => {
+    e.preventDefault();
+    const c = joinCode.trim().toUpperCase();
+    if (c.length < 4) return;
+    onJoinLobby({ code: c });
+    setJoinCode('');
+    setShowJoinCode(false);
+  };
 
   const [chatWidth, setChatWidth] = useState(() => {
     const saved = Number(localStorage.getItem(CHAT_WIDTH_KEY));
@@ -75,8 +98,8 @@ export default function Lobby({
 
   return (
     <div className="app">
-      {/* Incoming game invites — float on top, hard to miss */}
-      {invites.length > 0 && (
+      {/* Incoming game + lobby invites — float on top, hard to miss */}
+      {(invites.length > 0 || lobbyInvites?.length > 0) && (
         <div className="invite-banner">
           {invites.map((inv) => (
             <div key={inv.inviteId} className="invite-card">
@@ -91,12 +114,25 @@ export default function Lobby({
               </div>
             </div>
           ))}
+          {lobbyInvites?.map((inv) => (
+            <div key={inv.lobbyId} className="invite-card">
+              <span>
+                <b>{inv.from.username}</b> invited you to a <b>{inv.gameName}</b> lobby
+              </span>
+              <div className="invite-actions">
+                <button onClick={() => onJoinLobby({ lobbyId: inv.lobbyId })}>Join</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
       <header className="topbar">
         <span className="brand">🎮 {APP_NAME}</span>
         <span className="spacer" />
+        <button className="ghost" onClick={() => setShowJoinCode(true)}>
+          Join code
+        </button>
         <button className="ghost" onClick={() => setShowAdd(true)}>
           + Add friend
         </button>
@@ -118,7 +154,7 @@ export default function Lobby({
           <p className="muted">Pick a game, then invite a friend to play.</p>
           <div className="games-grid">
             {availableGames.map((g) => (
-              <GameCard key={g.id} game={g} onClick={setPickedGame} />
+              <GameCard key={g.id} game={g} onClick={pickGame} />
             ))}
           </div>
         </main>
@@ -155,6 +191,33 @@ export default function Lobby({
           onAddFriend={onAddFriend}
           onClose={() => setPickedGame(null)}
         />
+      )}
+
+      {lobby && (
+        <LobbyModal
+          lobby={lobby}
+          currentUser={currentUser}
+          friends={friends}
+          onlineIds={onlineIds}
+          onInvite={onInviteToLobby}
+          onReady={onLobbyReady}
+          onStart={onStartLobby}
+          onLeave={onLeaveLobby}
+        />
+      )}
+
+      {showJoinCode && (
+        <Modal title="Join by code" onClose={() => setShowJoinCode(false)}>
+          <form className="add-friend modal-add" onSubmit={submitJoinCode}>
+            <input
+              autoFocus
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))}
+              placeholder="ROOM CODE"
+            />
+            <button type="submit" disabled={joinCode.trim().length < 4}>Join</button>
+          </form>
+        </Modal>
       )}
 
       {showAdd && (

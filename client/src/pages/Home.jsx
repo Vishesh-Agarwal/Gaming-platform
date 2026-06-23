@@ -185,6 +185,9 @@ export default function Home() {
   const onLobbyReady = async (ready) => {
     await emitAck('lobby:ready', { ready });
   };
+  const onSetLobbyMap = async (map) => {
+    await emitAck('lobby:options', { options: { map } });
+  };
   const onInviteToLobby = async (friendId) => {
     const res = await emitAck('lobby:invite', { toUserId: friendId });
     flash(res.error ? res.error : 'Lobby invite sent!');
@@ -244,6 +247,7 @@ export default function Home() {
       onJoinLobby={onJoinLobby}
       onLeaveLobby={onLeaveLobby}
       onLobbyReady={onLobbyReady}
+      onSetLobbyMap={onSetLobbyMap}
       onInviteToLobby={onInviteToLobby}
       onStartLobby={onStartLobby}
       onSelectFriend={onSelectFriend}

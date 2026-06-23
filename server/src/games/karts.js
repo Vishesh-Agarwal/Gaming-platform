@@ -3,9 +3,8 @@
 // weapons from crates, fight, die + respawn; most kills in 90s wins.
 
 import { integrateKart, SIM_DT } from './kartPhysics.js';
+import { getMap } from './kartMaps.js';
 
-const ARENA_W = 80;
-const ARENA_D = 80;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
 
 // match
@@ -19,29 +18,19 @@ const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12
 const SHIELD = { dur: 4000 };
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
 
-const PADS = [
-  [0, 0], [-24, -24], [24, -24], [-24, 24], [24, 24],
-];
-
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const r1 = (v) => Math.round(v * 10) / 10;
 const rand = (a) => a[Math.floor(Math.random() * a.length)];
 
-function spawnPoint(i, n) {
-  const a = (i / Math.max(1, n)) * Math.PI * 2;
-  const radius = 22;
-  const x = Math.cos(a) * radius, z = Math.sin(a) * radius;
-  return { x, z, heading: Math.atan2(-x, -z) };
+function createInitialState(options) {
+  const map = getMap(options?.map);
+  return { arena: map.arena, colors: COLORS, realtime: true, maxPlayers: 4, mapId: map.id };
 }
 
-function createInitialState() {
-  return { arena: { w: ARENA_W, d: ARENA_D }, colors: COLORS, realtime: true, maxPlayers: 4 };
-}
-
-function createSim(players, now = Date.now()) {
-  const n = players.length;
+function createSim(players, now = Date.now(), options) {
+  const map = getMap(options?.map);
   const karts = players.map((p, i) => {
-    const s = spawnPoint(i, n);
+    const s = map.spawns[i % map.spawns.length];
     return {
       x: s.x, z: s.z, heading: s.heading, vel: 0,
       hp: HP_MAX, alive: true, respawnAt: 0, kills: 0,
@@ -50,8 +39,9 @@ function createSim(players, now = Date.now()) {
     };
   });
   return {
+    mapId: map.id,
     karts,
-    crates: PADS.map(([x, z]) => ({ x, z, type: null, readyAt: now + COUNTDOWN_MS })),
+    crates: map.pads.map(([x, z]) => ({ x, z, type: null, readyAt: now + COUNTDOWN_MS })),
     projectiles: [],
     nextPid: 1,
     startAt: now + COUNTDOWN_MS,
@@ -105,6 +95,7 @@ function step(sim, inputs, dt, now = Date.now()) {
   if (sim.over || now < sim.startAt) return;
   if (now >= sim.endsAt) { sim.over = true; return; }
   const d = clamp(dt, 0, 0.1);
+  const map = getMap(sim.mapId);
 
   // recharge crates
   for (const c of sim.crates) {
@@ -122,7 +113,7 @@ function step(sim, inputs, dt, now = Date.now()) {
         dslot.queue.length = 0;
       }
       if (now >= k.respawnAt) {
-        const s = spawnPoint(i, sim.karts.length);
+        const s = map.spawns[i % map.spawns.length];
         k.x = s.x; k.z = s.z; k.heading = s.heading; k.vel = 0;
         k.hp = HP_MAX; k.alive = true; k.shieldUntil = now + 1200; // brief spawn protection
       }
@@ -133,12 +124,19 @@ function step(sim, inputs, dt, now = Date.now()) {
     let drained = null;
     while (q.length) {
       const cmd = q.shift();
-      integrateKart(k, cmd, SIM_DT);
+      integrateKart(k, cmd, SIM_DT, map);
       k.lastSeq = cmd.seq || 0;
       drained = cmd;
     }
     if (drained) slot.last = drained;
     const fire = !!(drained || slot.last || {}).fire;
+
+    // hazard zones: server-authoritative self-damage (no kill credit; shield/spawn-protect applies via damage())
+    for (const hz of map.hazards) {
+      const hx = k.x - hz.x, hz2 = k.z - hz.z;
+      if (hx * hx + hz2 * hz2 < hz.r * hz.r) { damage(sim, i, hz.dmg, i, now); break; }
+    }
+    if (!k.alive) continue; // died to a hazard this tick
 
     // pick up a weapon when unarmed
     if (!k.weapon) {
@@ -196,7 +194,7 @@ function step(sim, inputs, dt, now = Date.now()) {
       pr.x += pr.vx * d; pr.z += pr.vz * d; pr.life -= d;
       const spec = pr.type === 'mg' ? MG : ROCKET;
       if (pr.life <= 0) dead = true;
-      else if (Math.abs(pr.x) > ARENA_W / 2 || Math.abs(pr.z) > ARENA_D / 2) dead = true;
+      else if (Math.abs(pr.x) > map.arena.w / 2 || Math.abs(pr.z) > map.arena.d / 2) dead = true;
       else {
         for (let i = 0; i < sim.karts.length; i++) {
           if (i === pr.owner) continue;

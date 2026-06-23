@@ -20,7 +20,8 @@ function makeBackdrop() {
   return tex;
 }
 
-function buildArena(scene, arena) {
+function buildArena(scene, map) {
+  const arena = map.arena;
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(arena.w, arena.d),
     new THREE.MeshStandardMaterial({ color: '#0e1020', roughness: 0.9, metalness: 0.1 })
@@ -60,9 +61,38 @@ function buildArena(scene, arena) {
     post.position.set(sx * (arena.w / 2 - 1), 1.7, sz * (arena.d / 2 - 1));
     scene.add(post);
   }
+
+  // obstacles
+  const obMat = new THREE.MeshStandardMaterial({ color: '#2a2450', emissive: '#161033', roughness: 0.6 });
+  const obTrim = new THREE.MeshStandardMaterial({ color: '#7cc4ff', emissive: '#7cc4ff', emissiveIntensity: 1.4 });
+  for (const o of map.obstacles || []) {
+    if (o.kind === 'cyl') {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, 3, 20), obMat);
+      m.position.set(o.x, 1.5, o.z); m.castShadow = true; scene.add(m);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(o.r * 1.05, o.r * 1.05, 0.2, 20), obTrim);
+      cap.position.set(o.x, 3.1, o.z); scene.add(cap);
+    } else {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(o.w, 3, o.d), obMat);
+      m.position.set(o.x, 1.5, o.z); m.castShadow = true; scene.add(m);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(o.w, 0.2, o.d), obTrim);
+      cap.position.set(o.x, 3.1, o.z); scene.add(cap);
+    }
+  }
+  // hazard zones (flat red glow)
+  for (const hz of map.hazards || []) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(hz.r, 28),
+      new THREE.MeshBasicMaterial({ color: '#ff3b5c', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.position.set(hz.x, 0.04, hz.z); scene.add(m);
+  }
+  // boost pads (cyan glow)
+  for (const b of map.boosts || []) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(b.r, 28),
+      new THREE.MeshBasicMaterial({ color: '#22e0ff', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.position.set(b.x, 0.05, b.z); scene.add(m);
+  }
 }
 
-export function createScene(mount, arena) {
+export function createScene(mount, map) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -90,7 +120,7 @@ export function createScene(mount, arena) {
   const p1 = new THREE.PointLight('#5cc8ff', 0.5, 140); p1.position.set(-30, 18, -30); scene.add(p1);
   const p2 = new THREE.PointLight('#ff5d6c', 0.5, 140); p2.position.set(30, 18, 30); scene.add(p2);
 
-  buildArena(scene, arena);
+  buildArena(scene, map);
 
   // Bloom postprocessing with graceful fallback.
   let composer = null;

@@ -8,6 +8,7 @@ import { createScene } from './karts/scene.js';
 import { makeKart, updateKart } from './karts/kartModel.js';
 import { createFx } from './karts/fx.js';
 import { createAudio } from './karts/audio.js';
+import { integrateKart, SIM_DT } from './karts/kartPhysics.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -101,11 +102,29 @@ export default function Karts({ room, youAreIndex }) {
     // snapshots
     const buffer = [];
     const latest = { snap: null };
+    // client-side prediction of the local kart
+    const pred = { x: 0, z: 0, heading: 0, vel: 0, has: false };
+    const pending = [];
+    const renderLocal = { x: 0, z: 0, h: 0 };
+    let renderInit = false;
+    let inputSeq = 0;
+    const PRED_SMOOTH = 0.35;
     const onSnap = (snap) => {
       if (!snap?.karts) return;
       buffer.push({ ct: performance.now(), karts: snap.karts });
       if (buffer.length > 10) buffer.shift();
       latest.snap = snap;
+      // reconcile local prediction against the authoritative state
+      const mine = snap.karts.find((k) => k.i === youAreIndex);
+      if (mine && mine.alive && !mine.gone) {
+        pred.x = mine.x; pred.z = mine.z; pred.heading = mine.h; pred.vel = mine.v || 0;
+        const ack = mine.seq || 0;
+        while (pending.length && pending[0].seq <= ack) pending.shift();
+        for (const p of pending) integrateKart(pred, p, SIM_DT);
+        pred.has = true;
+      } else if (mine) {
+        pred.has = false; pending.length = 0; renderInit = false;
+      }
     };
     socket?.on('game:rt:snap', onSnap);
 
@@ -142,7 +161,14 @@ export default function Karts({ room, youAreIndex }) {
     renderer.domElement.addEventListener('pointerdown', md);
     window.addEventListener('pointerup', mu);
     const sendTimer = setInterval(() => {
-      socket?.emit('game:rt:input', { roomId, input: { throttle: input.throttle, steer: input.steer, fire: input.fire } });
+      inputSeq += 1;
+      const cmd = { seq: inputSeq, throttle: input.throttle, steer: input.steer, fire: input.fire };
+      if (pred.has) {
+        integrateKart(pred, cmd, SIM_DT);
+        pending.push({ seq: inputSeq, throttle: cmd.throttle, steer: cmd.steer });
+        if (pending.length > 240) pending.shift();
+      }
+      socket?.emit('game:rt:input', { roomId, input: cmd });
     }, 33);
 
     // HUD state pushed to React ~6/s
@@ -177,6 +203,16 @@ export default function Karts({ room, youAreIndex }) {
       if (sample && snap) {
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
         meX = me ? me.x : null;
+        // ease the rendered local pose toward the predicted pose
+        if (pred.has) {
+          if (!renderInit) { renderLocal.x = pred.x; renderLocal.z = pred.z; renderLocal.h = pred.heading; renderInit = true; }
+          else {
+            renderLocal.x += (pred.x - renderLocal.x) * PRED_SMOOTH;
+            renderLocal.z += (pred.z - renderLocal.z) * PRED_SMOOTH;
+            renderLocal.h = lerpAngle(renderLocal.h, pred.heading, PRED_SMOOTH);
+          }
+        }
+        const camPose = pred.has ? renderLocal : me;
         let localSpeed = 0;
         for (const ks of sample) {
           const g = karts[ks.i];
@@ -184,20 +220,24 @@ export default function Karts({ room, youAreIndex }) {
           const meta = snap.karts.find((k) => k.i === ks.i);
           const visible = meta ? meta.alive && !meta.gone : true;
           g.visible = visible;
-          g.position.set(ks.x, 0, ks.z);
-          g.rotation.y = ks.h;
+          const useLocal = ks.i === youAreIndex && pred.has;
+          const rx = useLocal ? renderLocal.x : ks.x;
+          const rz = useLocal ? renderLocal.z : ks.z;
+          const rh = useLocal ? renderLocal.h : ks.h;
+          g.position.set(rx, 0, rz);
+          g.rotation.y = rh;
           // derive speed/turn from the interpolated transform delta
           const pt = prevT[ks.i];
           let speed = 0, turn = 0;
           if (pt.init) {
-            speed = Math.hypot(ks.x - pt.x, ks.z - pt.z);
-            turn = ((ks.h - pt.h + Math.PI) % (Math.PI * 2)) - Math.PI;
+            speed = Math.hypot(rx - pt.x, rz - pt.z);
+            turn = ((rh - pt.h + Math.PI) % (Math.PI * 2)) - Math.PI;
           }
-          pt.x = ks.x; pt.z = ks.z; pt.h = ks.h; pt.init = true;
+          pt.x = rx; pt.z = rz; pt.h = rh; pt.init = true;
           if (ks.i === youAreIndex) localSpeed = speed;
           updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
-          if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(ks.x - Math.sin(ks.h) * 1.8, ks.z - Math.cos(ks.h) * 1.8);
-          if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(ks.x, 1.0, ks.z);
+          if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(rx - Math.sin(rh) * 1.8, rz - Math.cos(rh) * 1.8);
+          if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(rx, 1.0, rz);
           // death explosion on alive->dead transition
           if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) { fx.explode(ks.x, ks.z, colors[ks.i % colors.length]); audio.explosion(panFor(ks.x)); }
           if (meta) prevAlive[ks.i] = meta.alive;
@@ -228,11 +268,11 @@ export default function Karts({ room, youAreIndex }) {
           prevKills = meMeta.kills;
         }
         // camera follows local kart
-        if (me) {
-          const fxDir = Math.sin(me.h), fz = Math.cos(me.h);
-          camTarget.set(me.x - fxDir * 16, 11, me.z - fz * 16);
+        if (camPose) {
+          const fxDir = Math.sin(camPose.h), fz = Math.cos(camPose.h);
+          camTarget.set(camPose.x - fxDir * 16, 11, camPose.z - fz * 16);
           camera.position.lerp(camTarget, 0.08);
-          camera.lookAt(me.x, 1.5, me.z);
+          camera.lookAt(camPose.x, 1.5, camPose.z);
         }
 
         // crates

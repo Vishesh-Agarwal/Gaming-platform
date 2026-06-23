@@ -2,13 +2,11 @@
 // engine ticks step() ~30Hz (passing `now`) and broadcasts snapshot(). Pick up
 // weapons from crates, fight, die + respawn; most kills in 90s wins.
 
+import { integrateKart, SIM_DT } from './kartPhysics.js';
+
 const ARENA_W = 80;
 const ARENA_D = 80;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
-
-// driving
-const ACCEL = 26, REVERSE_ACCEL = 16, MAX_SPEED = 28, REVERSE_MAX = 11;
-const DRAG = 1.7, TURN_RATE = 2.8, KART_R = 2.2;
 
 // match
 const COUNTDOWN_MS = 3000, MATCH_MS = 90000, RESPAWN_MS = 2000, HP_MAX = 100;
@@ -48,7 +46,7 @@ function createSim(players, now = Date.now()) {
       x: s.x, z: s.z, heading: s.heading, vel: 0,
       hp: HP_MAX, alive: true, respawnAt: 0, kills: 0,
       weapon: null, ammo: 0, shieldUntil: 0,
-      prevFire: false, queue: [], nextShotAt: 0, gone: false,
+      prevFire: false, queue: [], nextShotAt: 0, gone: false, lastSeq: 0,
     };
   });
   return {
@@ -107,7 +105,6 @@ function step(sim, inputs, dt, now = Date.now()) {
   if (sim.over || now < sim.startAt) return;
   if (now >= sim.endsAt) { sim.over = true; return; }
   const d = clamp(dt, 0, 0.1);
-  const half = ARENA_W / 2 - KART_R, halfD = ARENA_D / 2 - KART_R;
 
   // recharge crates
   for (const c of sim.crates) {
@@ -118,6 +115,12 @@ function step(sim, inputs, dt, now = Date.now()) {
     const k = sim.karts[i];
     if (k.gone) continue;
     if (!k.alive) {
+      // discard inputs queued while dead so they don't replay in a burst on respawn
+      const dslot = inputs[i];
+      if (dslot && dslot.queue && dslot.queue.length) {
+        k.lastSeq = dslot.queue[dslot.queue.length - 1].seq || k.lastSeq;
+        dslot.queue.length = 0;
+      }
       if (now >= k.respawnAt) {
         const s = spawnPoint(i, sim.karts.length);
         k.x = s.x; k.z = s.z; k.heading = s.heading; k.vel = 0;
@@ -125,23 +128,17 @@ function step(sim, inputs, dt, now = Date.now()) {
       }
       continue;
     }
-    const inp = inputs[i] || {};
-    const throttle = clamp(Number(inp.throttle) || 0, -1, 1);
-    const steer = clamp(Number(inp.steer) || 0, -1, 1);
-    const fire = !!inp.fire;
-
-    if (throttle > 0) k.vel += ACCEL * throttle * d;
-    else if (throttle < 0) k.vel += REVERSE_ACCEL * throttle * d;
-    k.vel -= k.vel * Math.min(1, DRAG * d);
-    k.vel = clamp(k.vel, -REVERSE_MAX, MAX_SPEED);
-    const turnFactor = clamp(Math.abs(k.vel) / 8, 0, 1);
-    k.heading += steer * TURN_RATE * d * turnFactor * Math.sign(k.vel || 1);
-    k.x += Math.sin(k.heading) * k.vel * d;
-    k.z += Math.cos(k.heading) * k.vel * d;
-    if (k.x > half) { k.x = half; k.vel *= 0.4; }
-    if (k.x < -half) { k.x = -half; k.vel *= 0.4; }
-    if (k.z > halfD) { k.z = halfD; k.vel *= 0.4; }
-    if (k.z < -halfD) { k.z = -halfD; k.vel *= 0.4; }
+    const slot = inputs[i] || {};
+    const q = slot.queue || [];
+    let drained = null;
+    while (q.length) {
+      const cmd = q.shift();
+      integrateKart(k, cmd, SIM_DT);
+      k.lastSeq = cmd.seq || 0;
+      drained = cmd;
+    }
+    if (drained) slot.last = drained;
+    const fire = !!(drained || slot.last || {}).fire;
 
     // pick up a weapon when unarmed
     if (!k.weapon) {
@@ -223,7 +220,7 @@ function snapshot(sim, now = Date.now()) {
     countdown: Math.max(0, Math.ceil((sim.startAt - now) / 1000)),
     timeLeft: Math.max(0, Math.ceil((sim.endsAt - now) / 1000)),
     karts: sim.karts.map((k, i) => ({
-      i, x: r1(k.x), z: r1(k.z), h: r1(k.heading),
+      i, x: r1(k.x), z: r1(k.z), h: r1(k.heading), v: r1(k.vel), seq: k.lastSeq || 0,
       hp: Math.round(k.hp), alive: k.alive, kills: k.kills,
       weapon: k.weapon, ammo: k.ammo, shield: now < k.shieldUntil, gone: k.gone,
     })),

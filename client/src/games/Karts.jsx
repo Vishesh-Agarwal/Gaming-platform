@@ -9,6 +9,7 @@ import { makeKart, updateKart } from './karts/kartModel.js';
 import { createFx } from './karts/fx.js';
 import { createAudio } from './karts/audio.js';
 import { integrateKart, SIM_DT } from './karts/kartPhysics.js';
+import { getMap } from './karts/kartMaps.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -37,8 +38,9 @@ export default function Karts({ room, youAreIndex }) {
     const names = room.players.map((p) => p.username);
     const roomId = room.id;
 
-    const arena = cfg.arena || { w: 80, d: 80 };
-    const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, arena);
+    const map = getMap(cfg.mapId);
+    const arena = map.arena;
+    const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, map);
     const fx = createFx(scene);
     const audio = createAudio();
     audioRef.current = audio;
@@ -120,7 +122,7 @@ export default function Karts({ room, youAreIndex }) {
         pred.x = mine.x; pred.z = mine.z; pred.heading = mine.h; pred.vel = mine.v || 0;
         const ack = mine.seq || 0;
         while (pending.length && pending[0].seq <= ack) pending.shift();
-        for (const p of pending) integrateKart(pred, p, SIM_DT);
+        for (const p of pending) integrateKart(pred, p, SIM_DT, map);
         pred.has = true;
       } else if (mine) {
         pred.has = false; pending.length = 0; renderInit = false;
@@ -164,7 +166,7 @@ export default function Karts({ room, youAreIndex }) {
       inputSeq += 1;
       const cmd = { seq: inputSeq, throttle: input.throttle, steer: input.steer, fire: input.fire };
       if (pred.has) {
-        integrateKart(pred, cmd, SIM_DT);
+        integrateKart(pred, cmd, SIM_DT, map);
         pending.push({ seq: inputSeq, throttle: cmd.throttle, steer: cmd.steer });
         if (pending.length > 240) pending.shift();
       }

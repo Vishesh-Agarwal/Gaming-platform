@@ -115,6 +115,12 @@ function step(sim, inputs, dt, now = Date.now()) {
     const k = sim.karts[i];
     if (k.gone) continue;
     if (!k.alive) {
+      // discard inputs queued while dead so they don't replay in a burst on respawn
+      const dslot = inputs[i];
+      if (dslot && dslot.queue && dslot.queue.length) {
+        k.lastSeq = dslot.queue[dslot.queue.length - 1].seq || k.lastSeq;
+        dslot.queue.length = 0;
+      }
       if (now >= k.respawnAt) {
         const s = spawnPoint(i, sim.karts.length);
         k.x = s.x; k.z = s.z; k.heading = s.heading; k.vel = 0;

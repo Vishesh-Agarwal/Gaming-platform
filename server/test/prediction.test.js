@@ -59,3 +59,27 @@ test('fire travels through the queue into the sim (regression: fire was dropped)
   step(sim, inputs, 0.033, now);
   assert.ok(sim.projectiles.length > before, 'a projectile should have been fired');
 });
+
+test('inputs queued while dead are discarded (no respawn lurch)', () => {
+  const sim = createSim([{}, {}], 0);
+  const t0 = sim.startAt + 1000;
+  sim.karts[0].alive = false;
+  sim.karts[0].respawnAt = t0 + 2000;
+  const q = [];
+  for (let i = 1; i <= 60; i++) q.push({ seq: i, throttle: 1, steer: 1, fire: false });
+  const inputs = { 0: { queue: q, last: null } };
+  // tick while still dead: the backlog must be discarded, not retained
+  step(sim, inputs, 0.033, t0);
+  assert.equal(inputs[0].queue.length, 0, 'dead queue discarded');
+  assert.equal(sim.karts[0].lastSeq, 60, 'lastSeq advanced to latest discarded');
+  assert.equal(sim.karts[0].alive, false);
+  // respawn tick (empty queue): kart placed at spawn with vel 0
+  const tR = sim.karts[0].respawnAt + 1;
+  step(sim, { 0: { queue: [], last: null } }, 0.033, tR);
+  assert.equal(sim.karts[0].alive, true);
+  assert.equal(sim.karts[0].vel, 0, 'respawn vel is 0, not flung');
+  const sx = sim.karts[0].x, sz = sim.karts[0].z;
+  // a follow-up tick with no input must not move the kart (no leftover backlog)
+  step(sim, { 0: { queue: [], last: null } }, 0.033, tR + 33);
+  assert.ok(Math.abs(sim.karts[0].x - sx) < 1e-9 && Math.abs(sim.karts[0].z - sz) < 1e-9, 'no movement without input');
+});

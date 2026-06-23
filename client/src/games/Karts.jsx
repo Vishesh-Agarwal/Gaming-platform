@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { getSocket } from '../socket.js';
 import { createScene } from './karts/scene.js';
 import { makeKart, updateKart } from './karts/kartModel.js';
+import { createFx } from './karts/fx.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -54,6 +55,7 @@ export default function Karts({ room, youAreIndex }) {
 
     const arena = cfg.arena || { w: 80, d: 80 };
     const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, arena);
+    const fx = createFx(scene);
 
     // karts (with a shield bubble child)
     const karts = [];
@@ -69,34 +71,36 @@ export default function Karts({ room, youAreIndex }) {
     const ensureCrates = (list) => {
       while (crateMeshes.length < list.length) {
         const c = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 2.2),
-          new THREE.MeshStandardMaterial({ color: '#888', emissive: '#000', emissiveIntensity: 0.6, transparent: true }));
-        c.castShadow = true; scene.add(c); crateMeshes.push(c);
+          new THREE.MeshStandardMaterial({ color: '#888', emissive: '#000', emissiveIntensity: 1.0, transparent: true }));
+        c.castShadow = true;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.08, 8, 28),
+          new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+        ring.rotation.x = Math.PI / 2; c.add(ring); c.userData.ring = ring;
+        scene.add(c); crateMeshes.push(c);
       }
     };
 
     // projectile pool keyed by id
     const projMap = new Map();
     const makeProj = (type) => {
+      let m;
       if (type === 'mine') {
-        return new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.4, 16),
-          new THREE.MeshStandardMaterial({ color: '#ffd24a', emissive: '#ff5d6c', emissiveIntensity: 0.5 }));
+        m = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.4, 16),
+          new THREE.MeshStandardMaterial({ color: '#ffd24a', emissive: '#ff5d6c', emissiveIntensity: 0.9 }));
+        const warn = new THREE.Mesh(new THREE.RingGeometry(1.5, 1.9, 20),
+          new THREE.MeshBasicMaterial({ color: '#ff5d6c', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+        warn.rotation.x = -Math.PI / 2; warn.position.y = -0.18; m.add(warn);
+      } else if (type === 'rocket') {
+        m = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.4, 4, 8),
+          new THREE.MeshStandardMaterial({ color: '#ff7a3c', emissive: '#ff7a3c', emissiveIntensity: 1.0 }));
+      } else {
+        m = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8),
+          new THREE.MeshStandardMaterial({ color: '#fff7b0', emissive: '#ffe39a', emissiveIntensity: 1.2 }));
       }
-      if (type === 'rocket') {
-        return new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.4, 4, 8),
-          new THREE.MeshStandardMaterial({ color: '#ff7a3c', emissive: '#ff7a3c', emissiveIntensity: 0.7 }));
-      }
-      return new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8),
-        new THREE.MeshStandardMaterial({ color: '#fff7b0', emissive: '#ffe39a', emissiveIntensity: 0.9 }));
+      m.userData.type = type;
+      return m;
     };
 
-    // death explosions
-    const blasts = [];
-    const spawnBlast = (x, z, color) => {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
-        new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.9 }));
-      m.position.set(x, 1.2, z); scene.add(m);
-      blasts.push({ m, t: 0 });
-    };
     const prevAlive = karts.map(() => true);
 
     // snapshots
@@ -188,8 +192,10 @@ export default function Karts({ room, youAreIndex }) {
           }
           pt.x = ks.x; pt.z = ks.z; pt.h = ks.h; pt.init = true;
           updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
+          if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(ks.x - Math.sin(ks.h) * 1.8, ks.z - Math.cos(ks.h) * 1.8);
+          if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(ks.x, 1.0, ks.z);
           // death explosion on alive->dead transition
-          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) spawnBlast(ks.x, ks.z, colors[ks.i % colors.length]);
+          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) fx.explode(ks.x, ks.z, colors[ks.i % colors.length]);
           if (meta) prevAlive[ks.i] = meta.alive;
         }
         // camera follows local kart
@@ -212,6 +218,7 @@ export default function Karts({ room, youAreIndex }) {
             mesh.rotation.y += 0.03;
             const col = new THREE.Color(WEAPON_COLOR[c.type] || '#fff');
             mesh.material.color.copy(col); mesh.material.emissive.copy(col);
+            if (mesh.userData.ring) mesh.userData.ring.material.color.copy(col);
           } else mesh.visible = false;
         });
 
@@ -220,22 +227,23 @@ export default function Karts({ room, youAreIndex }) {
         for (const p of snap.proj) {
           seen.add(p.id);
           let mesh = projMap.get(p.id);
-          if (!mesh) { mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh); }
+          if (!mesh) {
+            mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh);
+            if (p.type !== 'mine') fx.muzzle(p.x, p.z, p.h || 0, p.type === 'rocket' ? '#ff7a3c' : '#fff7b0');
+          }
           mesh.position.set(p.x, p.type === 'mine' ? 0.4 : 1.2, p.z);
-          if (p.type === 'rocket') mesh.rotation.set(Math.PI / 2, 0, -p.h);
+          if (p.type === 'rocket') { mesh.rotation.set(Math.PI / 2, 0, -p.h); fx.smoke(p.x, 1.0, p.z); }
         }
         for (const [id, mesh] of projMap) {
-          if (!seen.has(id)) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); projMap.delete(id); }
+          if (!seen.has(id)) {
+            if (mesh.userData.type === 'rocket') fx.explode(mesh.position.x, mesh.position.z, '#ff7a3c');
+            else if (mesh.userData.type !== 'mine') fx.spark(mesh.position.x, mesh.position.z, '#fff7b0');
+            scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); projMap.delete(id);
+          }
         }
       }
 
-      // animate blasts
-      for (let i = blasts.length - 1; i >= 0; i--) {
-        const b = blasts[i];
-        b.t += 0.06; b.m.scale.setScalar(1 + b.t * 6); b.m.material.opacity = Math.max(0, 0.9 - b.t);
-        if (b.t >= 1) { scene.remove(b.m); b.m.geometry.dispose(); b.m.material.dispose(); blasts.splice(i, 1); }
-      }
-
+      fx.update(1 / 60);
       render();
     };
     raf = requestAnimationFrame(loop);
@@ -249,6 +257,7 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
       socket?.off('game:rt:snap', onSnap);
+      fx.dispose();
       disposeView();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

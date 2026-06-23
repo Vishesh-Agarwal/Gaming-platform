@@ -4,6 +4,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { getSocket } from '../socket.js';
+import { createScene } from './karts/scene.js';
+import { makeKart, updateKart } from './karts/kartModel.js';
+import { createFx } from './karts/fx.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -45,119 +48,59 @@ export default function Karts({ room, youAreIndex }) {
     const socket = getSocket();
     const mount = mountRef.current;
     const cfg = room.state || {};
-    const arena = cfg.arena || { w: 80, d: 80 };
     const colors = cfg.colors || COLORS;
     const playerCount = room.players.length;
     const names = room.players.map((p) => p.username);
     const roomId = room.id;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    mount.appendChild(renderer.domElement);
-    Object.assign(renderer.domElement.style, { width: '100%', height: '100%', display: 'block' });
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#0a0813');
-    scene.fog = new THREE.Fog('#0a0813', 70, 170);
-    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
-    camera.position.set(0, 16, 28);
-
-    scene.add(new THREE.HemisphereLight('#9fb4ff', '#1a1626', 0.95));
-    const dir = new THREE.DirectionalLight('#ffffff', 1.1);
-    dir.position.set(30, 50, 20);
-    dir.castShadow = true;
-    dir.shadow.mapSize.set(1024, 1024);
-    Object.assign(dir.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60 });
-    scene.add(dir);
-
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(arena.w, arena.d),
-      new THREE.MeshStandardMaterial({ color: '#15182a', roughness: 0.95 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-    const grid = new THREE.GridHelper(arena.w, arena.w / 4, '#3a3460', '#241f3d');
-    grid.position.y = 0.02;
-    scene.add(grid);
-
-    const wallMat = new THREE.MeshStandardMaterial({ color: '#2a2450', emissive: '#1b1640', roughness: 0.6 });
-    const wallH = 3, tk = 1.5;
-    for (const [w, h, dd, x, y, z] of [
-      [arena.w + tk, wallH, tk, 0, wallH / 2, -arena.d / 2],
-      [arena.w + tk, wallH, tk, 0, wallH / 2, arena.d / 2],
-      [tk, wallH, arena.d + tk, -arena.w / 2, wallH / 2, 0],
-      [tk, wallH, arena.d + tk, arena.w / 2, wallH / 2, 0],
-    ]) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), wallMat);
-      wall.position.set(x, y, z);
-      scene.add(wall);
-    }
+    const arena = cfg.arena || { w: 80, d: 80 };
+    const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, arena);
+    const fx = createFx(scene);
 
     // karts (with a shield bubble child)
-    const makeKart = (color) => {
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1, 3.4),
-        new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.5 }));
-      body.position.y = 0.8; body.castShadow = true; g.add(body);
-      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.9, 1.5),
-        new THREE.MeshStandardMaterial({ color: '#15131f', roughness: 0.4 }));
-      cabin.position.set(0, 1.5, -0.2); g.add(cabin);
-      const wheelGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.5, 12);
-      const wheelMat = new THREE.MeshStandardMaterial({ color: '#0d0d14' });
-      for (const [wx, wz] of [[-1.2, 1.1], [1.2, 1.1], [-1.2, -1.1], [1.2, -1.1]]) {
-        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-        wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.6, wz); g.add(wheel);
-      }
-      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 8),
-        new THREE.MeshStandardMaterial({ color: '#fff', emissive: color, emissiveIntensity: 0.4 }));
-      nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.9, 1.9); g.add(nose);
-      const shield = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12),
-        new THREE.MeshBasicMaterial({ color: '#22e0ff', transparent: true, opacity: 0.22 }));
-      shield.position.y = 1; shield.visible = false; g.add(shield);
-      g.userData.shield = shield;
-      return g;
-    };
     const karts = [];
     for (let i = 0; i < playerCount; i++) {
       const k = makeKart(colors[i % colors.length]);
       scene.add(k); karts.push(k);
     }
+    // Per-kart previous render transform, to derive speed/turn for wheel spin + bank.
+    const prevT = karts.map(() => ({ x: 0, z: 0, h: 0, init: false }));
 
     // crate meshes (one per pad, recolored/shown by snapshot)
     const crateMeshes = [];
     const ensureCrates = (list) => {
       while (crateMeshes.length < list.length) {
         const c = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 2.2),
-          new THREE.MeshStandardMaterial({ color: '#888', emissive: '#000', emissiveIntensity: 0.6, transparent: true }));
-        c.castShadow = true; scene.add(c); crateMeshes.push(c);
+          new THREE.MeshStandardMaterial({ color: '#888', emissive: '#000', emissiveIntensity: 1.0, transparent: true }));
+        c.castShadow = true;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.08, 8, 28),
+          new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+        ring.rotation.x = Math.PI / 2; c.add(ring); c.userData.ring = ring;
+        scene.add(c); crateMeshes.push(c);
       }
     };
 
     // projectile pool keyed by id
     const projMap = new Map();
     const makeProj = (type) => {
+      let m;
       if (type === 'mine') {
-        return new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.4, 16),
-          new THREE.MeshStandardMaterial({ color: '#ffd24a', emissive: '#ff5d6c', emissiveIntensity: 0.5 }));
+        m = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.4, 16),
+          new THREE.MeshStandardMaterial({ color: '#ffd24a', emissive: '#ff5d6c', emissiveIntensity: 0.9 }));
+        const warn = new THREE.Mesh(new THREE.RingGeometry(1.5, 1.9, 20),
+          new THREE.MeshBasicMaterial({ color: '#ff5d6c', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+        warn.rotation.x = -Math.PI / 2; warn.position.y = -0.18; m.add(warn);
+      } else if (type === 'rocket') {
+        m = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.4, 4, 8),
+          new THREE.MeshStandardMaterial({ color: '#ff7a3c', emissive: '#ff7a3c', emissiveIntensity: 1.0 }));
+      } else {
+        m = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8),
+          new THREE.MeshStandardMaterial({ color: '#fff7b0', emissive: '#ffe39a', emissiveIntensity: 1.2 }));
       }
-      if (type === 'rocket') {
-        return new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.4, 4, 8),
-          new THREE.MeshStandardMaterial({ color: '#ff7a3c', emissive: '#ff7a3c', emissiveIntensity: 0.7 }));
-      }
-      return new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8),
-        new THREE.MeshStandardMaterial({ color: '#fff7b0', emissive: '#ffe39a', emissiveIntensity: 0.9 }));
+      m.userData.type = type;
+      return m;
     };
 
-    // death explosions
-    const blasts = [];
-    const spawnBlast = (x, z, color) => {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
-        new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.9 }));
-      m.position.set(x, 1.2, z); scene.add(m);
-      blasts.push({ m, t: 0 });
-    };
     const prevAlive = karts.map(() => true);
 
     // snapshots
@@ -220,9 +163,7 @@ export default function Karts({ room, youAreIndex }) {
 
     const resize = () => {
       const r = mount.getBoundingClientRect();
-      if (!r.width || !r.height) return;
-      renderer.setSize(r.width, r.height, false);
-      camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+      resizeView(r.width, r.height);
     };
     resize();
     window.addEventListener('resize', resize);
@@ -242,16 +183,26 @@ export default function Karts({ room, youAreIndex }) {
           g.visible = visible;
           g.position.set(ks.x, 0, ks.z);
           g.rotation.y = ks.h;
-          g.userData.shield.visible = visible && meta?.shield;
+          // derive speed/turn from the interpolated transform delta
+          const pt = prevT[ks.i];
+          let speed = 0, turn = 0;
+          if (pt.init) {
+            speed = Math.hypot(ks.x - pt.x, ks.z - pt.z);
+            turn = ((ks.h - pt.h + Math.PI) % (Math.PI * 2)) - Math.PI;
+          }
+          pt.x = ks.x; pt.z = ks.z; pt.h = ks.h; pt.init = true;
+          updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
+          if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(ks.x - Math.sin(ks.h) * 1.8, ks.z - Math.cos(ks.h) * 1.8);
+          if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(ks.x, 1.0, ks.z);
           // death explosion on alive->dead transition
-          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) spawnBlast(ks.x, ks.z, colors[ks.i % colors.length]);
+          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) fx.explode(ks.x, ks.z, colors[ks.i % colors.length]);
           if (meta) prevAlive[ks.i] = meta.alive;
         }
         // camera follows local kart
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
         if (me) {
-          const fx = Math.sin(me.h), fz = Math.cos(me.h);
-          camTarget.set(me.x - fx * 16, 11, me.z - fz * 16);
+          const fxDir = Math.sin(me.h), fz = Math.cos(me.h);
+          camTarget.set(me.x - fxDir * 16, 11, me.z - fz * 16);
           camera.position.lerp(camTarget, 0.08);
           camera.lookAt(me.x, 1.5, me.z);
         }
@@ -267,6 +218,7 @@ export default function Karts({ room, youAreIndex }) {
             mesh.rotation.y += 0.03;
             const col = new THREE.Color(WEAPON_COLOR[c.type] || '#fff');
             mesh.material.color.copy(col); mesh.material.emissive.copy(col);
+            if (mesh.userData.ring) mesh.userData.ring.material.color.copy(col);
           } else mesh.visible = false;
         });
 
@@ -275,23 +227,24 @@ export default function Karts({ room, youAreIndex }) {
         for (const p of snap.proj) {
           seen.add(p.id);
           let mesh = projMap.get(p.id);
-          if (!mesh) { mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh); }
+          if (!mesh) {
+            mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh);
+            if (p.type !== 'mine') fx.muzzle(p.x, p.z, p.h || 0, p.type === 'rocket' ? '#ff7a3c' : '#fff7b0');
+          }
           mesh.position.set(p.x, p.type === 'mine' ? 0.4 : 1.2, p.z);
-          if (p.type === 'rocket') mesh.rotation.set(Math.PI / 2, 0, -p.h);
+          if (p.type === 'rocket') { mesh.rotation.set(Math.PI / 2, 0, -p.h); fx.smoke(p.x, 1.0, p.z); }
         }
         for (const [id, mesh] of projMap) {
-          if (!seen.has(id)) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); projMap.delete(id); }
+          if (!seen.has(id)) {
+            if (mesh.userData.type === 'rocket') fx.explode(mesh.position.x, mesh.position.z, '#ff7a3c');
+            else if (mesh.userData.type !== 'mine') fx.spark(mesh.position.x, mesh.position.z, '#fff7b0');
+            scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); projMap.delete(id);
+          }
         }
       }
 
-      // animate blasts
-      for (let i = blasts.length - 1; i >= 0; i--) {
-        const b = blasts[i];
-        b.t += 0.06; b.m.scale.setScalar(1 + b.t * 6); b.m.material.opacity = Math.max(0, 0.9 - b.t);
-        if (b.t >= 1) { scene.remove(b.m); b.m.geometry.dispose(); b.m.material.dispose(); blasts.splice(i, 1); }
-      }
-
-      renderer.render(scene, camera);
+      fx.update(1 / 60);
+      render();
     };
     raf = requestAnimationFrame(loop);
 
@@ -304,12 +257,8 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
       socket?.off('game:rt:snap', onSnap);
-      renderer.dispose();
-      if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
-      scene.traverse((o) => {
-        if (o.geometry) o.geometry.dispose();
-        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
-      });
+      fx.dispose();
+      disposeView();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

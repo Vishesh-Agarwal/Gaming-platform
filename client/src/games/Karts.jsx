@@ -7,6 +7,7 @@ import { getSocket } from '../socket.js';
 import { createScene } from './karts/scene.js';
 import { makeKart, updateKart } from './karts/kartModel.js';
 import { createFx } from './karts/fx.js';
+import { createAudio } from './karts/audio.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -43,6 +44,8 @@ export function Thumbnail() {
 export default function Karts({ room, youAreIndex }) {
   const mountRef = useRef(null);
   const [hud, setHud] = useState({ phase: 'countdown', countdown: 3, timeLeft: 90, players: [], me: null });
+  const [muted, setMuted] = useState(false);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     const socket = getSocket();
@@ -56,6 +59,9 @@ export default function Karts({ room, youAreIndex }) {
     const arena = cfg.arena || { w: 80, d: 80 };
     const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, arena);
     const fx = createFx(scene);
+    const audio = createAudio();
+    audioRef.current = audio;
+    setMuted(audio.isMuted());
 
     // karts (with a shield bubble child)
     const karts = [];
@@ -102,6 +108,8 @@ export default function Karts({ room, youAreIndex }) {
     };
 
     const prevAlive = karts.map(() => true);
+    let prevCountdown = null;
+    let prevPhase = null;
 
     // snapshots
     const buffer = [];
@@ -138,11 +146,11 @@ export default function Karts({ room, youAreIndex }) {
       input.fire = !!keys[' '];
     };
     const driveKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '];
-    const kd = (e) => { const k = e.key.toLowerCase(); if (driveKeys.includes(k)) { keys[k] = true; apply(); e.preventDefault(); } };
+    const kd = (e) => { const k = e.key.toLowerCase(); if (driveKeys.includes(k)) { keys[k] = true; apply(); audio.resume(); e.preventDefault(); } };
     const ku = (e) => { keys[e.key.toLowerCase()] = false; apply(); };
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup', ku);
-    const md = () => { keys[' '] = true; apply(); };
+    const md = () => { keys[' '] = true; apply(); audio.resume(); };
     const mu = () => { keys[' '] = false; apply(); };
     renderer.domElement.addEventListener('pointerdown', md);
     window.addEventListener('pointerup', mu);
@@ -197,6 +205,16 @@ export default function Karts({ room, youAreIndex }) {
           // death explosion on alive->dead transition
           if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) fx.explode(ks.x, ks.z, colors[ks.i % colors.length]);
           if (meta) prevAlive[ks.i] = meta.alive;
+        }
+        // countdown beeps, GO, and match-end stinger
+        if (snap.phase === 'countdown' && snap.countdown !== prevCountdown) {
+          if (snap.countdown > 0) audio.countdownBeep();
+          prevCountdown = snap.countdown;
+        }
+        if (snap.phase !== prevPhase) {
+          if (prevPhase === 'countdown' && snap.phase === 'playing') audio.go();
+          if (snap.phase === 'over') { audio.matchEnd(); audio.musicDuck(true); audio.engineStop(); }
+          prevPhase = snap.phase;
         }
         // camera follows local kart
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
@@ -257,6 +275,7 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
       socket?.off('game:rt:snap', onSnap);
+      audio.dispose();
       fx.dispose();
       disposeView();
     };
@@ -272,6 +291,14 @@ export default function Karts({ room, youAreIndex }) {
 
         {/* HUD overlay */}
         <div className="kt-hud">
+          <button
+            className="kt-mute"
+            onClick={() => { const a = audioRef.current; if (!a) return; const m = !a.isMuted(); a.setMuted(m); setMuted(m); }}
+            aria-label={muted ? 'Unmute' : 'Mute'}
+            title={muted ? 'Unmute' : 'Mute'}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
           <div className="kt-timer">
             {hud.phase === 'countdown' ? (hud.countdown > 0 ? hud.countdown : 'GO!')
               : hud.phase === 'over' ? "TIME!" : fmtTime(hud.timeLeft)}

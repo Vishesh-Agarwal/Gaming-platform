@@ -236,8 +236,8 @@ export default function Karts({ room, youAreIndex }) {
           pt.x = rx; pt.z = rz; pt.h = rh; pt.init = true;
           if (ks.i === youAreIndex) localSpeed = speed;
           updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
-          if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(ks.x - Math.sin(ks.h) * 1.8, ks.z - Math.cos(ks.h) * 1.8);
-          if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(ks.x, 1.0, ks.z);
+          if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(rx - Math.sin(rh) * 1.8, rz - Math.cos(rh) * 1.8);
+          if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(rx, 1.0, rz);
           // death explosion on alive->dead transition
           if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) { fx.explode(ks.x, ks.z, colors[ks.i % colors.length]); audio.explosion(panFor(ks.x)); }
           if (meta) prevAlive[ks.i] = meta.alive;

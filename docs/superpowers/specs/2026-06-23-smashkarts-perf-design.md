@@ -120,6 +120,20 @@ Mostly measurable + manual (no unit tests for rendering):
    enter/play/leave; leaving removes all listeners (no pointerdown leak).
 4. **Client-only:** `git diff main -- server/` stays empty.
 
+## Known limitations (v1, accepted)
+
+- **Snapshots during the lazy chunk-load window are dropped.** The Karts component
+  subscribes to `game:rt:snap` and buffers snapshots inside its mount `useEffect`. With
+  lazy-loading, mount is deferred until the ~538 KB chunk downloads, so any snapshots that
+  arrive before mount are not buffered. **Accepted for v1** because it is self-healing in
+  practice: the match opens with a 3-second countdown, the chunk is cached after first
+  load, and rendering runs ~100 ms behind, so a player almost always has the chunk before
+  the play phase begins. If this ever bites, the fix is to hoist the snapshot
+  buffer/subscription above the lazy boundary (an architectural change, deferred).
+- **Lazy chunk-load failures are contained by an error boundary** (added after the
+  whole-branch review): a failed `import('./Karts.jsx')` now renders a "Couldn't load this
+  game / Back to lobby" panel scoped to the game pane instead of unwinding to the app root.
+
 ## Rollout
 
 Feature branch `smashkarts-perf`, subagent-driven, merged to `main`. After this, the only

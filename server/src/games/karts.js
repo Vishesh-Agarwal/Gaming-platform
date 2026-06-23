@@ -5,8 +5,6 @@
 import { integrateKart, SIM_DT } from './kartPhysics.js';
 import { getMap } from './kartMaps.js';
 
-const ARENA_W = 80;
-const ARENA_D = 80;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
 
 // match

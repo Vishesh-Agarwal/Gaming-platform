@@ -1,6 +1,6 @@
-// Shared, deterministic kart movement integrator. Used by the client predictor and
-// the server sim — keep this file byte-identical to its server copy
-// (server/src/games/kartPhysics.js); a test asserts they match.
+// Shared, deterministic kart movement integrator. Used by the server sim and the
+// client predictor — keep this file byte-identical to its client copy
+// (client/src/games/karts/kartPhysics.js); a test asserts they match.
 export const PHYS = {
   ACCEL: 26, REVERSE_ACCEL: 16, MAX_SPEED: 28, REVERSE_MAX: 11,
   DRAG: 1.1, TURN_RATE: 2.8, KART_R: 2.2, ARENA_W: 80, ARENA_D: 80,
@@ -8,6 +8,35 @@ export const PHYS = {
 export const SIM_DT = 1 / 30;
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// Height of the highest walkable surface column at (x, z). Default ground = 0.
+// Boxes contribute their flat top (box.top ?? 3) within their footprint;
+// wedges contribute a linear slope; cylinders are not walkable.
+export function surfaceHeight(map, x, z) {
+  let h = 0;
+  if (map && map.obstacles) {
+    for (const o of map.obstacles) {
+      if (o.kind !== 'box') continue;
+      const hw = o.w / 2, hd = o.d / 2;
+      if (x >= o.x - hw && x <= o.x + hw && z >= o.z - hd && z <= o.z + hd) {
+        const top = o.top == null ? 3 : o.top;
+        if (top > h) h = top;
+      }
+    }
+  }
+  if (map && map.ramps) {
+    for (const r of map.ramps) {
+      const hw = r.w / 2, hd = r.d / 2;
+      if (x >= r.x - hw && x <= r.x + hw && z >= r.z - hd && z <= r.z + hd) {
+        const t = r.axis === 'x' ? (x - (r.x - hw)) / r.w : (z - (r.z - hd)) / r.d;
+        const tc = t < 0 ? 0 : t > 1 ? 1 : t;
+        const ry = r.loY + (r.hiY - r.loY) * tc;
+        if (ry > h) h = ry;
+      }
+    }
+  }
+  return h;
+}
 
 // Advance one movement step. Pure: depends only on (k, input, dt, map).
 export function integrateKart(k, input, dt, map = null) {

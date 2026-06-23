@@ -4,7 +4,7 @@
 export const PHYS = {
   ACCEL: 26, REVERSE_ACCEL: 16, MAX_SPEED: 28, REVERSE_MAX: 11,
   DRAG: 1.1, TURN_RATE: 2.8, KART_R: 2.2, ARENA_W: 80, ARENA_D: 80,
-  GRAVITY: 30, SNAP: 2,
+  GRAVITY: 30, SNAP: 2, LAUNCH_MIN: 3,
 };
 export const SIM_DT = 1 / 30;
 
@@ -41,7 +41,7 @@ export function surfaceHeight(map, x, z) {
 
 // Advance one movement step. Pure: depends only on (k, input, dt, map).
 export function integrateKart(k, input, dt, map = null) {
-  const { ACCEL, REVERSE_ACCEL, MAX_SPEED, REVERSE_MAX, DRAG, TURN_RATE, KART_R, ARENA_W, ARENA_D, GRAVITY, SNAP } = PHYS;
+  const { ACCEL, REVERSE_ACCEL, MAX_SPEED, REVERSE_MAX, DRAG, TURN_RATE, KART_R, ARENA_W, ARENA_D, GRAVITY, SNAP, LAUNCH_MIN } = PHYS;
   if (k.y == null) k.y = 0;
   if (k.vy == null) k.vy = 0;
   if (k.grounded == null) k.grounded = true;
@@ -113,7 +113,7 @@ export function integrateKart(k, input, dt, map = null) {
     }
   }
 
-  // vertical resolution (launch added in Task 3)
+  // vertical resolution
   const floor = surfaceHeight(map, k.x, k.z);
   if (k.grounded) {
     if (k.y - floor > SNAP) {
@@ -121,8 +121,20 @@ export function integrateKart(k, input, dt, map = null) {
       k.grounded = false;
       k.vy = 0;
     } else {
-      k.y = floor;
-      k.vy = 0;
+      // on/near the surface — launch off a rising lip if upward momentum outpaces the ground ahead
+      const floorPrev = surfaceHeight(map, px, pz);
+      const vyImplied = (floor - floorPrev) / d;
+      const ax = k.x + Math.sin(k.heading) * k.vel * d;
+      const az = k.z + Math.cos(k.heading) * k.vel * d;
+      const slopeAheadVy = (surfaceHeight(map, ax, az) - floor) / d;
+      if (vyImplied > LAUNCH_MIN && slopeAheadVy < vyImplied - LAUNCH_MIN) {
+        k.grounded = false;
+        k.vy = vyImplied;
+        k.y = floor;
+      } else {
+        k.y = floor;
+        k.vy = 0;
+      }
     }
   } else {
     k.vy -= GRAVITY * d;

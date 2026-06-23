@@ -161,10 +161,15 @@ export function setInput(roomId, userId, input) {
   if (!room || !room.inputs) return;
   const player = room.players.find((p) => p.user.id === userId);
   if (!player) return;
-  room.inputs[player.index] = {
+  const idx = player.index;
+  if (!room.inputs[idx]) room.inputs[idx] = { queue: [], last: null };
+  room.inputs[idx].queue.push({
+    seq: Number(input?.seq) || 0,
     throttle: Math.max(-1, Math.min(1, Number(input?.throttle) || 0)),
     steer: Math.max(-1, Math.min(1, Number(input?.steer) || 0)),
-  };
+    fire: !!input?.fire,
+  });
+  if (room.inputs[idx].queue.length > 240) room.inputs[idx].queue.shift();
 }
 
 // Advance one tick; returns { players, data, over?, room? } or null.

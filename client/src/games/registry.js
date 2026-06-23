@@ -8,6 +8,10 @@ import Artillery, { Thumbnail as ArtilleryThumb } from './Artillery.jsx';
 import Hangman, { Thumbnail as HangmanThumb } from './Hangman.jsx';
 import { Thumbnail as KartsThumb } from './KartsThumb.jsx';
 
+// Karts pulls in Three.js (~550 KB). Lazy-load it so that weight is a separate
+// chunk fetched only when entering Smash Karts — do NOT change this to a static
+// import (it would drag Three.js back into the main bundle). The thumbnail is a
+// three-free module so the lobby grid stays eager.
 const Karts = lazy(() => import('./Karts.jsx'));
 
 const registry = {

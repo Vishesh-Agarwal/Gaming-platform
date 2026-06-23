@@ -14,7 +14,8 @@ test('mg projectile arcs downward over its flight (y decreases)', () => {
   const sim = playSim();
   const now = sim.startAt + 100;
   const shooter = sim.karts[0];
-  shooter.x = 0; shooter.z = 0; shooter.y = 0; shooter.heading = 0;
+  // arena now has a central mesa (Maps Phase 2); fire from open flat ground instead.
+  shooter.x = 20; shooter.z = 20; shooter.y = 0; shooter.heading = 0;
   shooter.weapon = 'mg'; shooter.ammo = 10; shooter.nextShotAt = 0;
   karts.step(sim, { 0: { last: { fire: true }, queue: [] } }, 1 / 30, now);
   const p = sim.projectiles[0];

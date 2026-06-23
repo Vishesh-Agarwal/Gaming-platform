@@ -1,6 +1,6 @@
 // Hosts the active game's component (from the client registry) and the
 // game-over overlay. Server is authoritative; this only renders + emits.
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { getGame } from '../games/registry.js';
 
 export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
@@ -50,7 +50,9 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
 
       {error && <div className="error-banner">{error}</div>}
 
-      <Component room={room} youAreIndex={youAreIndex} onMove={onMove} />
+      <Suspense fallback={<div className="game-loading">Loading arena…</div>}>
+        <Component room={room} youAreIndex={youAreIndex} onMove={onMove} />
+      </Suspense>
 
       {room.status === 'over' && showResult && (
         <div className="overlay">

@@ -17,6 +17,7 @@ const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
 const SHIELD = { dur: 4000 };
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
+const BARREL = 1.0, KART_CENTER = 1.0, GRAVITY_PROJ = 9, ROCKET_VY = 4;
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -57,20 +58,21 @@ function giveWeapon(k, type) {
   k.queue = [];
 }
 
-function fireProjectile(sim, k, owner, type, now) {
+function fireProjectile(sim, k, owner, type, now, map) {
   const fx = Math.sin(k.heading), fz = Math.cos(k.heading);
   if (type === 'mine') {
+    const mx = k.x - fx * 3, mz = k.z - fz * 3;
     sim.projectiles.push({
-      id: sim.nextPid++, type: 'mine', owner, x: k.x - fx * 3, z: k.z - fz * 3,
-      vx: 0, vz: 0, armAt: now + MINE.arm, dieAt: now + MINE.life,
+      id: sim.nextPid++, type: 'mine', owner, x: mx, z: mz, y: surfaceHeight(map, mx, mz),
+      vx: 0, vz: 0, vy: 0, armAt: now + MINE.arm, dieAt: now + MINE.life,
     });
     return;
   }
   const spec = type === 'mg' ? MG : ROCKET;
   sim.projectiles.push({
     id: sim.nextPid++, type, owner, h: k.heading,
-    x: k.x + fx * 3, z: k.z + fz * 3,
-    vx: fx * spec.speed, vz: fz * spec.speed, life: spec.life,
+    x: k.x + fx * 3, z: k.z + fz * 3, y: (k.y || 0) + BARREL,
+    vx: fx * spec.speed, vz: fz * spec.speed, vy: type === 'rocket' ? ROCKET_VY : 0, life: spec.life,
   });
 }
 
@@ -155,7 +157,7 @@ function step(sim, inputs, dt, now = Date.now()) {
     const rising = fire && !k.prevFire;
     if (k.weapon === 'mg') {
       if (fire && k.ammo > 0 && now >= k.nextShotAt) {
-        fireProjectile(sim, k, i, 'mg', now);
+        fireProjectile(sim, k, i, 'mg', now, map);
         k.ammo -= 1; k.nextShotAt = now + MG.cadence;
         if (k.ammo <= 0) k.weapon = null;
       }
@@ -166,7 +168,7 @@ function step(sim, inputs, dt, now = Date.now()) {
       }
       while (k.queue.length && now >= k.queue[0]) {
         k.queue.shift();
-        fireProjectile(sim, k, i, k.weapon, now);
+        fireProjectile(sim, k, i, k.weapon, now, map);
         k.ammo -= 1;
       }
       if (k.ammo <= 0 && k.queue.length === 0) k.weapon = null;
@@ -186,23 +188,26 @@ function step(sim, inputs, dt, now = Date.now()) {
         for (let i = 0; i < sim.karts.length; i++) {
           const k = sim.karts[i];
           if (!k.alive || k.gone) continue;
-          if (Math.hypot(k.x - pr.x, k.z - pr.z) < MINE.trigger) {
+          const dx = k.x - pr.x, dz = k.z - pr.z, dy = (k.y || 0) + KART_CENTER - pr.y;
+          if (dx * dx + dz * dz + dy * dy < MINE.trigger * MINE.trigger) {
             damage(sim, i, MINE.dmg, pr.owner, now);
             dead = true; break;
           }
         }
       }
     } else {
-      pr.x += pr.vx * d; pr.z += pr.vz * d; pr.life -= d;
+      pr.x += pr.vx * d; pr.z += pr.vz * d; pr.y += pr.vy * d; pr.vy -= GRAVITY_PROJ * d; pr.life -= d;
       const spec = pr.type === 'mg' ? MG : ROCKET;
       if (pr.life <= 0) dead = true;
       else if (Math.abs(pr.x) > map.arena.w / 2 || Math.abs(pr.z) > map.arena.d / 2) dead = true;
+      else if (pr.y <= surfaceHeight(map, pr.x, pr.z)) dead = true; // hit the ground/mesa
       else {
         for (let i = 0; i < sim.karts.length; i++) {
           if (i === pr.owner) continue;
           const k = sim.karts[i];
           if (!k.alive || k.gone) continue;
-          if (Math.hypot(k.x - pr.x, k.z - pr.z) < HIT_R) {
+          const dx = k.x - pr.x, dz = k.z - pr.z, dy = (k.y || 0) + KART_CENTER - pr.y;
+          if (dx * dx + dz * dz + dy * dy < HIT_R * HIT_R) {
             damage(sim, i, spec.dmg, pr.owner, now);
             dead = true; break;
           }
@@ -226,7 +231,7 @@ function snapshot(sim, now = Date.now()) {
       weapon: k.weapon, ammo: k.ammo, shield: now < k.shieldUntil, gone: k.gone,
     })),
     crates: sim.crates.map((c) => ({ x: r1(c.x), z: r1(c.z), type: c.type })),
-    proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, x: r1(p.x), z: r1(p.z), h: r1(p.h || 0) })),
+    proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, x: r1(p.x), y: r1(p.y || 0), z: r1(p.z), h: r1(p.h || 0) })),
     kills: sim.karts.map((k) => k.kills),
   };
 }

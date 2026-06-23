@@ -201,8 +201,8 @@ export default function Karts({ room, youAreIndex }) {
         // camera follows local kart
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
         if (me) {
-          const fx = Math.sin(me.h), fz = Math.cos(me.h);
-          camTarget.set(me.x - fx * 16, 11, me.z - fz * 16);
+          const fxDir = Math.sin(me.h), fz = Math.cos(me.h);
+          camTarget.set(me.x - fxDir * 16, 11, me.z - fz * 16);
           camera.position.lerp(camTarget, 0.08);
           camera.lookAt(me.x, 1.5, me.z);
         }

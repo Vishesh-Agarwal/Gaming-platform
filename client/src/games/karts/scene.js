@@ -73,7 +73,8 @@ export function createScene(mount, arena) {
   Object.assign(renderer.domElement.style, { width: '100%', height: '100%', display: 'block' });
 
   const scene = new THREE.Scene();
-  scene.background = makeBackdrop();
+  const backdrop = makeBackdrop();
+  scene.background = backdrop;
   scene.fog = new THREE.Fog('#0a0813', 80, 190);
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
@@ -123,6 +124,7 @@ export function createScene(mount, arena) {
       if (o.geometry) o.geometry.dispose();
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
     });
+    backdrop.dispose();
   };
 
   return { scene, camera, renderer, composer, resize, render, dispose };

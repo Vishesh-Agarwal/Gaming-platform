@@ -105,7 +105,7 @@ export function acceptInvite(inviteId, acceptingUserId) {
   };
   // server-authoritative realtime games carry a live sim + per-player input buffer
   if (typeof game.createSim === 'function') {
-    room.sim = game.createSim(room.players);
+    room.sim = game.createSim(room.players, Date.now(), invite.options || undefined);
     room.inputs = {};
   }
   rooms.set(room.id, room);
@@ -131,7 +131,7 @@ export function createRoom(gameId, options, userIds) {
     result: null,
   };
   if (typeof game.createSim === 'function') {
-    room.sim = game.createSim(room.players);
+    room.sim = game.createSim(room.players, Date.now(), options || undefined);
     room.inputs = {};
   }
   rooms.set(room.id, room);

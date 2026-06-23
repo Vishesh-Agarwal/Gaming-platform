@@ -177,7 +177,13 @@ export function createAudio() {
     master.gain.setTargetAtTime(muted ? 0 : 1, now(), 0.02);
   };
   const isMuted = () => muted;
-  const dispose = () => { try { engineStop(); stopMusic(); ctx.close(); } catch { /* already closed */ } };
+  const dispose = () => {
+    // Order cheapest-can't-throw first, and isolate ctx.close() so a throw in
+    // teardown can never leak the AudioContext across remounts.
+    try { stopMusic(); } catch { /* noop */ }
+    try { engineStop(); } catch { /* noop */ }
+    try { ctx.close(); } catch { /* already closed */ }
+  };
 
   return {
     resume, setMuted, isMuted, dispose,

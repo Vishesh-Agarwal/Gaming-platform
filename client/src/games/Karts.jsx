@@ -8,7 +8,7 @@ import { createScene } from './karts/scene.js';
 import { makeKart, updateKart } from './karts/kartModel.js';
 import { createFx } from './karts/fx.js';
 import { createAudio } from './karts/audio.js';
-import { integrateKart, SIM_DT } from './karts/kartPhysics.js';
+import { integrateKart, SIM_DT, surfaceHeight } from './karts/kartPhysics.js';
 import { getMap } from './karts/kartMaps.js';
 
 const INTERP_MS = 100;
@@ -208,10 +208,11 @@ export default function Karts({ room, youAreIndex }) {
         meX = me ? me.x : null;
         // ease the rendered local pose toward the predicted pose
         if (pred.has) {
-          if (!renderInit) { renderLocal.x = pred.x; renderLocal.z = pred.z; renderLocal.h = pred.heading; renderInit = true; }
+          if (!renderInit) { renderLocal.x = pred.x; renderLocal.z = pred.z; renderLocal.h = pred.heading; renderLocal.y = pred.y; renderInit = true; }
           else {
             renderLocal.x += (pred.x - renderLocal.x) * PRED_SMOOTH;
             renderLocal.z += (pred.z - renderLocal.z) * PRED_SMOOTH;
+            renderLocal.y += (pred.y - renderLocal.y) * PRED_SMOOTH;
             renderLocal.h = lerpAngle(renderLocal.h, pred.heading, PRED_SMOOTH);
           }
         }
@@ -227,8 +228,17 @@ export default function Karts({ room, youAreIndex }) {
           const rx = useLocal ? renderLocal.x : ks.x;
           const rz = useLocal ? renderLocal.z : ks.z;
           const rh = useLocal ? renderLocal.h : ks.h;
-          g.position.set(rx, 0, rz);
-          g.rotation.y = rh;
+          const ry = useLocal ? renderLocal.y : (ks.y || 0);
+          g.position.set(rx, ry, rz);
+          g.rotation.set(0, rh, 0);
+          // cosmetic tilt to the surface gradient (sample a kart-length fore/aft + left/right)
+          const fwd = 1.6;
+          const hF = surfaceHeight(map, rx + Math.sin(rh) * fwd, rz + Math.cos(rh) * fwd);
+          const hB = surfaceHeight(map, rx - Math.sin(rh) * fwd, rz - Math.cos(rh) * fwd);
+          const hL = surfaceHeight(map, rx + Math.cos(rh) * fwd, rz - Math.sin(rh) * fwd);
+          const hR = surfaceHeight(map, rx - Math.cos(rh) * fwd, rz + Math.sin(rh) * fwd);
+          g.rotation.x = Math.atan2(hB - hF, fwd * 2);
+          g.rotation.z = Math.atan2(hR - hL, fwd * 2);
           // derive speed/turn from the interpolated transform delta
           const pt = prevT[ks.i];
           let speed = 0, turn = 0;
@@ -271,11 +281,12 @@ export default function Karts({ room, youAreIndex }) {
           prevKills = meMeta.kills;
         }
         // camera follows local kart
+        const camY = pred.has ? renderLocal.y : (me?.y || 0);
         if (camPose) {
           const fxDir = Math.sin(camPose.h), fz = Math.cos(camPose.h);
-          camTarget.set(camPose.x - fxDir * 16, 11, camPose.z - fz * 16);
+          camTarget.set(camPose.x - fxDir * 16, 11 + camY, camPose.z - fz * 16);
           camera.position.lerp(camTarget, 0.08);
-          camera.lookAt(camPose.x, 1.5, camPose.z);
+          camera.lookAt(camPose.x, 1.5 + camY, camPose.z);
         }
 
         // crates
@@ -305,7 +316,7 @@ export default function Karts({ room, youAreIndex }) {
             else if (p.type === 'mine') audio.mineDrop(panFor(p.x));
             else audio.mgFire(panFor(p.x));
           }
-          mesh.position.set(p.x, p.type === 'mine' ? 0.4 : 1.2, p.z);
+          mesh.position.set(p.x, p.y != null ? p.y : (p.type === 'mine' ? 0.4 : 1.2), p.z);
           if (p.type === 'rocket') { mesh.rotation.set(Math.PI / 2, 0, -p.h); fx.smoke(p.x, 1.0, p.z); }
         }
         for (const [id, mesh] of projMap) {

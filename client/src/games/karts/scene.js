@@ -72,10 +72,33 @@ function buildArena(scene, map) {
       const cap = new THREE.Mesh(new THREE.CylinderGeometry(o.r * 1.05, o.r * 1.05, 0.2, 20), obTrim);
       cap.position.set(o.x, 3.1, o.z); scene.add(cap);
     } else {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(o.w, 3, o.d), obMat);
-      m.position.set(o.x, 1.5, o.z); m.castShadow = true; scene.add(m);
+      const top = o.top == null ? 3 : o.top;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(o.w, top, o.d), obMat);
+      m.position.set(o.x, top / 2, o.z); m.castShadow = true; m.receiveShadow = true; scene.add(m);
       const cap = new THREE.Mesh(new THREE.BoxGeometry(o.w, 0.2, o.d), obTrim);
-      cap.position.set(o.x, 3.1, o.z); scene.add(cap);
+      cap.position.set(o.x, top + 0.1, o.z); scene.add(cap);
+    }
+  }
+  // ramps (wedges) — sloped wedges render as a tilted slab; flat plateaus (loY === hiY)
+  // render as a solid raised block (mesa) matching the obstacle/mesa material style.
+  const rampMat = new THREE.MeshStandardMaterial({ color: '#27365e', emissive: '#101a33', roughness: 0.7 });
+  for (const r of map.ramps || []) {
+    if (r.loY === r.hiY) {
+      const H = r.hiY;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, H, r.d), obMat);
+      m.position.set(r.x, H / 2, r.z); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.2, r.d), obTrim);
+      cap.position.set(r.x, H + 0.1, r.z); scene.add(cap);
+    } else {
+      const len = r.axis === 'x' ? r.w : r.d;
+      const rise = r.hiY - r.loY;
+      const slabLen = Math.hypot(len, rise);
+      const angle = Math.atan2(rise, len);
+      const geo = new THREE.BoxGeometry(r.axis === 'x' ? slabLen : r.w, 0.4, r.axis === 'z' ? slabLen : r.d);
+      const m = new THREE.Mesh(geo, rampMat);
+      m.position.set(r.x, (r.loY + r.hiY) / 2, r.z);
+      if (r.axis === 'z') m.rotation.x = -angle; else m.rotation.z = angle;
+      m.receiveShadow = true; scene.add(m);
     }
   }
   // hazard zones (flat red glow)

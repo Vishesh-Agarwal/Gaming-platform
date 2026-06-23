@@ -94,19 +94,23 @@ export function createScene(mount, arena) {
 
   // Bloom postprocessing with graceful fallback.
   let composer = null;
+  let bloom = null;
   try {
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.7, 0.4, 0.85));
+    bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.7, 0.4, 0.85);
+    composer.addPass(bloom);
   } catch (e) {
     console.warn('[karts] bloom unavailable, falling back to direct render', e);
     composer = null;
+    bloom = null;
   }
 
   const resize = (w, h) => {
     if (!w || !h) return;
     renderer.setSize(w, h, false);
     composer?.setSize(w, h);
+    bloom?.setSize(w / 2, h / 2); // run bloom at half-res (~1/4 the pixels) — far cheaper, ~same glow
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };

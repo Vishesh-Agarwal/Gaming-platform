@@ -464,6 +464,14 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .game-header { width: 100%; max-width: 520px; display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
 .game-header h2 { margin: 0; flex: 1; font-family: var(--display); }
 .game-header .vs { color: var(--muted); }
+.game-loading {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  color: #9fb4ff;
+  font-family: var(--display, sans-serif);
+  letter-spacing: 0.04em;
+}
 
 .ttt { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .ttt-turn { color: var(--muted); }

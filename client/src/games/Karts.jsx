@@ -21,26 +21,6 @@ const lerpAngle = (a, b, t) => {
   return a + d * t;
 };
 
-export function Thumbnail() {
-  return (
-    <svg viewBox="0 0 120 120" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="kt-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#241a3a" />
-          <stop offset="100%" stopColor="#10131f" />
-        </linearGradient>
-      </defs>
-      <rect width="120" height="120" fill="url(#kt-bg)" />
-      <polygon points="20,88 100,88 86,58 34,58" fill="#1b2233" stroke="#3a4060" strokeWidth="1.5" />
-      <g>
-        <rect x="40" y="62" width="20" height="12" rx="3" fill="#ff5d6c" transform="rotate(-8 50 68)" />
-        <rect x="68" y="68" width="20" height="12" rx="3" fill="#5cc8ff" transform="rotate(10 78 74)" />
-      </g>
-      <circle cx="60" cy="30" r="10" fill="#ffd24a" opacity="0.85" />
-    </svg>
-  );
-}
-
 export default function Karts({ room, youAreIndex }) {
   const mountRef = useRef(null);
   const [hud, setHud] = useState({ phase: 'countdown', countdown: 3, timeLeft: 90, players: [], me: null });
@@ -185,14 +165,18 @@ export default function Karts({ room, youAreIndex }) {
 
     let raf = 0;
     const camTarget = new THREE.Vector3();
+    // perf: reuse across frames instead of allocating per frame
+    const crateCol = new THREE.Color();
+    let meX = null;
+    const panFor = (x) => (meX == null ? 0 : Math.max(-1, Math.min(1, (x - meX) / (arena.w / 2))));
+    let lastT = performance.now();
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const sample = sampleAt(performance.now() - INTERP_MS);
       const snap = latest.snap;
       if (sample && snap) {
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
-        const meX = me ? me.x : null;
-        const panFor = (x) => (meX == null ? 0 : Math.max(-1, Math.min(1, (x - meX) / (arena.w / 2))));
+        meX = me ? me.x : null;
         let localSpeed = 0;
         for (const ks of sample) {
           const g = karts[ks.i];
@@ -260,9 +244,9 @@ export default function Karts({ room, youAreIndex }) {
             mesh.visible = true;
             mesh.position.set(c.x, 1.6 + Math.sin(performance.now() / 300 + i) * 0.25, c.z);
             mesh.rotation.y += 0.03;
-            const col = new THREE.Color(WEAPON_COLOR[c.type] || '#fff');
-            mesh.material.color.copy(col); mesh.material.emissive.copy(col);
-            if (mesh.userData.ring) mesh.userData.ring.material.color.copy(col);
+            crateCol.set(WEAPON_COLOR[c.type] || '#fff');
+            mesh.material.color.copy(crateCol); mesh.material.emissive.copy(crateCol);
+            if (mesh.userData.ring) mesh.userData.ring.material.color.copy(crateCol);
           } else mesh.visible = false;
         });
 
@@ -290,7 +274,10 @@ export default function Karts({ room, youAreIndex }) {
         }
       }
 
-      fx.update(1 / 60);
+      const nowT = performance.now();
+      const dt = Math.min(0.05, (nowT - lastT) / 1000); // clamp so a tab stall doesn't fast-forward
+      lastT = nowT;
+      fx.update(dt);
       render();
     };
     raf = requestAnimationFrame(loop);
@@ -303,6 +290,7 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('keyup', ku);
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
+      renderer.domElement.removeEventListener('pointerdown', md);
       socket?.off('game:rt:snap', onSnap);
       audio.dispose();
       fx.dispose();

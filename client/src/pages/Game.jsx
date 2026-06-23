@@ -1,7 +1,34 @@
 // Hosts the active game's component (from the client registry) and the
 // game-over overlay. Server is authoritative; this only renders + emits.
-import { Suspense, useEffect, useState } from 'react';
+import { Component, Suspense, useEffect, useState } from 'react';
 import { getGame } from '../games/registry.js';
+
+// Contains chunk-load failures (e.g. a stale lazy chunk 404 after redeploy)
+// or render errors from the game component to the game pane, instead of
+// letting them unwind to the app root and blank the whole app.
+class GameErrorBoundary extends Component {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(err) {
+    console.error('[game] failed to load', err);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="game-loading">
+          <p>Couldn't load this game.</p>
+          <button onClick={this.props.onLeave}>Back to lobby</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
   const def = getGame(room.gameId);
@@ -50,9 +77,11 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
 
       {error && <div className="error-banner">{error}</div>}
 
-      <Suspense fallback={<div className="game-loading">Loading arena…</div>}>
-        <Component room={room} youAreIndex={youAreIndex} onMove={onMove} />
-      </Suspense>
+      <GameErrorBoundary onLeave={onLeave}>
+        <Suspense fallback={<div className="game-loading">Loading arena…</div>}>
+          <Component room={room} youAreIndex={youAreIndex} onMove={onMove} />
+        </Suspense>
+      </GameErrorBoundary>
 
       {room.status === 'over' && showResult && (
         <div className="overlay">

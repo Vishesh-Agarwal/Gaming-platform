@@ -3,7 +3,7 @@
 // (server/src/games/kartPhysics.js); a test asserts they match.
 export const PHYS = {
   ACCEL: 26, REVERSE_ACCEL: 16, MAX_SPEED: 28, REVERSE_MAX: 11,
-  DRAG: 1.7, TURN_RATE: 2.8, KART_R: 2.2, ARENA_W: 80, ARENA_D: 80,
+  DRAG: 1.1, TURN_RATE: 2.8, KART_R: 2.2, ARENA_W: 80, ARENA_D: 80,
 };
 export const SIM_DT = 1 / 30;
 

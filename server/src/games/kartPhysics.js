@@ -20,7 +20,7 @@ export function integrateKart(k, input, dt) {
   k.vel -= k.vel * Math.min(1, DRAG * d);
   k.vel = clamp(k.vel, -REVERSE_MAX, MAX_SPEED);
   const turnFactor = clamp(Math.abs(k.vel) / 8, 0, 1);
-  k.heading += steer * TURN_RATE * d * turnFactor * Math.sign(k.vel || 1);
+  k.heading -= steer * TURN_RATE * d * turnFactor * Math.sign(k.vel || 1);
   k.x += Math.sin(k.heading) * k.vel * d;
   k.z += Math.cos(k.heading) * k.vel * d;
   const half = ARENA_W / 2 - KART_R, halfD = ARENA_D / 2 - KART_R;

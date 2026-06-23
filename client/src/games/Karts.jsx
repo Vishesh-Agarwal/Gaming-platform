@@ -62,6 +62,8 @@ export default function Karts({ room, youAreIndex }) {
     const audio = createAudio();
     audioRef.current = audio;
     setMuted(audio.isMuted());
+    audio.engineStart();
+    const ENGINE_MAX_SPEED = 0.5; // per-frame interpolated delta at full throttle (tuning)
 
     // karts (with a shield bubble child)
     const karts = [];
@@ -190,6 +192,7 @@ export default function Karts({ room, youAreIndex }) {
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
         const meX = me ? me.x : null;
         const panFor = (x) => (meX == null ? 0 : Math.max(-1, Math.min(1, (x - meX) / (arena.w / 2))));
+        let localSpeed = 0;
         for (const ks of sample) {
           const g = karts[ks.i];
           if (!g) continue;
@@ -206,6 +209,7 @@ export default function Karts({ room, youAreIndex }) {
             turn = ((ks.h - pt.h + Math.PI) % (Math.PI * 2)) - Math.PI;
           }
           pt.x = ks.x; pt.z = ks.z; pt.h = ks.h; pt.init = true;
+          if (ks.i === youAreIndex) localSpeed = speed;
           updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
           if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(ks.x - Math.sin(ks.h) * 1.8, ks.z - Math.cos(ks.h) * 1.8);
           if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(ks.x, 1.0, ks.z);
@@ -223,6 +227,8 @@ export default function Karts({ room, youAreIndex }) {
           if (snap.phase === 'over') { audio.matchEnd(); audio.musicDuck(true); audio.engineStop(); }
           prevPhase = snap.phase;
         }
+        const meAlive = !!snap.karts.find((k) => k.i === youAreIndex && k.alive && !k.gone);
+        audio.engineUpdate(localSpeed / ENGINE_MAX_SPEED, snap.phase === 'playing' && meAlive);
         // local-player feedback sounds
         const meMeta = snap.karts.find((k) => k.i === youAreIndex);
         if (meMeta) {

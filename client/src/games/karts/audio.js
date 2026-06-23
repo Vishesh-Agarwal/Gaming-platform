@@ -77,10 +77,28 @@ export function createAudio() {
   const kill = () => { const d = panNode(0), t = now(); tone('square', 660, 660, t, 0.08, 0.25, d); tone('square', 990, 990, t + 0.08, 0.14, 0.25, d); };
   const matchEnd = () => { const d = panNode(0), t = now(); [523, 415, 330, 262].forEach((f, i) => tone('sawtooth', f, f, t + i * 0.15, 0.4, 0.25, d)); };
 
-  // --- engine (real implementation added in the engine task) ---
-  const engineStart = () => {};
-  const engineUpdate = () => {};
-  const engineStop = () => {};
+  // --- engine: a continuous filtered saw whose pitch/volume track speed ---
+  let engineOsc = null, engineFilter = null, engineGain = null;
+  const engineStart = () => {
+    if (engineOsc) return;
+    engineOsc = ctx.createOscillator(); engineOsc.type = 'sawtooth'; engineOsc.frequency.value = 50;
+    engineFilter = ctx.createBiquadFilter(); engineFilter.type = 'lowpass'; engineFilter.frequency.value = 300;
+    engineGain = ctx.createGain(); engineGain.gain.value = 0;
+    engineOsc.connect(engineFilter); engineFilter.connect(engineGain); engineGain.connect(sfxBus);
+    engineOsc.start();
+  };
+  const engineUpdate = (speed01, audible) => {
+    if (!engineOsc) return;
+    const s = Math.max(0, Math.min(1, speed01 || 0));
+    engineOsc.frequency.setTargetAtTime(50 + s * 90, now(), 0.05);
+    engineFilter.frequency.setTargetAtTime(300 + s * 1200, now(), 0.05);
+    engineGain.gain.setTargetAtTime(audible ? (0.05 + s * 0.12) : 0, now(), 0.05);
+  };
+  const engineStop = () => {
+    if (!engineOsc) return;
+    try { engineGain.gain.setTargetAtTime(0, now(), 0.05); engineOsc.stop(now() + 0.2); } catch { /* noop */ }
+    engineOsc = null; engineFilter = null; engineGain = null;
+  };
 
   // --- music (scheduler added in the music task) ---
   const startMusic = () => {};

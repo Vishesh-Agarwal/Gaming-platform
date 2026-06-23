@@ -867,6 +867,26 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .kt-name { color: var(--text); }
 .kt-kills { font-family: var(--display); color: var(--amber); font-size: 15px; min-width: 14px; text-align: right; }
 .kt-myhud { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.kt-mute {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(124, 196, 255, 0.35);
+  background: rgba(10, 12, 24, 0.6);
+  color: #cfe6ff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  transition: background var(--dur, 0.15s) var(--ease, ease);
+}
+.kt-mute:hover { background: rgba(20, 26, 50, 0.85); }
+.kt-mute:focus-visible { outline: 2px solid #7cc4ff; outline-offset: 2px; }
 .kt-hpbar { width: 220px; height: 12px; background: rgba(8, 6, 15, 0.7); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .kt-hpbar span { display: block; height: 100%; background: linear-gradient(90deg, #ff5d6c, #5fd17a); transition: width 0.15s; }
 .kt-weapon { font-size: 14px; color: var(--text); background: rgba(8, 6, 15, 0.6); border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; }

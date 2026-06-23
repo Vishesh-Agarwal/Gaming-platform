@@ -7,6 +7,7 @@ import { getSocket } from '../socket.js';
 import { createScene } from './karts/scene.js';
 import { makeKart, updateKart } from './karts/kartModel.js';
 import { createFx } from './karts/fx.js';
+import { createAudio } from './karts/audio.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -43,6 +44,8 @@ export function Thumbnail() {
 export default function Karts({ room, youAreIndex }) {
   const mountRef = useRef(null);
   const [hud, setHud] = useState({ phase: 'countdown', countdown: 3, timeLeft: 90, players: [], me: null });
+  const [muted, setMuted] = useState(false);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     const socket = getSocket();
@@ -56,6 +59,11 @@ export default function Karts({ room, youAreIndex }) {
     const arena = cfg.arena || { w: 80, d: 80 };
     const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, arena);
     const fx = createFx(scene);
+    const audio = createAudio();
+    audioRef.current = audio;
+    setMuted(audio.isMuted());
+    audio.engineStart();
+    const ENGINE_MAX_SPEED = 0.5; // per-frame interpolated delta at full throttle (tuning)
 
     // karts (with a shield bubble child)
     const karts = [];
@@ -102,6 +110,13 @@ export default function Karts({ room, youAreIndex }) {
     };
 
     const prevAlive = karts.map(() => true);
+    let prevCountdown = null;
+    let prevPhase = null;
+    let prevWeapon = null;
+    let prevShield = false;
+    let prevHp = 100;
+    let prevKills = 0;
+    let intensityOn = false;
 
     // snapshots
     const buffer = [];
@@ -138,11 +153,11 @@ export default function Karts({ room, youAreIndex }) {
       input.fire = !!keys[' '];
     };
     const driveKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '];
-    const kd = (e) => { const k = e.key.toLowerCase(); if (driveKeys.includes(k)) { keys[k] = true; apply(); e.preventDefault(); } };
+    const kd = (e) => { const k = e.key.toLowerCase(); if (driveKeys.includes(k)) { keys[k] = true; apply(); audio.resume(); e.preventDefault(); } };
     const ku = (e) => { keys[e.key.toLowerCase()] = false; apply(); };
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup', ku);
-    const md = () => { keys[' '] = true; apply(); };
+    const md = () => { keys[' '] = true; apply(); audio.resume(); };
     const mu = () => { keys[' '] = false; apply(); };
     renderer.domElement.addEventListener('pointerdown', md);
     window.addEventListener('pointerup', mu);
@@ -175,6 +190,10 @@ export default function Karts({ room, youAreIndex }) {
       const sample = sampleAt(performance.now() - INTERP_MS);
       const snap = latest.snap;
       if (sample && snap) {
+        const me = sample.find((k) => k.i === youAreIndex) || sample[0];
+        const meX = me ? me.x : null;
+        const panFor = (x) => (meX == null ? 0 : Math.max(-1, Math.min(1, (x - meX) / (arena.w / 2))));
+        let localSpeed = 0;
         for (const ks of sample) {
           const g = karts[ks.i];
           if (!g) continue;
@@ -191,15 +210,40 @@ export default function Karts({ room, youAreIndex }) {
             turn = ((ks.h - pt.h + Math.PI) % (Math.PI * 2)) - Math.PI;
           }
           pt.x = ks.x; pt.z = ks.z; pt.h = ks.h; pt.init = true;
+          if (ks.i === youAreIndex) localSpeed = speed;
           updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
           if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(ks.x - Math.sin(ks.h) * 1.8, ks.z - Math.cos(ks.h) * 1.8);
           if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(ks.x, 1.0, ks.z);
           // death explosion on alive->dead transition
-          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) fx.explode(ks.x, ks.z, colors[ks.i % colors.length]);
+          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) { fx.explode(ks.x, ks.z, colors[ks.i % colors.length]); audio.explosion(panFor(ks.x)); }
           if (meta) prevAlive[ks.i] = meta.alive;
         }
+        // countdown beeps, GO, and match-end stinger
+        if (snap.phase === 'countdown' && snap.countdown !== prevCountdown) {
+          if (snap.countdown > 0) audio.countdownBeep();
+          prevCountdown = snap.countdown;
+        }
+        if (snap.phase !== prevPhase) {
+          if (prevPhase === 'countdown' && snap.phase === 'playing') audio.go();
+          if (snap.phase === 'over') { audio.matchEnd(); audio.musicDuck(true); audio.engineStop(); }
+          prevPhase = snap.phase;
+        }
+        if (!intensityOn && snap.phase === 'playing' && snap.timeLeft <= 10) { audio.musicIntensity(1); intensityOn = true; }
+        const meAlive = !!snap.karts.find((k) => k.i === youAreIndex && k.alive && !k.gone);
+        audio.engineUpdate(localSpeed / ENGINE_MAX_SPEED, snap.phase === 'playing' && meAlive);
+        // local-player feedback sounds
+        const meMeta = snap.karts.find((k) => k.i === youAreIndex);
+        if (meMeta) {
+          if (meMeta.weapon && !prevWeapon) audio.pickup(0);
+          prevWeapon = meMeta.weapon;
+          if (meMeta.shield && !prevShield) audio.shieldUp(0);
+          prevShield = meMeta.shield;
+          if (meMeta.hp < prevHp && meMeta.alive) audio.hit();
+          prevHp = meMeta.hp;
+          if (meMeta.kills > prevKills) audio.kill();
+          prevKills = meMeta.kills;
+        }
         // camera follows local kart
-        const me = sample.find((k) => k.i === youAreIndex) || sample[0];
         if (me) {
           const fxDir = Math.sin(me.h), fz = Math.cos(me.h);
           camTarget.set(me.x - fxDir * 16, 11, me.z - fz * 16);
@@ -230,13 +274,16 @@ export default function Karts({ room, youAreIndex }) {
           if (!mesh) {
             mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh);
             if (p.type !== 'mine') fx.muzzle(p.x, p.z, p.h || 0, p.type === 'rocket' ? '#ff7a3c' : '#fff7b0');
+            if (p.type === 'rocket') audio.rocketLaunch(panFor(p.x));
+            else if (p.type === 'mine') audio.mineDrop(panFor(p.x));
+            else audio.mgFire(panFor(p.x));
           }
           mesh.position.set(p.x, p.type === 'mine' ? 0.4 : 1.2, p.z);
           if (p.type === 'rocket') { mesh.rotation.set(Math.PI / 2, 0, -p.h); fx.smoke(p.x, 1.0, p.z); }
         }
         for (const [id, mesh] of projMap) {
           if (!seen.has(id)) {
-            if (mesh.userData.type === 'rocket') fx.explode(mesh.position.x, mesh.position.z, '#ff7a3c');
+            if (mesh.userData.type === 'rocket') { fx.explode(mesh.position.x, mesh.position.z, '#ff7a3c'); audio.explosion(panFor(mesh.position.x)); }
             else if (mesh.userData.type !== 'mine') fx.spark(mesh.position.x, mesh.position.z, '#fff7b0');
             scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); projMap.delete(id);
           }
@@ -257,6 +304,7 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
       socket?.off('game:rt:snap', onSnap);
+      audio.dispose();
       fx.dispose();
       disposeView();
     };
@@ -272,6 +320,14 @@ export default function Karts({ room, youAreIndex }) {
 
         {/* HUD overlay */}
         <div className="kt-hud">
+          <button
+            className="kt-mute"
+            onClick={() => { const a = audioRef.current; if (!a) return; const m = !a.isMuted(); a.setMuted(m); setMuted(m); }}
+            aria-label={muted ? 'Unmute' : 'Mute'}
+            title={muted ? 'Unmute' : 'Mute'}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
           <div className="kt-timer">
             {hud.phase === 'countdown' ? (hud.countdown > 0 ? hud.countdown : 'GO!')
               : hud.phase === 'over' ? "TIME!" : fmtTime(hud.timeLeft)}

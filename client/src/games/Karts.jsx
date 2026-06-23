@@ -116,6 +116,7 @@ export default function Karts({ room, youAreIndex }) {
     let prevShield = false;
     let prevHp = 100;
     let prevKills = 0;
+    let intensityOn = false;
 
     // snapshots
     const buffer = [];
@@ -227,6 +228,7 @@ export default function Karts({ room, youAreIndex }) {
           if (snap.phase === 'over') { audio.matchEnd(); audio.musicDuck(true); audio.engineStop(); }
           prevPhase = snap.phase;
         }
+        if (!intensityOn && snap.phase === 'playing' && snap.timeLeft <= 10) { audio.musicIntensity(1); intensityOn = true; }
         const meAlive = !!snap.karts.find((k) => k.i === youAreIndex && k.alive && !k.gone);
         audio.engineUpdate(localSpeed / ENGINE_MAX_SPEED, snap.phase === 'playing' && meAlive);
         // local-player feedback sounds

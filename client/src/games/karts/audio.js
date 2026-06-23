@@ -100,10 +100,69 @@ export function createAudio() {
     engineOsc = null; engineFilter = null; engineGain = null;
   };
 
-  // --- music (scheduler added in the music task) ---
-  const startMusic = () => {};
-  const stopMusic = () => {};
-  const musicIntensity = () => {};
+  // --- music: a synthwave bed scheduled on the audio clock (lookahead) ---
+  const TEMPO = 120;
+  const stepDur = 60 / TEMPO / 2; // eighth notes
+  const baseFreq = 110; // A2
+  const semis = (n) => baseFreq * Math.pow(2, n / 12);
+  const bassPat = [0, 0, 7, 0, 5, 5, 3, 0];
+  const arpPat = [12, 16, 19, 24];
+  let musicTimer = null;
+  let nextNote = 0;
+  let step = 0;
+  let intensity = 0;
+
+  const schedStep = (time) => {
+    const s = step % 8;
+    // kick on beats
+    if (s % 4 === 0) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(140, time);
+      o.frequency.exponentialRampToValueAtTime(50, time + 0.12);
+      g.gain.setValueAtTime(0.5, time);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.15);
+      o.connect(g); g.connect(musicBus); o.start(time); o.stop(time + 0.16);
+    }
+    // bass
+    {
+      const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = semis(bassPat[s] - 12);
+      f.type = 'lowpass'; f.frequency.value = 500;
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.linearRampToValueAtTime(0.18, time + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + stepDur * 0.9);
+      o.connect(f); f.connect(g); g.connect(musicBus); o.start(time); o.stop(time + stepDur);
+    }
+    // arpeggio + hat only when intensity is up (final 10s)
+    if (intensity > 0) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'square'; o.frequency.value = semis(arpPat[step % arpPat.length]);
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.linearRampToValueAtTime(0.08, time + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + stepDur * 0.8);
+      o.connect(g); g.connect(musicBus); o.start(time); o.stop(time + stepDur);
+
+      const hs = ctx.createBufferSource(); hs.buffer = noiseBuf;
+      const hf = ctx.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 7000;
+      const hg = ctx.createGain();
+      hg.gain.setValueAtTime(0.0001, time);
+      hg.gain.linearRampToValueAtTime(0.06, time + 0.005);
+      hg.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+      hs.connect(hf); hf.connect(hg); hg.connect(musicBus); hs.start(time); hs.stop(time + 0.06);
+    }
+    step++;
+  };
+
+  const startMusic = () => {
+    if (musicTimer) return;
+    nextNote = now() + 0.1;
+    musicTimer = setInterval(() => {
+      while (nextNote < now() + 0.1) { schedStep(nextNote); nextNote += stepDur; }
+    }, 25);
+  };
+  const stopMusic = () => { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } };
+  const musicIntensity = (lvl) => { intensity = lvl; };
   const musicDuck = (on) => { musicBus.gain.setTargetAtTime(on ? 0.12 : 0.35, now(), 0.1); };
 
   // --- lifecycle ---

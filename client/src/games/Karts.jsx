@@ -165,14 +165,18 @@ export default function Karts({ room, youAreIndex }) {
 
     let raf = 0;
     const camTarget = new THREE.Vector3();
+    // perf: reuse across frames instead of allocating per frame
+    const crateCol = new THREE.Color();
+    let meX = null;
+    const panFor = (x) => (meX == null ? 0 : Math.max(-1, Math.min(1, (x - meX) / (arena.w / 2))));
+    let lastT = performance.now();
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const sample = sampleAt(performance.now() - INTERP_MS);
       const snap = latest.snap;
       if (sample && snap) {
         const me = sample.find((k) => k.i === youAreIndex) || sample[0];
-        const meX = me ? me.x : null;
-        const panFor = (x) => (meX == null ? 0 : Math.max(-1, Math.min(1, (x - meX) / (arena.w / 2))));
+        meX = me ? me.x : null;
         let localSpeed = 0;
         for (const ks of sample) {
           const g = karts[ks.i];
@@ -240,9 +244,9 @@ export default function Karts({ room, youAreIndex }) {
             mesh.visible = true;
             mesh.position.set(c.x, 1.6 + Math.sin(performance.now() / 300 + i) * 0.25, c.z);
             mesh.rotation.y += 0.03;
-            const col = new THREE.Color(WEAPON_COLOR[c.type] || '#fff');
-            mesh.material.color.copy(col); mesh.material.emissive.copy(col);
-            if (mesh.userData.ring) mesh.userData.ring.material.color.copy(col);
+            crateCol.set(WEAPON_COLOR[c.type] || '#fff');
+            mesh.material.color.copy(crateCol); mesh.material.emissive.copy(crateCol);
+            if (mesh.userData.ring) mesh.userData.ring.material.color.copy(crateCol);
           } else mesh.visible = false;
         });
 
@@ -270,7 +274,10 @@ export default function Karts({ room, youAreIndex }) {
         }
       }
 
-      fx.update(1 / 60);
+      const nowT = performance.now();
+      const dt = Math.min(0.05, (nowT - lastT) / 1000); // clamp so a tab stall doesn't fast-forward
+      lastT = nowT;
+      fx.update(dt);
       render();
     };
     raf = requestAnimationFrame(loop);
@@ -283,6 +290,7 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('keyup', ku);
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
+      renderer.domElement.removeEventListener('pointerdown', md);
       socket?.off('game:rt:snap', onSnap);
       audio.dispose();
       fx.dispose();

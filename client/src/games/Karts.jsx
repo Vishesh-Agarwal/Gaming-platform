@@ -110,6 +110,10 @@ export default function Karts({ room, youAreIndex }) {
     const prevAlive = karts.map(() => true);
     let prevCountdown = null;
     let prevPhase = null;
+    let prevWeapon = null;
+    let prevShield = false;
+    let prevHp = 100;
+    let prevKills = 0;
 
     // snapshots
     const buffer = [];
@@ -183,6 +187,9 @@ export default function Karts({ room, youAreIndex }) {
       const sample = sampleAt(performance.now() - INTERP_MS);
       const snap = latest.snap;
       if (sample && snap) {
+        const me = sample.find((k) => k.i === youAreIndex) || sample[0];
+        const meX = me ? me.x : null;
+        const panFor = (x) => (meX == null ? 0 : Math.max(-1, Math.min(1, (x - meX) / (arena.w / 2))));
         for (const ks of sample) {
           const g = karts[ks.i];
           if (!g) continue;
@@ -203,7 +210,7 @@ export default function Karts({ room, youAreIndex }) {
           if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(ks.x - Math.sin(ks.h) * 1.8, ks.z - Math.cos(ks.h) * 1.8);
           if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(ks.x, 1.0, ks.z);
           // death explosion on alive->dead transition
-          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) fx.explode(ks.x, ks.z, colors[ks.i % colors.length]);
+          if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) { fx.explode(ks.x, ks.z, colors[ks.i % colors.length]); audio.explosion(panFor(ks.x)); }
           if (meta) prevAlive[ks.i] = meta.alive;
         }
         // countdown beeps, GO, and match-end stinger
@@ -216,8 +223,19 @@ export default function Karts({ room, youAreIndex }) {
           if (snap.phase === 'over') { audio.matchEnd(); audio.musicDuck(true); audio.engineStop(); }
           prevPhase = snap.phase;
         }
+        // local-player feedback sounds
+        const meMeta = snap.karts.find((k) => k.i === youAreIndex);
+        if (meMeta) {
+          if (meMeta.weapon && !prevWeapon) audio.pickup(0);
+          prevWeapon = meMeta.weapon;
+          if (meMeta.shield && !prevShield) audio.shieldUp(0);
+          prevShield = meMeta.shield;
+          if (meMeta.hp < prevHp && meMeta.alive) audio.hit();
+          prevHp = meMeta.hp;
+          if (meMeta.kills > prevKills) audio.kill();
+          prevKills = meMeta.kills;
+        }
         // camera follows local kart
-        const me = sample.find((k) => k.i === youAreIndex) || sample[0];
         if (me) {
           const fxDir = Math.sin(me.h), fz = Math.cos(me.h);
           camTarget.set(me.x - fxDir * 16, 11, me.z - fz * 16);
@@ -248,13 +266,16 @@ export default function Karts({ room, youAreIndex }) {
           if (!mesh) {
             mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh);
             if (p.type !== 'mine') fx.muzzle(p.x, p.z, p.h || 0, p.type === 'rocket' ? '#ff7a3c' : '#fff7b0');
+            if (p.type === 'rocket') audio.rocketLaunch(panFor(p.x));
+            else if (p.type === 'mine') audio.mineDrop(panFor(p.x));
+            else audio.mgFire(panFor(p.x));
           }
           mesh.position.set(p.x, p.type === 'mine' ? 0.4 : 1.2, p.z);
           if (p.type === 'rocket') { mesh.rotation.set(Math.PI / 2, 0, -p.h); fx.smoke(p.x, 1.0, p.z); }
         }
         for (const [id, mesh] of projMap) {
           if (!seen.has(id)) {
-            if (mesh.userData.type === 'rocket') fx.explode(mesh.position.x, mesh.position.z, '#ff7a3c');
+            if (mesh.userData.type === 'rocket') { fx.explode(mesh.position.x, mesh.position.z, '#ff7a3c'); audio.explosion(panFor(mesh.position.x)); }
             else if (mesh.userData.type !== 'mine') fx.spark(mesh.position.x, mesh.position.z, '#fff7b0');
             scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); projMap.delete(id);
           }

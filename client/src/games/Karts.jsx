@@ -105,9 +105,9 @@ export default function Karts({ room, youAreIndex }) {
     const buffer = [];
     const latest = { snap: null };
     // client-side prediction of the local kart
-    const pred = { x: 0, z: 0, heading: 0, vel: 0, has: false };
+    const pred = { x: 0, z: 0, heading: 0, vel: 0, y: 0, vy: 0, grounded: true, has: false };
     const pending = [];
-    const renderLocal = { x: 0, z: 0, h: 0 };
+    const renderLocal = { x: 0, z: 0, h: 0, y: 0 };
     let renderInit = false;
     let inputSeq = 0;
     const PRED_SMOOTH = 0.35;
@@ -120,6 +120,7 @@ export default function Karts({ room, youAreIndex }) {
       const mine = snap.karts.find((k) => k.i === youAreIndex);
       if (mine && mine.alive && !mine.gone) {
         pred.x = mine.x; pred.z = mine.z; pred.heading = mine.h; pred.vel = mine.v || 0;
+        pred.y = mine.y || 0; pred.vy = mine.vy || 0; pred.grounded = mine.g !== false;
         const ack = mine.seq || 0;
         while (pending.length && pending[0].seq <= ack) pending.shift();
         for (const p of pending) integrateKart(pred, p, SIM_DT, map);
@@ -141,7 +142,7 @@ export default function Karts({ room, youAreIndex }) {
       const f = Math.max(0, Math.min(1, (renderT - a.ct) / span));
       return a.karts.map((ka) => {
         const kb = b.karts.find((x) => x.i === ka.i) || ka;
-        return { i: ka.i, x: lerp(ka.x, kb.x, f), z: lerp(ka.z, kb.z, f), h: lerpAngle(ka.h, kb.h, f) };
+        return { i: ka.i, x: lerp(ka.x, kb.x, f), y: lerp(ka.y || 0, kb.y || 0, f), z: lerp(ka.z, kb.z, f), h: lerpAngle(ka.h, kb.h, f) };
       });
     };
 

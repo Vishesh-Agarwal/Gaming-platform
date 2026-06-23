@@ -2,7 +2,7 @@
 // engine ticks step() ~30Hz (passing `now`) and broadcasts snapshot(). Pick up
 // weapons from crates, fight, die + respawn; most kills in 90s wins.
 
-import { integrateKart, SIM_DT } from './kartPhysics.js';
+import { integrateKart, SIM_DT, surfaceHeight } from './kartPhysics.js';
 import { getMap } from './kartMaps.js';
 
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
@@ -33,6 +33,7 @@ function createSim(players, now = Date.now(), options) {
     const s = map.spawns[i % map.spawns.length];
     return {
       x: s.x, z: s.z, heading: s.heading, vel: 0,
+      y: surfaceHeight(map, s.x, s.z), vy: 0, grounded: true,
       hp: HP_MAX, alive: true, respawnAt: 0, kills: 0,
       weapon: null, ammo: 0, shieldUntil: 0,
       prevFire: false, queue: [], nextShotAt: 0, gone: false, lastSeq: 0,
@@ -115,6 +116,7 @@ function step(sim, inputs, dt, now = Date.now()) {
       if (now >= k.respawnAt) {
         const s = map.spawns[i % map.spawns.length];
         k.x = s.x; k.z = s.z; k.heading = s.heading; k.vel = 0;
+        k.y = surfaceHeight(map, s.x, s.z); k.vy = 0; k.grounded = true;
         k.hp = HP_MAX; k.alive = true; k.shieldUntil = now + 1200; // brief spawn protection
       }
       continue;
@@ -219,6 +221,7 @@ function snapshot(sim, now = Date.now()) {
     timeLeft: Math.max(0, Math.ceil((sim.endsAt - now) / 1000)),
     karts: sim.karts.map((k, i) => ({
       i, x: r1(k.x), z: r1(k.z), h: r1(k.heading), v: r1(k.vel), seq: k.lastSeq || 0,
+      y: r1(k.y || 0), vy: r1(k.vy || 0), g: !!k.grounded,
       hp: Math.round(k.hp), alive: k.alive, kills: k.kills,
       weapon: k.weapon, ammo: k.ammo, shield: now < k.shieldUntil, gone: k.gone,
     })),

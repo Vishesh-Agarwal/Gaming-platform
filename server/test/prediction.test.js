@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { integrateKart, SIM_DT } from '../src/games/kartPhysics.js';
+import { integrateKart, SIM_DT, surfaceHeight } from '../src/games/kartPhysics.js';
 import karts from '../src/games/karts.js';
 
 const { createSim, step } = karts;
@@ -82,4 +82,32 @@ test('inputs queued while dead are discarded (no respawn lurch)', () => {
   // a follow-up tick with no input must not move the kart (no leftover backlog)
   step(sim, { 0: { queue: [], last: null } }, 0.033, tR + 33);
   assert.ok(Math.abs(sim.karts[0].x - sx) < 1e-9 && Math.abs(sim.karts[0].z - sz) < 1e-9, 'no movement without input');
+});
+
+test('reconcile + replay reproduces elevation state exactly', () => {
+  const map = {
+    arena: { w: 80, d: 80 }, obstacles: [],
+    ramps: [{ kind: 'wedge', x: 0, z: 0, w: 8, d: 12, axis: 'z', loY: 0, hiY: 6 }],
+  };
+  const inputs = [];
+  for (let i = 0; i < 40; i++) inputs.push({ seq: i + 1, throttle: 1, steer: 0 });
+  // authoritative
+  const server = { x: 0, z: -6, heading: 0, vel: 20, y: 0, vy: 0, grounded: true };
+  for (const inp of inputs) integrateKart(server, inp, SIM_DT, map);
+  // client replays the same inputs from the same start
+  const client = { x: 0, z: -6, heading: 0, vel: 20, y: 0, vy: 0, grounded: true };
+  for (const inp of inputs) integrateKart(client, inp, SIM_DT, map);
+  assert.equal(client.y, server.y);
+  assert.equal(client.vy, server.vy);
+  assert.equal(client.grounded, server.grounded);
+});
+
+test('createSim seeds karts grounded at the spawn surface height', () => {
+  const players = [{ id: 'a' }, { id: 'b' }];
+  const sim = karts.createSim(players, 1000, { map: 'arena' });
+  for (const k of sim.karts) {
+    assert.equal(k.vy, 0);
+    assert.equal(k.grounded, true);
+    assert.equal(typeof k.y, 'number');
+  }
 });

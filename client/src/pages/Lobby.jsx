@@ -2,6 +2,7 @@
 // Clicking a game opens the invite/add-friend modal.
 import { useEffect, useState } from 'react';
 import { availableGames } from '../games/registry.js';
+import { listMaps } from '../games/karts/kartMaps.js';
 import { APP_NAME } from '../config.js';
 import GameCard from '../components/GameCard.jsx';
 import InviteModal from '../components/InviteModal.jsx';
@@ -36,6 +37,7 @@ export default function Lobby({
   onJoinLobby,
   onLeaveLobby,
   onLobbyReady,
+  onSetLobbyMap,
   onInviteToLobby,
   onStartLobby,
   onSelectFriend,
@@ -203,6 +205,8 @@ export default function Lobby({
           onReady={onLobbyReady}
           onStart={onStartLobby}
           onLeave={onLeaveLobby}
+          maps={lobby.gameId === 'karts' ? listMaps() : null}
+          onSetMap={onSetLobbyMap}
         />
       )}
 

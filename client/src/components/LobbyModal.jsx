@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Modal from './Modal.jsx';
 
-export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave }) {
+export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave, maps, onSetMap }) {
   const [copied, setCopied] = useState(false);
   const isHost = lobby.hostId === currentUser.id;
   const me = lobby.members.find((m) => m.id === currentUser.id);
@@ -43,6 +43,22 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
           </div>
         ))}
       </div>
+
+      {maps && (
+        <div className="lb-map">
+          <span className="mode-label">Map</span>
+          <select
+            value={lobby.options?.map || maps[0].id}
+            disabled={!isHost}
+            onChange={(e) => onSetMap(e.target.value)}
+          >
+            {maps.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+          {!isHost && <span className="muted lb-map-hint">host picks the map</span>}
+        </div>
+      )}
 
       {invitable.length > 0 && (
         <div className="lb-invite">

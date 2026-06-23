@@ -26,6 +26,7 @@ export function publicLobby(lobby) {
     hostId: lobby.hostId,
     maxPlayers: lobby.maxPlayers,
     members: lobby.members.map((m) => ({ id: m.id, username: m.username, ready: m.ready })),
+    options: lobby.options || null,
   };
 }
 
@@ -99,6 +100,15 @@ export function setReady(userId, ready) {
   if (!lobby) return { error: 'You are not in a lobby.' };
   const m = lobby.members.find((x) => x.id === userId);
   if (m) m.ready = !!ready;
+  return { lobby };
+}
+
+// Host-only: merge into the lobby's options (e.g. { map }). Returns { lobby } or { error }.
+export function setLobbyOptions(hostId, options) {
+  const lobby = getLobbyForUser(hostId);
+  if (!lobby) return { error: 'You are not in a lobby.' };
+  if (lobby.hostId !== hostId) return { error: 'Only the host can change settings.' };
+  lobby.options = { ...(lobby.options || {}), ...(options || {}) };
   return { lobby };
 }
 

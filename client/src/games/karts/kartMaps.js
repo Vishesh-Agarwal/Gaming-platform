@@ -103,6 +103,46 @@ export const MAPS = {
     ],
     pads: [[-34, 0], [34, 0], [0, -34], [0, 40]],
   },
+  coliseum: {
+    id: 'coliseum', name: 'Coliseum', arena: { w: 110, d: 110 },
+    obstacles: [
+      // pillar cover (LOS breaks for the auto-MG)
+      { kind: 'cyl', x: -32, z: -16, r: 3 },
+      { kind: 'cyl', x: 32, z: -16, r: 3 },
+      { kind: 'cyl', x: -32, z: 16, r: 3 },
+      { kind: 'cyl', x: 32, z: 16, r: 3 },
+      // low box cover near each spawn zone
+      { kind: 'box', x: 0, z: -34, w: 16, d: 4 },
+      { kind: 'box', x: 0, z: 34, w: 16, d: 4 },
+    ],
+    ramps: [
+      // central climbable plateau (x:-10..10, z:-10..10), height 4
+      { kind: 'wedge', x: 0, z: 0, w: 20, d: 20, axis: 'z', loY: 4, hiY: 4 },
+      // north connector ramp: high edge (4) abuts plateau z=-10
+      { kind: 'wedge', x: 0, z: -17, w: 12, d: 14, axis: 'z', loY: 0, hiY: 4 },
+      // south connector ramp: high edge (4) abuts plateau z=10
+      { kind: 'wedge', x: 0, z: 17, w: 12, d: 14, axis: 'z', loY: 4, hiY: 0 },
+    ],
+    hazards: [
+      { x: -28, z: 0, r: 7, dmg: 40 },
+      { x: 28, z: 0, r: 7, dmg: 40 },
+    ],
+    boosts: [
+      { x: 0, z: -42, r: 5, strength: 46 },
+      { x: 0, z: 42, r: 5, strength: 46 },
+    ],
+    spawns: [
+      { x: -30, z: -46, heading: 0 },
+      { x: -10, z: -46, heading: 0 },
+      { x: 10, z: -46, heading: 0 },
+      { x: 30, z: -46, heading: 0 },
+      { x: -30, z: 46, heading: 3.1416 },
+      { x: -10, z: 46, heading: 3.1416 },
+      { x: 10, z: 46, heading: 3.1416 },
+      { x: 30, z: 46, heading: 3.1416 },
+    ],
+    pads: [[-18, 0], [18, 0], [-42, 0], [42, 0], [-22, -22], [22, 22]],
+  },
 };
 
 export const DEFAULT_MAP = 'arena';

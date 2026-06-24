@@ -9,6 +9,7 @@ const GROUND_PARAMS = {
   pillars:   { grassRatio: 0.30, asphalt: '#3a3c41', grass: '#496a31' },
   gauntlet:  { grassRatio: 0.20, asphalt: '#37393e', grass: '#456530' },
   launchpad: { grassRatio: 0.25, asphalt: '#3c3e44', grass: '#4c6e34' },
+  coliseum:  { grassRatio: 0.28, asphalt: '#3a3c41', grass: '#4a6b32' },
 };
 const GROUND_DEFAULT = { grassRatio: 0.30, asphalt: '#3b3d42', grass: '#4a6b32' };
 

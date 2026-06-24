@@ -158,6 +158,7 @@ export function createScene(mount, map) {
     if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
     });
     mat.dispose();
   };

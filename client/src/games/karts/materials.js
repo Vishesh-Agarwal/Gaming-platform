@@ -1,7 +1,11 @@
 // Smash Karts — procedural PBR materials + environment, generated entirely in code.
 // No binary assets, no neon. Verified by build + manual playtest (GL-dependent).
 import * as THREE from 'three';
-import { groundParamsFor, kartPaintParams, createCache } from './materialParams.js';
+import { groundParamsFor } from './materialParams.js';
+
+// Hazard glow color, shared by the grain texture and the material emissive
+// so a future tuning change can't desync the two.
+const HAZARD_GLOW = '#b5471a';
 
 // --- canvas helpers -------------------------------------------------------
 
@@ -34,6 +38,7 @@ function grainTexture(base, grains, size = 256, density = 0.18) {
 }
 
 // Cheap normal map from the same grain pattern (grayscale -> bluish normals).
+// normal maps must stay linear — leave colorSpace at the default (NoColorSpace)
 function grainNormal(size = 256, density = 0.18) {
   const c = makeCanvas(size);
   const g = c.getContext('2d');
@@ -114,9 +119,9 @@ export function createMaterials(renderer, map) {
   const ramp = new THREE.MeshStandardMaterial({ color: '#7f8186', roughness: 0.5, metalness: 0.2 });
 
   // Realistic hazard: dark crust + warm cracks, only a subtle emissive cue.
-  const hazardTex = track(grainTexture('#1c0e08', ['#7a2a10', '#b5471a', '#e06a22'], 256, 0.12));
+  const hazardTex = track(grainTexture('#1c0e08', ['#7a2a10', HAZARD_GLOW, '#e06a22'], 256, 0.12));
   const hazard = new THREE.MeshStandardMaterial({
-    map: hazardTex, emissive: '#b5471a', emissiveIntensity: 0.35, roughness: 0.9, metalness: 0.0,
+    map: hazardTex, emissive: HAZARD_GLOW, emissiveIntensity: 0.35, roughness: 0.9, metalness: 0.0,
   });
 
   // Painted boost arrows as a road marking (alpha cut from a generated texture).
@@ -125,19 +130,10 @@ export function createMaterials(renderer, map) {
     map: boostTex, transparent: true, roughness: 0.6, metalness: 0.0,
   });
 
-  const paintCache = createCache((color) => {
-    const p = kartPaintParams(color);
-    return new THREE.MeshStandardMaterial({
-      color: p.color, metalness: p.metalness, roughness: p.roughness,
-    });
-  });
-
   return {
     sky, environment, asphalt, grass, wall, block, ramp, hazard, boost,
     grassRatio: gp.grassRatio,
-    kartPaint(color) { return paintCache.get(color); },
     dispose() {
-      paintCache.dispose();
       for (const m of [asphalt, grass, wall, block, ramp, hazard, boost]) m.dispose();
       for (const t of disposables) t.dispose();
     },

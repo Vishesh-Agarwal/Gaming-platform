@@ -20,8 +20,10 @@ assets).
 - **No map-data change.** `kartMaps.js` (both byte-identical copies) is
   untouched — geometry, spawns, ramps, hazards, boosts stay exactly as they are.
   The new look is derived purely from data the renderer already reads.
-- No Playverse lobby redesign — the lobby keeps its neon identity. This change
-  is scoped to the in-game Karts 3D scene only.
+- No Playverse lobby redesign — the lobby (menu / games grid / chat) is **out of
+  scope and untouched** in this sub-project. A separate future task may restyle
+  it. This change is scoped to the in-game Karts 3D scene only, which becomes
+  **fully realistic with zero neon residue**.
 - No HUD redesign.
 
 ## Constraints (binding)
@@ -44,7 +46,8 @@ Semi-realistic PBR: grounded, material-driven realism. HDRI-style environment
 light + a warm sun, textured asphalt/grass, painted-metal karts with real
 contact shadows, vivid-but-not-neon color palette. **Bloom is fully off** — a
 clean realistic frame. Reference vibe: a real daytime kart circuit, not a neon
-night arena.
+night arena. **No neon residue anywhere in the scene** — including hazard/boost
+markers, which are realistic surfaces, not glowing decals.
 
 ## Architecture / file structure
 
@@ -87,9 +90,10 @@ A procedural material + texture factory. Responsibilities:
     receive shadows, lit by the env map. Keep the existing geometry rules
     (box mesas at `top`, flat wedge plateaus `loY===hiY` as solid blocks,
     sloped wedges as tilted slabs).
-  - Hazards: re-themed molten/red emissive ground ring. Boosts: blue chevron
-    ground decal. Both readable in daylight via emissive + additive blending
-    (no bloom needed).
+  - Hazards: realistic hazard surface (e.g. textured lava/oil-slick patch with
+    only a subtle emissive cue) — **no arcade glow, no additive neon blending**.
+    Boosts: realistic painted boost arrows / road marking on the asphalt. Both
+    must read clearly in daylight through material + contrast alone.
 - **Remove the bloom pass entirely.** `render()` calls `renderer.render(scene,
   camera)` directly; drop `EffectComposer`/`UnrealBloomPass` imports, the
   composer/bloom fields, and their `resize`/`dispose` handling.

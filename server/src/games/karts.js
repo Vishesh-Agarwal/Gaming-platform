@@ -5,7 +5,8 @@
 import { integrateKart, SIM_DT, surfaceHeight } from './kartPhysics.js';
 import { getMap } from './kartMaps.js';
 
-const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
+const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a', '#c87bff', '#ff9f43', '#2ee6c0', '#f25fbf'];
+const TEAM_COLORS = ['#ff5d6c', '#5cc8ff'];
 
 // match
 const COUNTDOWN_MS = 3000, MATCH_MS = 90000, RESPAWN_MS = 2000, HP_MAX = 100;
@@ -108,23 +109,36 @@ export function nearestTarget(sim, self, map) {
 
 function createInitialState(options) {
   const map = getMap(options?.map);
-  return { arena: map.arena, colors: COLORS, realtime: true, maxPlayers: 4, mapId: map.id };
+  const mode = options?.mode === 'teams' ? 'teams' : 'ffa';
+  const teams = mode === 'teams' && Array.isArray(options?.teams) ? options.teams : null;
+  return { arena: map.arena, colors: COLORS, teamColors: TEAM_COLORS, mode, teams, realtime: true, maxPlayers: 8, mapId: map.id };
 }
 
 function createSim(players, now = Date.now(), options) {
   const map = getMap(options?.map);
+  const mode = options?.mode === 'teams' ? 'teams' : 'ffa';
+  const teams = mode === 'teams' && Array.isArray(options?.teams) ? options.teams : null;
+  const h = Math.floor(map.spawns.length / 2);
+  let aIdx = 0, bIdx = 0;
   const karts = players.map((p, i) => {
-    const s = map.spawns[i % map.spawns.length];
+    const team = teams ? (teams[i] === 1 ? 1 : 0) : null;
+    let spawnIdx;
+    if (team === 0) { spawnIdx = aIdx % h; aIdx++; }
+    else if (team === 1) { spawnIdx = h + (bIdx % (map.spawns.length - h)); bIdx++; }
+    else { spawnIdx = i % map.spawns.length; }
+    const s = map.spawns[spawnIdx];
     return {
       x: s.x, z: s.z, heading: s.heading, vel: 0,
       y: surfaceHeight(map, s.x, s.z), vy: 0, grounded: true,
       hp: HP_MAX, alive: true, respawnAt: 0, kills: 0,
       weapon: null, ammo: 0, shieldUntil: 0,
       prevFire: false, queue: [], nextShotAt: 0, gone: false, lastSeq: 0,
+      team, spawnIdx,
     };
   });
   return {
     mapId: map.id,
+    mode,
     karts,
     crates: map.pads.map(([x, z]) => ({ x, z, type: null, readyAt: now + COUNTDOWN_MS })),
     projectiles: [],
@@ -217,7 +231,7 @@ function step(sim, inputs, dt, now = Date.now()) {
         dslot.queue.length = 0;
       }
       if (now >= k.respawnAt) {
-        const s = map.spawns[i % map.spawns.length];
+        const s = map.spawns[k.spawnIdx];
         k.x = s.x; k.z = s.z; k.heading = s.heading; k.vel = 0;
         k.y = surfaceHeight(map, s.x, s.z); k.vy = 0; k.grounded = true;
         k.hp = HP_MAX; k.alive = true; k.shieldUntil = now + 1200; // brief spawn protection
@@ -366,8 +380,9 @@ export default {
   id: 'karts',
   name: 'Smash Karts',
   type: 'realtime',
+  modes: [{ id: 'ffa', name: 'Free-for-all' }, { id: 'teams', name: 'Teams' }],
   minPlayers: 2,
-  maxPlayers: 4,
+  maxPlayers: 8,
   createInitialState,
   createSim,
   step,

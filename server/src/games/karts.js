@@ -141,7 +141,7 @@ function giveWeapon(k, type) {
   k.queue = [];
 }
 
-function fireProjectile(sim, k, owner, type, now, map) {
+function fireProjectile(sim, k, owner, type, now, map, target = null) {
   const fx = Math.sin(k.heading), fz = Math.cos(k.heading);
   if (type === 'mine') {
     const mx = k.x - fx * 3, mz = k.z - fz * 3;
@@ -151,11 +151,29 @@ function fireProjectile(sim, k, owner, type, now, map) {
     });
     return;
   }
-  const spec = type === 'mg' ? MG : ROCKET;
+  if (type === 'mg') {
+    // cosmetic only — damage is applied as hitscan at fire time. Aim at the
+    // target if there is one, otherwise straight ahead (idle fire).
+    let dx = fx, dz = fz, dy = 0;
+    if (target) {
+      const tx = target.x - k.x, tz = target.z - k.z;
+      const ty = ((target.y || 0) + KART_CENTER) - ((k.y || 0) + BARREL);
+      const len = Math.hypot(tx, tz) || 1;
+      dx = tx / len; dz = tz / len; dy = ty / len;
+    }
+    sim.projectiles.push({
+      id: sim.nextPid++, type: 'mg', owner, h: Math.atan2(dx, dz),
+      x: k.x + dx * 3, z: k.z + dz * 3, y: (k.y || 0) + BARREL,
+      vx: dx * MG.speed, vz: dz * MG.speed, vy: dy * MG.speed, life: MG.life,
+      cosmetic: true,
+    });
+    return;
+  }
+  // rocket — real, forward
   sim.projectiles.push({
     id: sim.nextPid++, type, owner, h: k.heading,
     x: k.x + fx * 3, z: k.z + fz * 3, y: (k.y || 0) + BARREL,
-    vx: fx * spec.speed, vz: fz * spec.speed, vy: type === 'rocket' ? ROCKET_VY : 0, life: spec.life,
+    vx: fx * ROCKET.speed, vz: fz * ROCKET.speed, vy: ROCKET_VY, life: ROCKET.life,
   });
 }
 
@@ -240,7 +258,15 @@ function step(sim, inputs, dt, now = Date.now()) {
     const rising = fire && !k.prevFire;
     if (k.weapon === 'mg') {
       if (fire && k.ammo > 0 && now >= k.nextShotAt) {
-        fireProjectile(sim, k, i, 'mg', now, map);
+        const t = nearestTarget(sim, i, map);
+        if (t != null) {
+          const tg = sim.karts[t];
+          const dist = Math.hypot(tg.x - k.x, tg.z - k.z);
+          damage(sim, t, mgDamage(dist), i, now);
+          fireProjectile(sim, k, i, 'mg', now, map, tg);
+        } else {
+          fireProjectile(sim, k, i, 'mg', now, map, null); // idle fire
+        }
         k.ammo -= 1; k.nextShotAt = now + MG.cadence;
         if (k.ammo <= 0) k.weapon = null;
       }
@@ -284,7 +310,7 @@ function step(sim, inputs, dt, now = Date.now()) {
       if (pr.life <= 0) dead = true;
       else if (Math.abs(pr.x) > map.arena.w / 2 || Math.abs(pr.z) > map.arena.d / 2) dead = true;
       else if (pr.y <= surfaceHeight(map, pr.x, pr.z)) dead = true; // hit the ground/mesa
-      else {
+      else if (!pr.cosmetic) { // cosmetic MG bullets are visual-only
         for (let i = 0; i < sim.karts.length; i++) {
           if (i === pr.owner) continue;
           const k = sim.karts[i];

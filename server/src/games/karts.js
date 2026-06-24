@@ -16,6 +16,7 @@ const MG = { dmg: 8, speed: 70, life: 0.55, ammo: 24, cadence: 90, r: 0.8 };
 const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
 const SHIELD = { dur: 4000 };
+const MG_RANGE = 15, MG_DMG_NEAR = 8, MG_DMG_FAR = 2.5;
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
 const BARREL = 1.0, KART_CENTER = 1.0, GRAVITY_PROJ = 9, ROCKET_VY = 4;
 
@@ -79,6 +80,30 @@ export function lineOfSightClear(map, x0, z0, x1, z1) {
     if (segHitsRect(x0, z0, x1, z1, minX, minZ, maxX, maxZ)) return false;
   }
   return true;
+}
+
+// Linear MG damage falloff: MG_DMG_NEAR at point-blank -> MG_DMG_FAR at MG_RANGE.
+export function mgDamage(dist) {
+  const t = clamp(dist / MG_RANGE, 0, 1);
+  return MG_DMG_NEAR + (MG_DMG_FAR - MG_DMG_NEAR) * t;
+}
+
+// Index of the nearest valid MG target for shooter `self`, or null.
+// Valid = alive, not gone, not self, horizontal distance < MG_RANGE, clear LOS.
+export function nearestTarget(sim, self, map) {
+  const k = sim.karts[self];
+  let best = null, bestD2 = MG_RANGE * MG_RANGE;
+  for (let i = 0; i < sim.karts.length; i++) {
+    if (i === self) continue;
+    const t = sim.karts[i];
+    if (!t.alive || t.gone) continue;
+    const dx = t.x - k.x, dz = t.z - k.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 >= bestD2) continue;
+    if (!lineOfSightClear(map, k.x, k.z, t.x, t.z)) continue;
+    best = i; bestD2 = d2;
+  }
+  return best;
 }
 
 function createInitialState(options) {

@@ -89,8 +89,11 @@ export function mgDamage(dist) {
   return MG_DMG_NEAR + (MG_DMG_FAR - MG_DMG_NEAR) * t;
 }
 
+// Two karts are teammates only when both carry the same non-null team.
+function sameTeam(a, b) { return a && b && a.team != null && a.team === b.team; }
+
 // Index of the nearest valid MG target for shooter `self`, or null.
-// Valid = alive, not gone, not self, horizontal distance < MG_RANGE, clear LOS.
+// Valid = alive, not gone, not self, not a teammate, horizontal distance < MG_RANGE, clear LOS.
 export function nearestTarget(sim, self, map) {
   const k = sim.karts[self];
   let best = null, bestD2 = MG_RANGE * MG_RANGE;
@@ -98,6 +101,7 @@ export function nearestTarget(sim, self, map) {
     if (i === self) continue;
     const t = sim.karts[i];
     if (!t.alive || t.gone) continue;
+    if (sameTeam(k, t)) continue;
     const dx = t.x - k.x, dz = t.z - k.z;
     const d2 = dx * dx + dz * dz;
     if (d2 >= bestD2) continue;
@@ -311,6 +315,7 @@ function step(sim, inputs, dt, now = Date.now()) {
         for (let i = 0; i < sim.karts.length; i++) {
           const k = sim.karts[i];
           if (!k.alive || k.gone) continue;
+          if (i !== pr.owner && sameTeam(sim.karts[pr.owner], k)) continue; // teammates safe; owner can still self-trigger
           const dx = k.x - pr.x, dz = k.z - pr.z, dy = (k.y || 0) + KART_CENTER - pr.y;
           if (dx * dx + dz * dz + dy * dy < MINE.trigger * MINE.trigger) {
             damage(sim, i, MINE.dmg, pr.owner, now);
@@ -329,6 +334,7 @@ function step(sim, inputs, dt, now = Date.now()) {
           if (i === pr.owner) continue;
           const k = sim.karts[i];
           if (!k.alive || k.gone) continue;
+          if (sameTeam(sim.karts[pr.owner], k)) continue; // no friendly fire
           const dx = k.x - pr.x, dz = k.z - pr.z, dy = (k.y || 0) + KART_CENTER - pr.y;
           if (dx * dx + dz * dz + dy * dy < HIT_R * HIT_R) {
             damage(sim, i, spec.dmg, pr.owner, now);
@@ -352,15 +358,24 @@ function snapshot(sim, now = Date.now()) {
       y: r1(k.y || 0), vy: r1(k.vy || 0), g: !!k.grounded,
       hp: Math.round(k.hp), alive: k.alive, kills: k.kills,
       weapon: k.weapon, ammo: k.ammo, shield: now < k.shieldUntil, gone: k.gone,
+      team: k.team ?? null,
     })),
     crates: sim.crates.map((c) => ({ x: r1(c.x), z: r1(c.z), type: c.type })),
     proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, x: r1(p.x), y: r1(p.y || 0), z: r1(p.z), h: r1(p.h || 0) })),
     kills: sim.karts.map((k) => k.kills),
+    teams: sim.mode === 'teams'
+      ? [0, 1].map((t) => sim.karts.reduce((s, k) => s + (k.team === t ? k.kills : 0), 0))
+      : null,
   };
 }
 
 function result(sim) {
   const kills = sim.karts.map((k) => k.kills);
+  if (sim.mode === 'teams') {
+    const teams = [0, 1].map((t) => sim.karts.reduce((s, k) => s + (k.team === t ? k.kills : 0), 0));
+    const draw = teams[0] === teams[1];
+    return { over: true, mode: 'teams', winner: draw ? null : (teams[0] > teams[1] ? 0 : 1), draw, teams, scores: kills };
+  }
   let best = -1, winner = null, tie = false;
   for (let i = 0; i < sim.karts.length; i++) {
     if (sim.karts[i].gone) continue;

@@ -31,6 +31,7 @@ import {
   joinLobby,
   leaveLobby,
   setReady,
+  setMemberTeam,
   setLobbyOptions,
   startLobby,
   getLobbyForUser,
@@ -158,6 +159,13 @@ export function initSockets(io) {
 
     socket.on('lobby:options', (payload, ack) => {
       const { lobby, error } = setLobbyOptions(me.id, payload?.options);
+      if (error) return ack?.({ error });
+      broadcastLobby(lobby);
+      ack?.({ ok: true });
+    });
+
+    socket.on('lobby:team', (payload, ack) => {
+      const { lobby, error } = setMemberTeam(me.id, Number(payload?.team));
       if (error) return ack?.({ error });
       broadcastLobby(lobby);
       ack?.({ ok: true });

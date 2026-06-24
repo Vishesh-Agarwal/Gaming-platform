@@ -23,6 +23,64 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const r1 = (v) => Math.round(v * 10) / 10;
 const rand = (a) => a[Math.floor(Math.random() * a.length)];
 
+// --- line-of-sight geometry (2D, x/z plane) -------------------------------
+function pointInRect(px, pz, minX, minZ, maxX, maxZ) {
+  return px >= minX && px <= maxX && pz >= minZ && pz <= maxZ;
+}
+function pointInCircle(px, pz, cx, cz, r) {
+  const dx = px - cx, dz = pz - cz;
+  return dx * dx + dz * dz <= r * r;
+}
+// True if segment A->B passes within r of circle center C.
+function segHitsCircle(ax, az, bx, bz, cx, cz, r) {
+  const abx = bx - ax, abz = bz - az;
+  const len2 = abx * abx + abz * abz;
+  let t = len2 > 0 ? ((cx - ax) * abx + (cz - az) * abz) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const px = ax + abx * t, pz = az + abz * t;
+  const dx = cx - px, dz = cz - pz;
+  return dx * dx + dz * dz < r * r;
+}
+// Segment A->B vs axis-aligned rectangle (Liang–Barsky clip).
+function segHitsRect(ax, az, bx, bz, minX, minZ, maxX, maxZ) {
+  let t0 = 0, t1 = 1;
+  const dx = bx - ax, dz = bz - az;
+  const edges = [[-dx, ax - minX], [dx, maxX - ax], [-dz, az - minZ], [dz, maxZ - az]];
+  for (const [p, q] of edges) {
+    if (p === 0) { if (q < 0) return false; continue; } // parallel & outside
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+    else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t0 <= t1;
+}
+
+// True if the straight line from (x0,z0) to (x1,z1) is not blocked by any solid
+// obstacle: box footprints, cylinders, and flat wedge plateaus (loY === hiY).
+// Sloped wedges do not block. An obstacle whose footprint contains either
+// endpoint is ignored (a kart on a mesa is reachable; a shooter isn't self-blocked).
+export function lineOfSightClear(map, x0, z0, x1, z1) {
+  for (const o of (map.obstacles || [])) {
+    if (o.kind === 'cyl') {
+      if (pointInCircle(x0, z0, o.x, o.z, o.r) || pointInCircle(x1, z1, o.x, o.z, o.r)) continue;
+      if (segHitsCircle(x0, z0, x1, z1, o.x, o.z, o.r)) return false;
+    } else {
+      const hw = o.w / 2, hd = o.d / 2;
+      const minX = o.x - hw, minZ = o.z - hd, maxX = o.x + hw, maxZ = o.z + hd;
+      if (pointInRect(x0, z0, minX, minZ, maxX, maxZ) || pointInRect(x1, z1, minX, minZ, maxX, maxZ)) continue;
+      if (segHitsRect(x0, z0, x1, z1, minX, minZ, maxX, maxZ)) return false;
+    }
+  }
+  for (const r of (map.ramps || [])) {
+    if (r.loY !== r.hiY) continue; // sloped ramps don't block
+    const hw = r.w / 2, hd = r.d / 2;
+    const minX = r.x - hw, minZ = r.z - hd, maxX = r.x + hw, maxZ = r.z + hd;
+    if (pointInRect(x0, z0, minX, minZ, maxX, maxZ) || pointInRect(x1, z1, minX, minZ, maxX, maxZ)) continue;
+    if (segHitsRect(x0, z0, x1, z1, minX, minZ, maxX, maxZ)) return false;
+  }
+  return true;
+}
+
 function createInitialState(options) {
   const map = getMap(options?.map);
   return { arena: map.arena, colors: COLORS, realtime: true, maxPlayers: 4, mapId: map.id };

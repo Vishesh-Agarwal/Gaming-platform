@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import Modal from './Modal.jsx';
 
-export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave, maps, onSetMap }) {
+export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave, maps, onSetMap, modes, onSetMode, onSetTeam }) {
   const [copied, setCopied] = useState(false);
   const isHost = lobby.hostId === currentUser.id;
+  const mode = lobby.options?.mode || 'ffa';
   const me = lobby.members.find((m) => m.id === currentUser.id);
   const memberIds = new Set(lobby.members.map((m) => m.id));
   const invitable = friends.filter((f) => onlineIds.has(f.id) && !memberIds.has(f.id));
@@ -57,6 +58,37 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
             ))}
           </select>
           {!isHost && <span className="muted lb-map-hint">host picks the map</span>}
+        </div>
+      )}
+
+      {modes && (
+        <div className="lb-map">
+          <span className="mode-label">Mode</span>
+          <select value={mode} disabled={!isHost} onChange={(e) => onSetMode(e.target.value)}>
+            {modes.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+          {!isHost && <span className="muted lb-map-hint">host picks the mode</span>}
+        </div>
+      )}
+
+      {modes && mode === 'teams' && (
+        <div className="lb-teams">
+          {[0, 1].map((t) => (
+            <div key={t} className="lb-team">
+              <span className="mode-label">{t === 0 ? 'Team A' : 'Team B'}</span>
+              {lobby.members.filter((m) => (m.team ?? 0) === t).map((m) => (
+                <div key={m.id} className="lb-member">
+                  <span className={`dot ${m.ready ? 'online' : 'offline'}`} />
+                  <span className="friend-name">{m.id === currentUser.id ? 'You' : m.username}</span>
+                </div>
+              ))}
+              {(me?.team ?? 0) !== t && (
+                <button className="ghost" onClick={() => onSetTeam(t)}>Join {t === 0 ? 'A' : 'B'}</button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

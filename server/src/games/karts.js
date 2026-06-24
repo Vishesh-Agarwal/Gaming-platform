@@ -16,12 +16,95 @@ const MG = { dmg: 8, speed: 70, life: 0.55, ammo: 24, cadence: 90, r: 0.8 };
 const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
 const SHIELD = { dur: 4000 };
+const MG_RANGE = 15, MG_DMG_NEAR = 8, MG_DMG_FAR = 2.5;
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
 const BARREL = 1.0, KART_CENTER = 1.0, GRAVITY_PROJ = 9, ROCKET_VY = 4;
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const r1 = (v) => Math.round(v * 10) / 10;
 const rand = (a) => a[Math.floor(Math.random() * a.length)];
+
+// --- line-of-sight geometry (2D, x/z plane) -------------------------------
+function pointInRect(px, pz, minX, minZ, maxX, maxZ) {
+  return px >= minX && px <= maxX && pz >= minZ && pz <= maxZ;
+}
+function pointInCircle(px, pz, cx, cz, r) {
+  const dx = px - cx, dz = pz - cz;
+  return dx * dx + dz * dz <= r * r;
+}
+// True if segment A->B passes within r of circle center C.
+function segHitsCircle(ax, az, bx, bz, cx, cz, r) {
+  const abx = bx - ax, abz = bz - az;
+  const len2 = abx * abx + abz * abz;
+  let t = len2 > 0 ? ((cx - ax) * abx + (cz - az) * abz) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const px = ax + abx * t, pz = az + abz * t;
+  const dx = cx - px, dz = cz - pz;
+  return dx * dx + dz * dz < r * r;
+}
+// Segment A->B vs axis-aligned rectangle (Liang–Barsky clip).
+function segHitsRect(ax, az, bx, bz, minX, minZ, maxX, maxZ) {
+  let t0 = 0, t1 = 1;
+  const dx = bx - ax, dz = bz - az;
+  const edges = [[-dx, ax - minX], [dx, maxX - ax], [-dz, az - minZ], [dz, maxZ - az]];
+  for (const [p, q] of edges) {
+    if (p === 0) { if (q < 0) return false; continue; } // parallel & outside
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+    else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t0 <= t1;
+}
+
+// True if the straight line from (x0,z0) to (x1,z1) is not blocked by any solid
+// obstacle: box footprints, cylinders, and flat wedge plateaus (loY === hiY).
+// Sloped wedges do not block. An obstacle whose footprint contains either
+// endpoint is ignored (a kart on a mesa is reachable; a shooter isn't self-blocked).
+export function lineOfSightClear(map, x0, z0, x1, z1) {
+  for (const o of (map.obstacles || [])) {
+    if (o.kind === 'cyl') {
+      if (pointInCircle(x0, z0, o.x, o.z, o.r) || pointInCircle(x1, z1, o.x, o.z, o.r)) continue;
+      if (segHitsCircle(x0, z0, x1, z1, o.x, o.z, o.r)) return false;
+    } else {
+      const hw = o.w / 2, hd = o.d / 2;
+      const minX = o.x - hw, minZ = o.z - hd, maxX = o.x + hw, maxZ = o.z + hd;
+      if (pointInRect(x0, z0, minX, minZ, maxX, maxZ) || pointInRect(x1, z1, minX, minZ, maxX, maxZ)) continue;
+      if (segHitsRect(x0, z0, x1, z1, minX, minZ, maxX, maxZ)) return false;
+    }
+  }
+  for (const r of (map.ramps || [])) {
+    if (r.loY !== r.hiY) continue; // sloped ramps don't block
+    const hw = r.w / 2, hd = r.d / 2;
+    const minX = r.x - hw, minZ = r.z - hd, maxX = r.x + hw, maxZ = r.z + hd;
+    if (pointInRect(x0, z0, minX, minZ, maxX, maxZ) || pointInRect(x1, z1, minX, minZ, maxX, maxZ)) continue;
+    if (segHitsRect(x0, z0, x1, z1, minX, minZ, maxX, maxZ)) return false;
+  }
+  return true;
+}
+
+// Linear MG damage falloff: MG_DMG_NEAR at point-blank -> MG_DMG_FAR at MG_RANGE.
+export function mgDamage(dist) {
+  const t = clamp(dist / MG_RANGE, 0, 1);
+  return MG_DMG_NEAR + (MG_DMG_FAR - MG_DMG_NEAR) * t;
+}
+
+// Index of the nearest valid MG target for shooter `self`, or null.
+// Valid = alive, not gone, not self, horizontal distance < MG_RANGE, clear LOS.
+export function nearestTarget(sim, self, map) {
+  const k = sim.karts[self];
+  let best = null, bestD2 = MG_RANGE * MG_RANGE;
+  for (let i = 0; i < sim.karts.length; i++) {
+    if (i === self) continue;
+    const t = sim.karts[i];
+    if (!t.alive || t.gone) continue;
+    const dx = t.x - k.x, dz = t.z - k.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 >= bestD2) continue;
+    if (!lineOfSightClear(map, k.x, k.z, t.x, t.z)) continue;
+    best = i; bestD2 = d2;
+  }
+  return best;
+}
 
 function createInitialState(options) {
   const map = getMap(options?.map);
@@ -58,7 +141,7 @@ function giveWeapon(k, type) {
   k.queue = [];
 }
 
-function fireProjectile(sim, k, owner, type, now, map) {
+function fireProjectile(sim, k, owner, type, now, map, target = null) {
   const fx = Math.sin(k.heading), fz = Math.cos(k.heading);
   if (type === 'mine') {
     const mx = k.x - fx * 3, mz = k.z - fz * 3;
@@ -68,11 +151,29 @@ function fireProjectile(sim, k, owner, type, now, map) {
     });
     return;
   }
-  const spec = type === 'mg' ? MG : ROCKET;
+  if (type === 'mg') {
+    // cosmetic only — damage is applied as hitscan at fire time. Aim at the
+    // target if there is one, otherwise straight ahead (idle fire).
+    let dx = fx, dz = fz, dy = 0;
+    if (target) {
+      const tx = target.x - k.x, tz = target.z - k.z;
+      const ty = ((target.y || 0) + KART_CENTER) - ((k.y || 0) + BARREL);
+      const len = Math.hypot(tx, tz) || 1;
+      dx = tx / len; dz = tz / len; dy = ty / len;
+    }
+    sim.projectiles.push({
+      id: sim.nextPid++, type: 'mg', owner, h: Math.atan2(dx, dz),
+      x: k.x + dx * 3, z: k.z + dz * 3, y: (k.y || 0) + BARREL,
+      vx: dx * MG.speed, vz: dz * MG.speed, vy: dy * MG.speed, life: MG.life,
+      cosmetic: true,
+    });
+    return;
+  }
+  // rocket — real, forward
   sim.projectiles.push({
     id: sim.nextPid++, type, owner, h: k.heading,
     x: k.x + fx * 3, z: k.z + fz * 3, y: (k.y || 0) + BARREL,
-    vx: fx * spec.speed, vz: fz * spec.speed, vy: type === 'rocket' ? ROCKET_VY : 0, life: spec.life,
+    vx: fx * ROCKET.speed, vz: fz * ROCKET.speed, vy: ROCKET_VY, life: ROCKET.life,
   });
 }
 
@@ -157,7 +258,15 @@ function step(sim, inputs, dt, now = Date.now()) {
     const rising = fire && !k.prevFire;
     if (k.weapon === 'mg') {
       if (fire && k.ammo > 0 && now >= k.nextShotAt) {
-        fireProjectile(sim, k, i, 'mg', now, map);
+        const t = nearestTarget(sim, i, map);
+        if (t != null) {
+          const tg = sim.karts[t];
+          const dist = Math.hypot(tg.x - k.x, tg.z - k.z);
+          damage(sim, t, mgDamage(dist), i, now);
+          fireProjectile(sim, k, i, 'mg', now, map, tg);
+        } else {
+          fireProjectile(sim, k, i, 'mg', now, map, null); // idle fire
+        }
         k.ammo -= 1; k.nextShotAt = now + MG.cadence;
         if (k.ammo <= 0) k.weapon = null;
       }
@@ -201,7 +310,7 @@ function step(sim, inputs, dt, now = Date.now()) {
       if (pr.life <= 0) dead = true;
       else if (Math.abs(pr.x) > map.arena.w / 2 || Math.abs(pr.z) > map.arena.d / 2) dead = true;
       else if (pr.y <= surfaceHeight(map, pr.x, pr.z)) dead = true; // hit the ground/mesa
-      else {
+      else if (!pr.cosmetic) { // cosmetic MG bullets are visual-only
         for (let i = 0; i < sim.karts.length; i++) {
           if (i === pr.owner) continue;
           const k = sim.karts[i];

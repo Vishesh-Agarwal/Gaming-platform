@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { kartPaintParams } from './materialParams.js';
 
-export function makeKart(color) {
+export function makeKart(color, accent = color) {
   const g = new THREE.Group();
 
   const p = kartPaintParams(color);
@@ -51,6 +51,12 @@ export function makeKart(color) {
   const shield = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6, 1),
     new THREE.MeshBasicMaterial({ color: '#bfe6ff', transparent: true, opacity: 0.18, depthWrite: false }));
   shield.position.y = 1; shield.visible = false; g.add(shield);
+
+  // Per-player marker: a small roof fin in the player's accent color so
+  // teammates sharing a team color stay distinguishable.
+  const accentMat = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.5, metalness: 0.3, emissive: accent, emissiveIntensity: 0.25 });
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 1.0), accentMat);
+  fin.position.set(0, 2.25, -0.3); fin.castShadow = true; g.add(fin);
 
   g.userData = { wheels, shield, bodyMat, baseColor: new THREE.Color(color), body };
   return g;

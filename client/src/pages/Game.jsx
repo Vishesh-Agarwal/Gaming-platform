@@ -54,6 +54,11 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
   const resultMessage = () => {
     const r = room.result;
     if (!r) return '';
+    if (r.mode === 'teams') {
+      if (r.draw) return "It's a draw!";
+      const myTeam = room.state?.teams?.[youAreIndex] ?? 0;
+      return r.winner === myTeam ? 'Your team wins! 🎉' : 'Your team lost.';
+    }
     if (r.draw) return "It's a draw!";
     if (r.winner === youAreIndex) {
       return r.forfeit ? 'Opponent left — you win!' : 'You won! 🎉';
@@ -87,6 +92,11 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
         <div className="overlay">
           <div className="overlay-card">
             <h3>{resultMessage()}</h3>
+            {room.result?.mode === 'teams' && room.result.teams && (
+              <p className="overlay-scores">
+                Team A: <b>{room.result.teams[0]}</b> · Team B: <b>{room.result.teams[1]}</b>
+              </p>
+            )}
             {room.result?.scores && (
               room.players.length > 2 ? (
                 <div className="overlay-standings">

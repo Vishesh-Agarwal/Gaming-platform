@@ -25,8 +25,12 @@ changes; rocket, mine, and shield are untouched.
   moment the shot fires (no travel-time miss). A cosmetic bullet is spawned for
   visuals only.
 - **Damage:** scaled by the target's distance (see Damage falloff).
-- **No target in range/sight:** no shot fires and **no ammo is spent** (so the
-  gun fires the instant a valid target appears).
+- **No valid target in range/sight:** the MG **still fires** — a cosmetic bullet
+  goes straight ahead (along the kart heading, "idle" fire) and **ammo is still
+  spent** — it simply deals no damage. So holding fire always drains the
+  magazine whether or not anything is hit.
+- **Out of ammo:** the weapon clears (`weapon = null`); the player must drive
+  over another crate to pick up a new weapon (existing pickup logic).
 
 ## Non-goals
 
@@ -88,12 +92,16 @@ mgDamage(dist) = MG_DMG_NEAR + (MG_DMG_FAR - MG_DMG_NEAR) * clamp(dist / MG_RANG
 ```
 
 **5. Rewrite the `mg` branch of `step`:** replace the current
-"fire straight ahead" block. While `fire && k.ammo > 0 && now >= k.nextShotAt`:
-find the nearest valid target. If found (index `t`, distance `dist`):
-`damage(sim, t, mgDamage(dist), i, now)`; `k.ammo -= 1`;
-`k.nextShotAt = now + MG.cadence`; spawn a cosmetic tracer-bullet aimed at the
-target's current position; `if (k.ammo <= 0) k.weapon = null`. If no target:
-fire nothing (ammo and `nextShotAt` untouched).
+"fire straight ahead" block. While `fire && k.ammo > 0 && now >= k.nextShotAt`,
+**always fire one shot** (every tick spends ammo and advances cooldown):
+- Find the nearest valid target.
+- **If found** (index `t`, distance `dist`): `damage(sim, t, mgDamage(dist), i,
+  now)` and spawn a cosmetic tracer-bullet aimed at the target's current
+  position.
+- **If none found:** spawn a cosmetic bullet straight ahead (along `k.heading`),
+  deal no damage (idle fire).
+- In both cases: `k.ammo -= 1`; `k.nextShotAt = now + MG.cadence`;
+  `if (k.ammo <= 0) k.weapon = null` (so the player must collect another crate).
 
 **6. Cosmetic MG bullets:** the spawned MG projectile is **visual only**. In the
 projectile-update loop, MG-type projectiles no longer hit-test karts or deal
@@ -126,8 +134,10 @@ cosmetic bullet pushed to `sim.projectiles` → `snapshot.proj` → client rende
   rule).
 - **Multiple equidistant targets:** first found in index order wins (stable,
   deterministic).
-- **Self / dead / gone karts:** never targeted.
-- **Out of range or blocked:** no fire, no ammo spent, cooldown not advanced.
+- **Self / dead / gone karts:** never targeted (but the gun still idle-fires at
+  nothing, spending ammo).
+- **Out of range or blocked by a wall:** the MG still fires forward (idle, no
+  damage) and still spends ammo + advances cooldown.
 
 ## Testing (`node --test` in `server/test/`)
 
@@ -146,9 +156,12 @@ same file):
   (target on a mesa is reachable).
 - **Shield/spawn-protect:** shielded nearest target absorbs (no hp loss) while
   ammo is still spent.
-- **Exclusions:** dead/gone/self never targeted.
-- **No-target preserves ammo:** holding fire with no valid target leaves ammo
-  and `nextShotAt` unchanged.
+- **Exclusions:** dead/gone/self never targeted (no damage dealt to them).
+- **Idle fire with no target:** holding fire with no valid target still spends
+  one ammo per tick, advances `nextShotAt`, and spawns a forward cosmetic bullet,
+  but deals no damage to anyone.
+- **Ammo depletion clears weapon:** firing (hitting or whiffing) until ammo
+  reaches 0 sets `weapon = null`, after which driving over a crate re-arms.
 - **Cosmetic bullet:** an MG projectile present in the sim does not reduce any
   kart's hp as it travels (only the hitscan at fire time damages).
 - **Kill credit:** an MG shot that drops a target to 0 hp credits the shooter's

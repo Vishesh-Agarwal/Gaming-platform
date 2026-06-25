@@ -38,6 +38,8 @@ export default function Karts({ room, youAreIndex }) {
     const teamColors = cfg.teamColors || TEAM_COLORS;
     const teamMode = cfg.mode === 'teams' && Array.isArray(cfg.teams);
     const bodyColor = (i) => (teamMode ? teamColors[cfg.teams[i] === 1 ? 1 : 0] : colors[i % colors.length]);
+    const mineFriendly = (owner) =>
+      owner === youAreIndex || (teamMode && cfg.teams[owner] === cfg.teams[youAreIndex]);
     const playerCount = room.players.length;
     const names = room.players.map((p) => p.username);
     const roomId = room.id;
@@ -77,13 +79,13 @@ export default function Karts({ room, youAreIndex }) {
 
     // projectile pool keyed by id
     const projMap = new Map();
-    const makeProj = (type) => {
+    const makeProj = (type, mineColor = '#ff5d6c') => {
       let m;
       if (type === 'mine') {
         m = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.4, 16),
-          new THREE.MeshStandardMaterial({ color: '#ffd24a', emissive: '#ff5d6c', emissiveIntensity: 0.9 }));
+          new THREE.MeshStandardMaterial({ color: mineColor, emissive: mineColor, emissiveIntensity: 0.6 }));
         const warn = new THREE.Mesh(new THREE.RingGeometry(1.5, 1.9, 20),
-          new THREE.MeshBasicMaterial({ color: '#ff5d6c', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+          new THREE.MeshBasicMaterial({ color: mineColor, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
         warn.rotation.x = -Math.PI / 2; warn.position.y = -0.18; m.add(warn);
       } else if (type === 'rocket') {
         m = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.4, 4, 8),
@@ -253,7 +255,7 @@ export default function Karts({ room, youAreIndex }) {
           }
           pt.x = rx; pt.z = rz; pt.h = rh; pt.init = true;
           if (ks.i === youAreIndex) localSpeed = speed;
-          updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, now: performance.now() });
+          updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, weapon: meta?.weapon, now: performance.now() });
           if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(rx - Math.sin(rh) * 1.8, rz - Math.cos(rh) * 1.8);
           if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(rx, 1.0, rz);
           // death explosion on alive->dead transition
@@ -315,7 +317,7 @@ export default function Karts({ room, youAreIndex }) {
           seen.add(p.id);
           let mesh = projMap.get(p.id);
           if (!mesh) {
-            mesh = makeProj(p.type); scene.add(mesh); projMap.set(p.id, mesh);
+            mesh = makeProj(p.type, mineFriendly(p.owner) ? '#5cd860' : '#ff5d6c'); scene.add(mesh); projMap.set(p.id, mesh);
             if (p.type !== 'mine') fx.muzzle(p.x, p.z, p.h || 0, p.type === 'rocket' ? '#ff7a3c' : '#fff7b0');
             if (p.type === 'rocket') audio.rocketLaunch(panFor(p.x));
             else if (p.type === 'mine') audio.mineDrop(panFor(p.x));

@@ -58,14 +58,49 @@ export function makeKart(color, accent = color) {
   const fin = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 1.0), accentMat);
   fin.position.set(0, 2.25, -0.3); fin.castShadow = true; g.add(fin);
 
-  g.userData = { wheels, shield, bodyMat, baseColor: new THREE.Color(color), body };
+  // Held-weapon attachments — original procedural geometry; only the active one shows.
+  const wMat = new THREE.MeshStandardMaterial({ color: '#2c2f36', roughness: 0.5, metalness: 0.6 });
+
+  const mgW = new THREE.Group();
+  const mgBarrel = new THREE.CylinderGeometry(0.12, 0.12, 1.4, 10);
+  for (const bx of [-0.18, 0.18]) {
+    const barrel = new THREE.Mesh(mgBarrel, wMat);
+    barrel.rotation.x = Math.PI / 2; barrel.position.set(bx, 0, 0.7); mgW.add(barrel);
+  }
+  mgW.add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.35, 0.5), wMat));
+  mgW.position.set(0, 1.5, 0.7); g.add(mgW);
+
+  const rocketW = new THREE.Group();
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.6, 12), wMat);
+  tube.rotation.x = Math.PI / 2; tube.position.z = 0.4; rocketW.add(tube);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 12),
+    new THREE.MeshStandardMaterial({ color: '#ff7a3c', roughness: 0.5, metalness: 0.3 }));
+  tip.rotation.x = Math.PI / 2; tip.position.z = 1.4; rocketW.add(tip);
+  rocketW.position.set(0, 1.55, 0.3); g.add(rocketW);
+
+  const mineW = new THREE.Group();
+  const discGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.18, 12);
+  const discMat = new THREE.MeshStandardMaterial({ color: '#3a3d44', roughness: 0.6, metalness: 0.4 });
+  for (const [dx, dy] of [[-0.3, 0], [0.3, 0], [0, 0.22]]) {
+    const disc = new THREE.Mesh(discGeo, discMat); disc.position.set(dx, dy, 0); mineW.add(disc);
+  }
+  mineW.position.set(0, 1.5, -1.5); g.add(mineW);
+
+  for (const w of [mgW, rocketW, mineW]) w.visible = false;
+
+  g.userData = { wheels, shield, bodyMat, baseColor: new THREE.Color(color), body, weapons: { mg: mgW, rocket: rocketW, mine: mineW } };
   return g;
 }
 
 const RED = new THREE.Color('#ff2a2a');
 
-export function updateKart(group, { speed, turn, hp, shield, now }) {
+export function updateKart(group, { speed, turn, hp, shield, weapon, now }) {
   const ud = group.userData;
+  if (ud.weapons) {
+    ud.weapons.mg.visible = weapon === 'mg';
+    ud.weapons.rocket.visible = weapon === 'rocket';
+    ud.weapons.mine.visible = weapon === 'mine';
+  }
   for (const w of ud.wheels) w.rotation.x += speed * 0.4;
   const targetBank = THREE.MathUtils.clamp(-turn * 6, -0.18, 0.18);
   ud.body.rotation.z += (targetBank - ud.body.rotation.z) * 0.15;

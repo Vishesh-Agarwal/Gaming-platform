@@ -26,17 +26,6 @@ test('default map (no options) preserves the open arena', () => {
   assert.equal(sim.crates.length, 5);
 });
 
-test('hazard zone damages a kart standing in it (server-side)', () => {
-  const sim = createSim([{}, {}], 0, { map: 'gauntlet' });
-  const now = sim.startAt + 2000; // past spawn protection
-  const hz = getMap('gauntlet').hazards[0];
-  const k = sim.karts[0];
-  k.x = hz.x; k.z = hz.z; k.shieldUntil = 0;
-  const before = k.hp;
-  step(sim, { 0: { queue: [{ seq: 1, throttle: 0, steer: 0, fire: false }], last: null } }, 0.033, now);
-  assert.ok(sim.karts[0].hp < before || !sim.karts[0].alive, 'hazard should reduce hp');
-});
-
 test('launchpad map exists and is listed', () => {
   assert.ok(MAPS.launchpad, 'launchpad registered');
   assert.ok(listMaps().some((m) => m.id === 'launchpad'));

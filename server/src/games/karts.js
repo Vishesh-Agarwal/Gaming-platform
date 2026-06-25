@@ -12,11 +12,10 @@ const TEAM_COLORS = ['#ff5d6c', '#5cc8ff'];
 const COUNTDOWN_MS = 3000, MATCH_MS = 90000, RESPAWN_MS = 2000, HP_MAX = 100;
 
 // weapons: ammo + behaviour
-const WEAPONS = ['mg', 'rocket', 'mine', 'shield'];
+export const WEAPONS = ['mg', 'rocket', 'mine'];
 const MG = { dmg: 8, speed: 70, life: 0.55, ammo: 24, cadence: 90, r: 0.8 };
 const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
-const SHIELD = { dur: 4000 };
 const MG_RANGE = 15, MG_DMG_NEAR = 8, MG_DMG_FAR = 2.5;
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
 const BARREL = 1.0, KART_CENTER = 1.0, GRAVITY_PROJ = 9, ROCKET_VY = 4;
@@ -135,7 +134,7 @@ function createSim(players, now = Date.now(), options) {
       x: s.x, z: s.z, heading: s.heading, vel: 0,
       y: surfaceHeight(map, s.x, s.z), vy: 0, grounded: true,
       hp: HP_MAX, alive: true, respawnAt: 0, kills: 0,
-      weapon: null, ammo: 0, shieldUntil: 0,
+      weapon: null, ammo: 0, shieldUntil: 0, mgAuto: false,
       prevFire: false, queue: [], nextShotAt: 0, gone: false, lastSeq: 0,
       team, spawnIdx,
     };
@@ -156,7 +155,7 @@ function createSim(players, now = Date.now(), options) {
 function giveWeapon(k, type) {
   k.weapon = type;
   k.ammo = type === 'mg' ? MG.ammo : type === 'rocket' ? ROCKET.ammo : type === 'mine' ? MINE.ammo : 1;
-  k.queue = [];
+  k.queue = []; k.mgAuto = false;
 }
 
 function fireProjectile(sim, k, owner, type, now, map, target = null) {
@@ -199,7 +198,7 @@ function killKart(sim, victimIdx, ownerIdx, now) {
   const v = sim.karts[victimIdx];
   v.alive = false;
   v.respawnAt = now + RESPAWN_MS;
-  v.weapon = null; v.ammo = 0; v.queue = [];
+  v.weapon = null; v.ammo = 0; v.queue = []; v.mgAuto = false;
   if (ownerIdx != null && ownerIdx !== victimIdx && sim.karts[ownerIdx] && !sim.karts[ownerIdx].gone) {
     sim.karts[ownerIdx].kills += 1;
   }
@@ -254,13 +253,6 @@ function step(sim, inputs, dt, now = Date.now()) {
     if (drained) slot.last = drained;
     const fire = !!(drained || slot.last || {}).fire;
 
-    // hazard zones: server-authoritative self-damage (no kill credit; shield/spawn-protect applies via damage())
-    for (const hz of map.hazards) {
-      const hx = k.x - hz.x, hz2 = k.z - hz.z;
-      if (hx * hx + hz2 * hz2 < hz.r * hz.r) { damage(sim, i, hz.dmg, i, now); break; }
-    }
-    if (!k.alive) continue; // died to a hazard this tick
-
     // pick up a weapon when unarmed
     if (!k.weapon) {
       for (const c of sim.crates) {
@@ -275,7 +267,8 @@ function step(sim, inputs, dt, now = Date.now()) {
     // firing
     const rising = fire && !k.prevFire;
     if (k.weapon === 'mg') {
-      if (fire && k.ammo > 0 && now >= k.nextShotAt) {
+      if (rising) k.mgAuto = true; // one press dumps the whole magazine
+      if (k.mgAuto && k.ammo > 0 && now >= k.nextShotAt) {
         const t = nearestTarget(sim, i, map);
         if (t != null) {
           const tg = sim.karts[t];
@@ -286,7 +279,7 @@ function step(sim, inputs, dt, now = Date.now()) {
           fireProjectile(sim, k, i, 'mg', now, map, null); // idle fire
         }
         k.ammo -= 1; k.nextShotAt = now + MG.cadence;
-        if (k.ammo <= 0) k.weapon = null;
+        if (k.ammo <= 0) { k.weapon = null; k.mgAuto = false; }
       }
     } else if (k.weapon === 'rocket' || k.weapon === 'mine') {
       const spec = k.weapon === 'rocket' ? ROCKET : MINE;
@@ -299,8 +292,6 @@ function step(sim, inputs, dt, now = Date.now()) {
         k.ammo -= 1;
       }
       if (k.ammo <= 0 && k.queue.length === 0) k.weapon = null;
-    } else if (k.weapon === 'shield') {
-      if (rising) { k.shieldUntil = now + SHIELD.dur; k.weapon = null; k.ammo = 0; }
     }
     k.prevFire = fire;
   }
@@ -315,7 +306,7 @@ function step(sim, inputs, dt, now = Date.now()) {
         for (let i = 0; i < sim.karts.length; i++) {
           const k = sim.karts[i];
           if (!k.alive || k.gone) continue;
-          if (i !== pr.owner && sameTeam(sim.karts[pr.owner], k)) continue; // teammates safe; owner can still self-trigger
+          if (i === pr.owner || sameTeam(sim.karts[pr.owner], k)) continue; // owner + teammates safe
           const dx = k.x - pr.x, dz = k.z - pr.z, dy = (k.y || 0) + KART_CENTER - pr.y;
           if (dx * dx + dz * dz + dy * dy < MINE.trigger * MINE.trigger) {
             damage(sim, i, MINE.dmg, pr.owner, now);
@@ -361,7 +352,7 @@ function snapshot(sim, now = Date.now()) {
       team: k.team ?? null,
     })),
     crates: sim.crates.map((c) => ({ x: r1(c.x), z: r1(c.z), type: c.type })),
-    proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, x: r1(p.x), y: r1(p.y || 0), z: r1(p.z), h: r1(p.h || 0) })),
+    proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, owner: p.owner, x: r1(p.x), y: r1(p.y || 0), z: r1(p.z), h: r1(p.h || 0) })),
     kills: sim.karts.map((k) => k.kills),
     teams: sim.mode === 'teams'
       ? [0, 1].map((t) => sim.karts.reduce((s, k) => s + (k.team === t ? k.kills : 0), 0))

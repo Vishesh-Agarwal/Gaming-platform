@@ -94,14 +94,6 @@ function buildArena(scene, map, mat) {
     }
   }
 
-  // Hazard zones — realistic lava/oil patches (no glow).
-  for (const hz of map.hazards || []) {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(hz.r, 32), mat.hazard);
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(hz.x, 0.04, hz.z);
-    scene.add(m);
-  }
-
   // Boost pads — painted arrow road markings.
   for (const b of map.boosts || []) {
     const m = new THREE.Mesh(new THREE.CircleGeometry(b.r, 32), mat.boost);

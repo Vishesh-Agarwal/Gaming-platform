@@ -18,7 +18,7 @@
 //        making their footprints share an edge at matching height H (overlap is
 //        fine; surfaceHeight takes the max), so a grounded kart drives up the slope
 //        and seamlessly onto the plateau with no wall in the way.
-// hazards: {x,z,r,dmg} (server-side damage; 999 = instakill). boosts: {x,z,r,strength}.
+// boosts: {x,z,r,strength}.
 // spawns: {x,z,heading}. pads: [x,z] weapon-crate locations.
 export const MAPS = {
   arena: {
@@ -31,7 +31,7 @@ export const MAPS = {
       { kind: 'wedge', x: 0, z: -12, w: 10, d: 8, axis: 'z', loY: 0, hiY: 4 },
       { kind: 'wedge', x: 0, z: 12, w: 10, d: 8, axis: 'z', loY: 4, hiY: 0 },
     ],
-    hazards: [], boosts: [],
+    boosts: [],
     spawns: [
       { x: 22, z: 0, heading: -1.5708 },
       { x: 0, z: 22, heading: 3.1416 },
@@ -55,7 +55,6 @@ export const MAPS = {
       // connector ramp: high edge (loY=3 at z=-17) abuts the plateau's z=-17 edge
       { kind: 'wedge', x: -30, z: -9.5, w: 12, d: 15, axis: 'z', loY: 3, hiY: 0 },
     ],
-    hazards: [],
     boosts: [
       { x: -30, z: 0, r: 5, strength: 42 },
       { x: 30, z: 0, r: 5, strength: 42 },
@@ -79,7 +78,6 @@ export const MAPS = {
       { kind: 'wedge', x: -36, z: -10, w: 12, d: 5, axis: 'x', loY: 0, hiY: 4 },
       { kind: 'wedge', x: 36, z: 10, w: 12, d: 5, axis: 'x', loY: 4, hiY: 0 },
     ],
-    hazards: [{ x: 0, z: -25, r: 7, dmg: 40 }],
     boosts: [{ x: 0, z: 25, r: 6, strength: 45 }],
     spawns: [
       { x: -38, z: -30, heading: 0.9028 },
@@ -93,7 +91,6 @@ export const MAPS = {
     id: 'launchpad', name: 'Launchpad', arena: { w: 90, d: 90 },
     obstacles: [{ kind: 'box', x: 0, z: 26, w: 24, d: 18, top: 5 }],
     ramps: [{ kind: 'wedge', x: 0, z: -6, w: 12, d: 16, axis: 'z', loY: 0, hiY: 6 }],
-    hazards: [{ x: 0, z: 8, r: 8, dmg: 40 }],
     boosts: [{ x: 0, z: -28, r: 6, strength: 45 }],
     spawns: [
       { x: -34, z: -34, heading: 0.78 },
@@ -122,10 +119,6 @@ export const MAPS = {
       { kind: 'wedge', x: 0, z: -17, w: 12, d: 14, axis: 'z', loY: 0, hiY: 4 },
       // south connector ramp: high edge (4) abuts plateau z=10
       { kind: 'wedge', x: 0, z: 17, w: 12, d: 14, axis: 'z', loY: 4, hiY: 0 },
-    ],
-    hazards: [
-      { x: -28, z: 0, r: 7, dmg: 40 },
-      { x: 28, z: 0, r: 7, dmg: 40 },
     ],
     boosts: [
       { x: 0, z: -42, r: 5, strength: 46 },

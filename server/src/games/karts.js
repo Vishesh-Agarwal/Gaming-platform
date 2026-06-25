@@ -253,13 +253,6 @@ function step(sim, inputs, dt, now = Date.now()) {
     if (drained) slot.last = drained;
     const fire = !!(drained || slot.last || {}).fire;
 
-    // hazard zones: server-authoritative self-damage (no kill credit; shield/spawn-protect applies via damage())
-    for (const hz of map.hazards) {
-      const hx = k.x - hz.x, hz2 = k.z - hz.z;
-      if (hx * hx + hz2 * hz2 < hz.r * hz.r) { damage(sim, i, hz.dmg, i, now); break; }
-    }
-    if (!k.alive) continue; // died to a hazard this tick
-
     // pick up a weapon when unarmed
     if (!k.weapon) {
       for (const c of sim.crates) {

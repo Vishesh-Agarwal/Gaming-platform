@@ -5,7 +5,6 @@ import { groundParamsFor } from './materialParams.js';
 
 // Hazard glow color, shared by the grain texture and the material emissive
 // so a future tuning change can't desync the two.
-const HAZARD_GLOW = '#b5471a';
 
 // --- canvas helpers -------------------------------------------------------
 
@@ -118,12 +117,6 @@ export function createMaterials(renderer, map) {
   const block = new THREE.MeshStandardMaterial({ color: '#8d8f93', roughness: 0.75, metalness: 0.1 });
   const ramp = new THREE.MeshStandardMaterial({ color: '#7f8186', roughness: 0.5, metalness: 0.2 });
 
-  // Realistic hazard: dark crust + warm cracks, only a subtle emissive cue.
-  const hazardTex = track(grainTexture('#1c0e08', ['#7a2a10', HAZARD_GLOW, '#e06a22'], 256, 0.12));
-  const hazard = new THREE.MeshStandardMaterial({
-    map: hazardTex, emissive: HAZARD_GLOW, emissiveIntensity: 0.35, roughness: 0.9, metalness: 0.0,
-  });
-
   // Painted boost arrows as a road marking (alpha cut from a generated texture).
   const boostTex = track(makeBoostTexture());
   const boost = new THREE.MeshStandardMaterial({
@@ -131,10 +124,10 @@ export function createMaterials(renderer, map) {
   });
 
   return {
-    sky, environment, asphalt, grass, wall, block, ramp, hazard, boost,
+    sky, environment, asphalt, grass, wall, block, ramp, boost,
     grassRatio: gp.grassRatio,
     dispose() {
-      for (const m of [asphalt, grass, wall, block, ramp, hazard, boost]) m.dispose();
+      for (const m of [asphalt, grass, wall, block, ramp, boost]) m.dispose();
       for (const t of disposables) t.dispose();
     },
   };

@@ -122,25 +122,29 @@ export function Thumbnail() {
 
 export default function Ludo({ room, youAreIndex, onMove }) {
   const st = room.state;
-  const { players, colors, current, phase, dice, movable = [], finishedOrder = [], lastEvent } = st;
+  const { players, colors, current, phase, dice, movable = [], finishedOrder = [], lastEvent, lastRoll } = st;
   const myTurn = room.status === 'playing' && current === youAreIndex;
   const myColor = colors[youAreIndex];
 
-  const [rollFace, setRollFace] = useState(null);
+  // Animate each new roll (keyed on lastRoll.seq) by tumbling random faces in the
+  // roller's dice box, then settle on the real value. The settled value persists
+  // (even when the server auto-passed a no-move roll) until the next roll.
+  const [anim, setAnim] = useState(null); // { seq, face } while tumbling
   const timer = useRef(null);
+  const seq = lastRoll?.seq;
   useEffect(() => {
     clearInterval(timer.current);
-    if (dice == null) { setRollFace(null); return undefined; }
+    if (seq == null) { setAnim(null); return undefined; }
     let ticks = 0;
-    setRollFace(1 + Math.floor(Math.random() * 6));
+    setAnim({ seq, face: 1 + Math.floor(Math.random() * 6) });
     timer.current = setInterval(() => {
       ticks += 1;
-      if (ticks >= 8) { clearInterval(timer.current); setRollFace(null); }
-      else setRollFace(1 + Math.floor(Math.random() * 6));
+      if (ticks >= 8) { clearInterval(timer.current); setAnim(null); }
+      else setAnim({ seq, face: 1 + Math.floor(Math.random() * 6) });
     }, 70);
     return () => clearInterval(timer.current);
-  }, [dice, current]);
-  const rolling = rollFace != null;
+  }, [seq]);
+  const rolling = anim?.seq === seq;
 
   const nameFor = (seat) => (seat === youAreIndex ? 'You' : (room.players[seat]?.username || COLOR_NAMES[colors[seat]]));
 
@@ -240,7 +244,12 @@ export default function Ludo({ room, youAreIndex, onMove }) {
           const active = seat === current && room.status === 'playing';
           const isMe = seat === youAreIndex;
           const showRoll = isMe && active && phase === 'roll';
-          const faceVal = active ? (rolling ? rollFace : dice) : null;
+          // The roller's box shows the tumbling animation, then the real value; it
+          // persists on that seat's box until someone rolls again. The waiting roller
+          // (active, hasn't rolled yet) shows a '?'.
+          const isRoller = lastRoll && seat === lastRoll.seat;
+          const animating = rolling && isRoller;
+          const faceVal = animating ? anim.face : (isRoller ? lastRoll.value : null);
           return (
             <div
               key={`box-${seat}`}
@@ -248,8 +257,8 @@ export default function Ludo({ room, youAreIndex, onMove }) {
               style={{ '--pc': COLORS[p.color] }}
             >
               <div className="ludo-dice-name">{nameFor(seat)}</div>
-              <div className={`ludo-die${rolling && active ? ' rolling' : ''}`}>
-                {faceVal ? <DieFace value={faceVal} /> : <span className="ludo-die-empty">{active ? '?' : ''}</span>}
+              <div className={`ludo-die${animating ? ' rolling' : ''}`}>
+                {faceVal ? <DieFace value={faceVal} /> : <span className="ludo-die-empty">{active && phase === 'roll' ? '?' : ''}</span>}
               </div>
               {showRoll && <button className="ludo-roll" onClick={() => onMove({ action: 'roll' })}>Roll</button>}
               {active && isMe && phase === 'move' && <div className="ludo-hint">Move a piece</div>}

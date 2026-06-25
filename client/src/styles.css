@@ -972,6 +972,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   transition: transform var(--dur) var(--ease);
 }
 .ludo-pawn { width: auto; height: 76%; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45)); }
+.ludo-token:disabled { opacity: 1; } /* keep resting pieces full-strength, not browser-dimmed */
 .ludo-token.movable { cursor: pointer; }
 .ludo-token.movable .ludo-pawn {
   animation: ludo-bounce 0.9s ease-in-out infinite;
@@ -985,7 +986,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   align-items: center; gap: 6px; padding: 10px;
   border-radius: 14px; background: linear-gradient(#1c2238, #121626);
   border: 2px solid var(--pc); box-shadow: 0 4px 12px rgba(0,0,0,0.45);
-  opacity: 0.55; transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  opacity: 0.78; transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 .ludo-dicebox.active { opacity: 1; transform: scale(1.06); box-shadow: 0 0 0 3px var(--pc), 0 8px 18px rgba(0,0,0,0.55); }
 .ludo-dicebox.corner-tl { top: 0; left: 0; }

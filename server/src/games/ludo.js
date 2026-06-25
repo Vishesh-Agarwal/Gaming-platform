@@ -24,6 +24,7 @@ export function createInitialState(_options, seatCount = 2) {
     sixesInRow: 0,
     finishedOrder: [],
     lastEvent: null,
+    lastRoll: null, // { seat, value, seq } — last die rolled, so the client always shows it
   };
 }
 
@@ -50,18 +51,19 @@ export function nextActiveSeat(state, from) {
 // Apply a concrete dice value to state.current (the testable core of the roll action).
 export function applyRoll(state, dice) {
   const seat = state.current;
+  const lastRoll = { seat, value: dice, seq: (state.lastRoll?.seq || 0) + 1 };
   // three consecutive 6s -> void the turn
   if (dice === 6 && state.sixesInRow >= 2) {
-    return { ...state, dice: null, movable: [], sixesInRow: 0,
+    return { ...state, dice: null, movable: [], sixesInRow: 0, lastRoll,
       phase: 'roll', current: nextActiveSeat(state, seat), lastEvent: { type: 'sixes', seat } };
   }
   const sixes = dice === 6 ? state.sixesInRow + 1 : state.sixesInRow;
   const movable = legalMoves(state, seat, dice);
   if (movable.length === 0) {
-    return { ...state, dice: null, movable: [], sixesInRow: dice === 6 ? sixes : 0,
+    return { ...state, dice: null, movable: [], sixesInRow: dice === 6 ? sixes : 0, lastRoll,
       phase: 'roll', current: nextActiveSeat(state, seat), lastEvent: { type: 'pass', seat } };
   }
-  return { ...state, dice, movable, sixesInRow: sixes, phase: 'move', lastEvent: null };
+  return { ...state, dice, movable, sixesInRow: sixes, lastRoll, phase: 'move', lastEvent: null };
 }
 
 // Apply a move of `token` for state.current by state.dice (testable core of the move action).

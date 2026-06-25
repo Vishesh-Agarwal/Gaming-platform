@@ -2,6 +2,7 @@
 // PBR ground (asphalt field framed by grass), shadows, no bloom, no neon.
 import * as THREE from 'three';
 import { createMaterials } from './materials.js';
+import { addCarnivalStructure, addCarnivalDecor } from './carnival.js';
 
 function footprint(o) {
   // Returns { x, z, w, d } world-space footprint for an obstacle or ramp.
@@ -57,6 +58,7 @@ function buildArena(scene, map, mat) {
   // Obstacles.
   for (const o of map.obstacles || []) {
     addApron(o);
+    if (map.theme === 'carnival') { addCarnivalStructure(scene, o); continue; }
     if (o.kind === 'cyl') {
       const m = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, 3, 24), mat.block);
       m.position.set(o.x, 1.5, o.z);
@@ -101,6 +103,8 @@ function buildArena(scene, map, mat) {
     m.position.set(b.x, 0.05, b.z);
     scene.add(m);
   }
+
+  if (map.theme === 'carnival') addCarnivalDecor(scene, map.decor || []);
 }
 
 export function createScene(mount, map) {

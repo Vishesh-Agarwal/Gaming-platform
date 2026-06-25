@@ -15,6 +15,7 @@ import ghostrider from './ghostrider.js';
 import artillery from './artillery.js';
 import hangman from './hangman.js';
 import karts from './karts.js';
+import ludo from './ludo.js';
 
 const games = new Map();
 
@@ -41,3 +42,4 @@ register(ghostrider);
 register(artillery);
 register(hangman);
 register(karts);
+register(ludo);

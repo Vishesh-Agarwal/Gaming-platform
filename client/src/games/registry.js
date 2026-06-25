@@ -6,6 +6,7 @@ import TicTacToe, { Thumbnail as TicTacToeThumb } from './TicTacToe.jsx';
 import GhostRider, { Thumbnail as GhostRiderThumb } from './GhostRider.jsx';
 import Artillery, { Thumbnail as ArtilleryThumb } from './Artillery.jsx';
 import Hangman, { Thumbnail as HangmanThumb } from './Hangman.jsx';
+import Ludo, { Thumbnail as LudoThumb } from './Ludo.jsx';
 import { Thumbnail as KartsThumb } from './KartsThumb.jsx';
 
 // Karts pulls in Three.js (~550 KB). Lazy-load it so that weight is a separate
@@ -49,6 +50,13 @@ const registry = {
     Component: Karts,
     thumbnail: KartsThumb,
     accent: '#ff5d6c',
+    maxPlayers: 4,
+  },
+  ludo: {
+    name: 'Ludo',
+    Component: Ludo,
+    thumbnail: LudoThumb,
+    accent: '#e4453a',
     maxPlayers: 4,
   },
 };

@@ -99,7 +99,7 @@ export function acceptInvite(inviteId, acceptingUserId) {
       { index: 0, user: getUserById(invite.from.id) },
       { index: 1, user: getUserById(acceptingUserId) },
     ],
-    state: game.createInitialState(invite.options || undefined),
+    state: game.createInitialState(invite.options || undefined, 2),
     status: 'playing',
     result: null,
   };
@@ -126,7 +126,7 @@ export function createRoom(gameId, options, userIds) {
     gameId,
     game,
     players: userIds.map((uid, i) => ({ index: i, user: getUserById(uid) })),
-    state: game.createInitialState(options || undefined),
+    state: game.createInitialState(options || undefined, userIds.length),
     status: 'playing',
     result: null,
   };

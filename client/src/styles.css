@@ -907,3 +907,71 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   .gr-canvas { height: 52vh; }
   .kt-stage { height: 56vh; }
 }
+
+/* ---- Ludo ---- */
+.ludo-main { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.ludo-board {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  grid-template-rows: repeat(15, 1fr);
+  width: min(72vh, 560px); aspect-ratio: 1;
+  background: #0e1424;
+  border: 2px solid var(--border); border-radius: 10px; padding: 6px; gap: 1px;
+}
+.ludo-cell { width: 100%; height: 100%; border-radius: 2px; }
+.ludo-void { background: transparent; }
+.ludo-track { background: #20283f; }
+.ludo-track.ludo-safe { background: #2f3a59; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.25); }
+.ludo-center { background: #2b3350; }
+.ludo-home, .ludo-start, .ludo-base { border-radius: 2px; }
+.ludo-start { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.4); }
+
+.ludo-slot {
+  width: 64%; height: 64%; align-self: center; justify-self: center;
+  border: 2px solid; border-radius: 50%; opacity: 0.5;
+}
+.ludo-token {
+  width: 70%; height: 70%; align-self: center; justify-self: center;
+  border-radius: 50%; border: 2px solid rgba(0,0,0,0.35); padding: 0; cursor: default;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4); transition: transform var(--dur) var(--ease);
+}
+.ludo-token.movable {
+  cursor: pointer; border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.55), 0 2px 6px rgba(0,0,0,0.5);
+  animation: ludo-pulse 1s ease-in-out infinite;
+}
+@keyframes ludo-pulse { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
+
+.ludo-side { min-width: 200px; display: flex; flex-direction: column; gap: 12px; }
+.ludo-you { font-size: 15px; }
+.ludo-status { color: var(--muted); font-size: 14px; min-height: 20px; }
+.ludo-dice { display: flex; align-items: center; gap: 14px; }
+.ludo-die {
+  width: 56px; height: 56px; display: grid; place-items: center;
+  font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: #161d30; border: 2px solid var(--border); border-radius: 12px;
+}
+.ludo-roll {
+  padding: 12px 22px; font-size: 16px; font-weight: 700; border-radius: 10px;
+  border: none; background: var(--accent, #e4453a); color: #fff; cursor: pointer;
+}
+.ludo-roll:hover { filter: brightness(1.1); }
+.ludo-event {
+  background: #1a2238; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 13px; color: #ffd24a;
+}
+.ludo-standings { display: flex; flex-direction: column; gap: 6px; }
+.ludo-rank {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 8px; background: #141b2c; font-size: 14px;
+}
+.ludo-rank.active { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3); }
+.ludo-swatch { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.ludo-pname { flex: 1; }
+.ludo-home { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ludo-place { color: #ffd24a; }
+
+@media (max-width: 720px) {
+  .ludo-board { width: min(92vw, 460px); }
+  .ludo-side { width: min(92vw, 460px); }
+}

@@ -69,15 +69,37 @@ function DieFace({ value }) {
   );
 }
 
-function Pawn({ color }) {
+// Lighten (amt>0 toward white) or darken (amt<0 toward black) a #rrggbb color.
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const target = amt < 0 ? 0 : 255, t = Math.abs(amt);
+  r = Math.round(r + (target - r) * t);
+  g = Math.round(g + (target - g) * t);
+  b = Math.round(b + (target - b) * t);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Glossy 3D location-pin token (teardrop head + white eye), shaded with a radial
+// gradient so it reads as a rounded piece, not a flat disc.
+function Pawn({ color, id }) {
+  const gid = `pin-${id}`;
   return (
-    <svg className="ludo-pawn" viewBox="0 0 40 52" aria-hidden="true">
-      <ellipse cx="20" cy="48.5" rx="12" ry="3.4" fill="rgba(0,0,0,0.35)" />
+    <svg className="ludo-pawn" viewBox="0 0 40 54" aria-hidden="true">
+      <defs>
+        <radialGradient id={gid} cx="38%" cy="30%" r="78%">
+          <stop offset="0%" stopColor={shade(color, 0.55)} />
+          <stop offset="52%" stopColor={color} />
+          <stop offset="100%" stopColor={shade(color, -0.38)} />
+        </radialGradient>
+      </defs>
+      <ellipse cx="20" cy="50.5" rx="8.5" ry="2.4" fill="rgba(0,0,0,0.32)" />
       <path
-        d="M20 4 a9 9 0 0 1 9 9 c0 4 -3 6.5 -6 8.5 l3.6 7 q6 5 6.4 17 l-26 0 q0.4 -12 6.4 -17 l3.6 -7 c-3 -2 -6 -4.5 -6 -8.5 a9 9 0 0 1 9 -9 z"
-        fill={color} stroke="rgba(0,0,0,0.32)" strokeWidth="1.5"
+        d="M20 3 C29.4 3 37 10.4 37 19.2 C37 31 24 42 20 48.8 C16 42 3 31 3 19.2 C3 10.4 10.6 3 20 3 Z"
+        fill={`url(#${gid})`} stroke="rgba(0,0,0,0.28)" strokeWidth="1.1"
       />
-      <ellipse cx="16.4" cy="11" rx="3.1" ry="4.3" fill="rgba(255,255,255,0.6)" />
+      <circle cx="20" cy="18.6" r="7.8" fill="#fff" stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
+      <ellipse cx="14.8" cy="11.5" rx="3.2" ry="4.5" fill="rgba(255,255,255,0.55)" />
     </svg>
   );
 }
@@ -207,7 +229,7 @@ export default function Ludo({ room, youAreIndex, onMove }) {
                 onClick={() => clickable && onMove({ action: 'move', token: t.token })}
                 title={nameFor(t.seat)}
               >
-                <Pawn color={COLORS[t.color]} />
+                <Pawn color={COLORS[t.color]} id={t.color} />
               </button>
             );
           })}

@@ -956,12 +956,12 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .ludo-star.on-light path { fill: rgba(90,72,40,0.55); }
 .ludo-star.on-color path { fill: rgba(255,255,255,0.92); }
 
-/* coin wells — colored rings, sitting on the white yard, symmetric 2x2 */
+/* coin wells — plain white circles on the yard, symmetric 2x2 */
 .ludo-slot {
-  z-index: 3; width: 80%; height: 80%; align-self: center; justify-self: center;
-  border-radius: 50%; border: 3px solid var(--pc);
-  background: radial-gradient(circle at 38% 34%, #ffffff, #e6e6e6);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.28);
+  z-index: 3; width: 78%; height: 78%; align-self: center; justify-self: center;
+  border-radius: 50%; border: 1.5px solid rgba(0,0,0,0.12);
+  background: radial-gradient(circle at 40% 36%, #ffffff, #ededed);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.22);
 }
 
 .ludo-goal { z-index: 5; width: 100%; height: 100%; filter: drop-shadow(0 0 2px rgba(0,0,0,0.35)); }
@@ -971,7 +971,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   background: none; border: none; padding: 0; cursor: default;
   transition: transform var(--dur) var(--ease);
 }
-.ludo-pawn { width: 80%; height: 94%; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); }
+.ludo-pawn { width: auto; height: 76%; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45)); }
 .ludo-token.movable { cursor: pointer; }
 .ludo-token.movable .ludo-pawn {
   animation: ludo-bounce 0.9s ease-in-out infinite;

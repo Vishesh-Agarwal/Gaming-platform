@@ -305,7 +305,7 @@ function step(sim, inputs, dt, now = Date.now()) {
         for (let i = 0; i < sim.karts.length; i++) {
           const k = sim.karts[i];
           if (!k.alive || k.gone) continue;
-          if (i !== pr.owner && sameTeam(sim.karts[pr.owner], k)) continue; // teammates safe; owner can still self-trigger
+          if (i === pr.owner || sameTeam(sim.karts[pr.owner], k)) continue; // owner + teammates safe
           const dx = k.x - pr.x, dz = k.z - pr.z, dy = (k.y || 0) + KART_CENTER - pr.y;
           if (dx * dx + dz * dz + dy * dy < MINE.trigger * MINE.trigger) {
             damage(sim, i, MINE.dmg, pr.owner, now);
@@ -351,7 +351,7 @@ function snapshot(sim, now = Date.now()) {
       team: k.team ?? null,
     })),
     crates: sim.crates.map((c) => ({ x: r1(c.x), z: r1(c.z), type: c.type })),
-    proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, x: r1(p.x), y: r1(p.y || 0), z: r1(p.z), h: r1(p.h || 0) })),
+    proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, owner: p.owner, x: r1(p.x), y: r1(p.y || 0), z: r1(p.z), h: r1(p.h || 0) })),
     kills: sim.karts.map((k) => k.kills),
     teams: sim.mode === 'teams'
       ? [0, 1].map((t) => sim.karts.reduce((s, k) => s + (k.team === t ? k.kills : 0), 0))

@@ -24,8 +24,10 @@ import {
   getRoomIdForUser,
   createRoom,
   dropFromRealtime,
+  hasTurnClock,
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
+import { armTurnClock, stopTurnClock } from './turnclock.js';
 import {
   createLobby,
   joinLobby,
@@ -100,6 +102,7 @@ export function initSockets(io) {
       if (invite) emitToUser(io, invite.from.id, 'game:invite:resolved', { inviteId });
       // Kick off the server tick loop for realtime games.
       if (isRealtimeRoom(room.id)) startMatch(io, room.id);
+      else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
       ack?.({ ok: true, roomId: room.id });
     });
 
@@ -186,6 +189,7 @@ export function initSockets(io) {
         emitToUser(io, p.id, 'game:start', { room, youAreIndex: p.index });
       }
       if (isRealtimeRoom(room.id)) startMatch(io, room.id);
+      else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
       ack?.({ ok: true, roomId: room.id });
     });
 
@@ -198,9 +202,12 @@ export function initSockets(io) {
         emitToUser(io, pid, 'game:state', { room: result.room });
       }
       if (result.room.status === 'over') {
+        stopTurnClock(roomId);
         for (const pid of result.players) {
           emitToUser(io, pid, 'game:over', { room: result.room });
         }
+      } else if (hasTurnClock(roomId)) {
+        armTurnClock(io, roomId); // reset the timer for the next turn
       }
       ack?.({ ok: true });
     });
@@ -264,7 +271,7 @@ function endGameByForfeit(io, userId) {
   const roomId = getRoomIdForUser(userId);
   const res = forfeit(userId);
   if (!res) return;
-  if (roomId) stopMatch(roomId); // halt the realtime tick loop, if any
+  if (roomId) { stopMatch(roomId); stopTurnClock(roomId); } // halt any timers
   for (const pid of res.players) {
     emitToUser(io, pid, 'game:over', { room: res.room });
   }

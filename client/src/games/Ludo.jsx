@@ -122,7 +122,9 @@ export function Thumbnail() {
 
 export default function Ludo({ room, youAreIndex, onMove }) {
   const st = room.state;
-  const { players, colors, current, phase, dice, movable = [], finishedOrder = [], lastEvent, lastRoll } = st;
+  const { players, colors, current, phase, dice, movable = [], finishedOrder = [], lastEvent, lastRoll,
+    misses = [], out = [] } = st;
+  const turnEndsAt = room.turnEndsAt || null;
   const myTurn = room.status === 'playing' && current === youAreIndex;
   const myColor = colors[youAreIndex];
 
@@ -145,6 +147,15 @@ export default function Ludo({ room, youAreIndex, onMove }) {
     return () => clearInterval(timer.current);
   }, [seq]);
   const rolling = anim?.seq === seq;
+
+  // Tick once a second so the turn countdown re-renders while a deadline is live.
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    if (!turnEndsAt) return undefined;
+    const id = setInterval(() => setNowTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [turnEndsAt]);
+  const secondsLeft = turnEndsAt ? Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000)) : null;
 
   const nameFor = (seat) => (seat === youAreIndex ? 'You' : (room.players[seat]?.username || COLOR_NAMES[colors[seat]]));
 
@@ -170,6 +181,8 @@ export default function Ludo({ room, youAreIndex, onMove }) {
     if (lastEvent.type === 'home') return `${who} brought a token home!`;
     if (lastEvent.type === 'sixes') return `${who} rolled three 6s — turn skipped`;
     if (lastEvent.type === 'pass') return `${who} had no move`;
+    if (lastEvent.type === 'timeout') return `${who} ran out of time — turn auto-played`;
+    if (lastEvent.type === 'eliminated') return `${who} timed out 5 times — eliminated!`;
     return null;
   };
 
@@ -243,7 +256,9 @@ export default function Ludo({ room, youAreIndex, onMove }) {
         {players.map((p, seat) => {
           const active = seat === current && room.status === 'playing';
           const isMe = seat === youAreIndex;
+          const eliminated = out.includes(seat);
           const showRoll = isMe && active && phase === 'roll';
+          const lowTime = active && secondsLeft != null && secondsLeft <= 5;
           // The roller's box shows the tumbling animation, then the real value; it
           // persists on that seat's box until someone rolls again. The waiting roller
           // (active, hasn't rolled yet) shows a '?'.
@@ -253,16 +268,21 @@ export default function Ludo({ room, youAreIndex, onMove }) {
           return (
             <div
               key={`box-${seat}`}
-              className={`ludo-dicebox corner-${CORNER[p.color]}${active ? ' active' : ''}`}
+              className={`ludo-dicebox corner-${CORNER[p.color]}${active ? ' active' : ''}${eliminated ? ' out' : ''}`}
               style={{ '--pc': COLORS[p.color] }}
             >
               <div className="ludo-dice-name">{nameFor(seat)}</div>
               <div className={`ludo-die${animating ? ' rolling' : ''}`}>
                 {faceVal ? <DieFace value={faceVal} /> : <span className="ludo-die-empty">{active && phase === 'roll' ? '?' : ''}</span>}
               </div>
-              {showRoll && <button className="ludo-roll" onClick={() => onMove({ action: 'roll' })}>Roll</button>}
-              {active && isMe && phase === 'move' && <div className="ludo-hint">Move a piece</div>}
-              {active && !isMe && <div className="ludo-hint">Rolling…</div>}
+              {eliminated ? <div className="ludo-hint">Eliminated</div> : <>
+                {active && secondsLeft != null && (
+                  <div className={`ludo-clock${lowTime ? ' low' : ''}`}>{secondsLeft}s</div>
+                )}
+                {showRoll && <button className="ludo-roll" onClick={() => onMove({ action: 'roll' })}>Roll</button>}
+                {active && isMe && phase === 'move' && <div className="ludo-hint">Move a piece</div>}
+                {active && !isMe && <div className="ludo-hint">Rolling…</div>}
+              </>}
             </div>
           );
         })}
@@ -275,11 +295,16 @@ export default function Ludo({ room, youAreIndex, onMove }) {
           {players.map((p, seat) => {
             const home = p.tokens.filter((t) => t === 57).length;
             const rank = finishedOrder.indexOf(seat);
+            const eliminated = out.includes(seat);
+            const miss = misses[seat] || 0;
             return (
-              <div key={seat} className={`ludo-rank${seat === current ? ' active' : ''}`}>
+              <div key={seat} className={`ludo-rank${seat === current ? ' active' : ''}${eliminated ? ' out' : ''}`}>
                 <span className="ludo-swatch" style={{ background: COLORS[p.color] }} />
                 <span className="ludo-pname">{nameFor(seat)}</span>
-                {rank >= 0 ? <b className="ludo-place">#{rank + 1}</b> : <span className="ludo-home">{home}/4</span>}
+                {miss > 0 && !eliminated && <span className="ludo-misses" title="Timed-out turns">⏱{miss}/5</span>}
+                {eliminated ? <b className="ludo-place out">OUT</b>
+                  : rank >= 0 ? <b className="ludo-place">#{rank + 1}</b>
+                  : <span className="ludo-home">{home}/4</span>}
               </div>
             );
           })}

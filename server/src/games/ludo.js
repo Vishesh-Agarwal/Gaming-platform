@@ -3,6 +3,8 @@
 export const START = [0, 13, 26, 39];
 export const SAFE = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
 export const SEAT_COLORS = { 2: [0, 2], 3: [0, 1, 2], 4: [0, 1, 2, 3] };
+export const TURN_TIMEOUT_MS = 20000; // a player has 20s to act before their turn auto-plays
+export const MAX_MISSES = 5;          // 5 timed-out turns total -> eliminated
 
 // Absolute loop index (0..51) of a token at `progress` for `color`; -1 if not on the loop.
 export function loopCell(color, progress) {
@@ -23,6 +25,8 @@ export function createInitialState(_options, seatCount = 2) {
     movable: [],
     sixesInRow: 0,
     finishedOrder: [],
+    misses: colors.map(() => 0), // per-seat count of timed-out turns
+    out: [],                     // seats eliminated by reaching MAX_MISSES
     lastEvent: null,
     lastRoll: null, // { seat, value, seq } — last die rolled, so the client always shows it
   };
@@ -40,10 +44,11 @@ export function legalMoves(state, seat, dice) {
 }
 
 export function nextActiveSeat(state, from) {
+  const out = state.out || [];
   let s = from;
   for (let k = 0; k < state.seatCount; k++) {
     s = (s + 1) % state.seatCount;
-    if (!state.finishedOrder.includes(s)) return s;
+    if (!state.finishedOrder.includes(s) && !out.includes(s)) return s;
   }
   return from;
 }
@@ -124,17 +129,62 @@ export function applyMove(state, seat, move) {
 }
 
 export function getResult(state) {
+  const out = state.out || [];
   const scores = state.players.map((p) => p.tokens.filter((t) => t === 57).length);
-  const over = state.finishedOrder.length >= state.seatCount - 1;
+  // over once all but one seat is done (finished or eliminated)
+  const over = state.finishedOrder.length + out.length >= state.seatCount - 1;
   if (!over) return { over: false, winner: null, draw: false, scores };
   const remaining = [];
-  for (let s = 0; s < state.seatCount; s++) if (!state.finishedOrder.includes(s)) remaining.push(s);
-  const ranking = [...state.finishedOrder, ...remaining];
+  for (let s = 0; s < state.seatCount; s++) {
+    if (!state.finishedOrder.includes(s) && !out.includes(s)) remaining.push(s);
+  }
+  // winners first (finish order), the survivor next, then eliminated (latest-out ranks higher)
+  const ranking = [...state.finishedOrder, ...remaining, ...out.slice().reverse()];
   return { over: true, winner: ranking[0], draw: false, ranking, scores };
+}
+
+// Pick the current seat's most-progressed movable token (a reasonable autopilot).
+function bestMovable(state, seat) {
+  const t = state.players[seat].tokens;
+  let best = state.movable[0];
+  for (const i of state.movable) if (t[i] > t[best]) best = i;
+  return best;
+}
+
+// The current player ran out of time. Count a miss; at MAX_MISSES they are
+// eliminated and the turn passes. Otherwise auto-play their whole turn (rolling
+// again whenever a 6/capture/home grants an extra turn) so play keeps moving.
+export function onTimeout(state) {
+  const seat = state.current;
+  const misses = state.misses.slice();
+  misses[seat] = (misses[seat] || 0) + 1;
+
+  if (misses[seat] >= MAX_MISSES) {
+    const out = state.out.includes(seat) ? state.out : [...state.out, seat];
+    const base = {
+      ...state, misses, out, dice: null, movable: [], sixesInRow: 0,
+      phase: 'roll', lastEvent: { type: 'eliminated', seat },
+    };
+    base.current = nextActiveSeat(base, seat);
+    return { state: base };
+  }
+
+  let s = { ...state, misses };
+  let guard = 0;
+  while (s.current === seat && !getResult(s).over && guard++ < 24) {
+    if (s.phase === 'roll') {
+      const dice = 1 + Math.floor(Math.random() * 6);
+      s = applyRoll(s, dice);
+      if (s.phase !== 'move') break; // no legal move (or three-6s) -> turn ended
+    }
+    s = applyTokenMove(s, bestMovable(s, seat));
+  }
+  return { state: { ...s, lastEvent: { type: 'timeout', seat } } };
 }
 
 export default {
   id: 'ludo', name: 'Ludo', type: 'turn-based',
   minPlayers: 2, maxPlayers: 4,
-  createInitialState, applyMove, getResult,
+  turnTimeoutMs: TURN_TIMEOUT_MS,
+  createInitialState, applyMove, getResult, onTimeout,
 };

@@ -1021,6 +1021,13 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .ludo-roll:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.35); }
 .ludo-hint { font-size: 11px; color: var(--muted); }
 
+/* turn countdown + elimination */
+.ludo-clock { font-size: 13px; font-weight: 800; color: #cdd6f4; font-variant-numeric: tabular-nums; }
+.ludo-clock.low { color: #ff5b5b; animation: ludo-pulse 1s ease-in-out infinite; }
+@keyframes ludo-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.22); } }
+.ludo-dicebox.out { opacity: 0.4; filter: grayscale(0.7); }
+.ludo-dicebox.out .ludo-hint { color: #ff7a7a; font-weight: 700; }
+
 .ludo-footer { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .ludo-you { font-size: 15px; }
 .ludo-event { background: #1a2238; border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 13px; color: #ffd24a; }
@@ -1030,6 +1037,9 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .ludo-swatch { width: 13px; height: 13px; border-radius: 50%; flex: none; }
 .ludo-home { color: var(--muted); font-variant-numeric: tabular-nums; }
 .ludo-place { color: #ffd24a; }
+.ludo-place.out { color: #ff5b5b; }
+.ludo-misses { color: #ff9c4a; font-size: 11px; font-variant-numeric: tabular-nums; }
+.ludo-rank.out { opacity: 0.55; }
 
 @media (max-width: 720px) {
   .ludo-table { padding: 70px; }

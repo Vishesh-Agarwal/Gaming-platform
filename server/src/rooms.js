@@ -20,7 +20,17 @@ function publicRoom(room) {
     state,
     status: room.status, // 'playing' | 'over'
     result: room.result || null,
+    turnEndsAt: room.turnEndsAt || null, // wall-clock deadline for the current turn, if timed
   };
+}
+
+// Stamp the current-turn deadline on a room when its game uses turn timeouts and
+// play is ongoing; clear it otherwise. Called right before snapshotting so the
+// deadline rides along in the broadcast state.
+function armTurnDeadline(room) {
+  room.turnEndsAt = room.status === 'playing' && room.game.turnTimeoutMs
+    ? Date.now() + room.game.turnTimeoutMs
+    : null;
 }
 
 // Create an invite from one user to a friend. Returns { invite } or { error }.
@@ -108,6 +118,7 @@ export function acceptInvite(inviteId, acceptingUserId) {
     room.sim = game.createSim(room.players, Date.now(), invite.options || undefined);
     room.inputs = {};
   }
+  armTurnDeadline(room);
   rooms.set(room.id, room);
   for (const p of room.players) userRooms.set(p.user.id, room.id);
   return { room: publicRoom(room) };
@@ -134,6 +145,7 @@ export function createRoom(gameId, options, userIds) {
     room.sim = game.createSim(room.players, Date.now(), options || undefined);
     room.inputs = {};
   }
+  armTurnDeadline(room);
   rooms.set(room.id, room);
   for (const p of room.players) userRooms.set(p.user.id, room.id);
   return { room: publicRoom(room) };
@@ -237,7 +249,38 @@ export function makeMove(roomId, userId, move) {
     room.status = 'over';
     room.result = result;
   }
+  armTurnDeadline(room); // fresh deadline for the next turn (cleared if the game ended)
   const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id) };
+  if (result.over) endRoom(room);
+  return out;
+}
+
+// ---- Turn timeouts (e.g. Ludo) ----
+
+export function hasTurnClock(roomId) {
+  const room = rooms.get(roomId);
+  return !!room && !!room.game.turnTimeoutMs && typeof room.game.onTimeout === 'function';
+}
+
+export function getTurnEndsAt(roomId) {
+  const room = rooms.get(roomId);
+  return room && room.status === 'playing' ? (room.turnEndsAt || null) : null;
+}
+
+// The current player's turn expired: ask the game to auto-resolve it, then snapshot
+// and re-arm. Returns { room, players, over } or null if there's nothing to do.
+export function applyTimeout(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing' || typeof room.game.onTimeout !== 'function') return null;
+  const { state } = room.game.onTimeout(room.state);
+  room.state = state;
+  const result = room.game.getResult(state);
+  if (result.over) {
+    room.status = 'over';
+    room.result = result;
+  }
+  armTurnDeadline(room);
+  const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id), over: result.over };
   if (result.over) endRoom(room);
   return out;
 }

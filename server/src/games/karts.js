@@ -2,7 +2,7 @@
 // engine ticks step() ~30Hz (passing `now`) and broadcasts snapshot(). Pick up
 // weapons from crates, fight, die + respawn; most kills in 90s wins.
 
-import { integrateKart, SIM_DT, surfaceHeight } from './kartPhysics.js';
+import { integrateKart, SIM_DT, surfaceHeight, PHYS } from './kartPhysics.js';
 import { getMap } from './kartMaps.js';
 
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a', '#c87bff', '#ff9f43', '#2ee6c0', '#f25fbf'];
@@ -18,6 +18,7 @@ const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
 const MG_RANGE = 15, MG_DMG_NEAR = 8, MG_DMG_FAR = 2.5;
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
+const KART_BOUNCE = 0.45, KART_COLLIDE_DY = 2; // kart-kart recoil + max height delta to collide
 const BARREL = 1.0, KART_CENTER = 1.0, GRAVITY_PROJ = 9, ROCKET_VY = 4;
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -294,6 +295,30 @@ function step(sim, inputs, dt, now = Date.now()) {
       if (k.ammo <= 0 && k.queue.length === 0) k.weapon = null;
     }
     k.prevFire = fire;
+  }
+
+  // kart-kart collision: bumper-car separation + recoil. Server-authoritative;
+  // the shared integrator stays per-kart, so this resolution lives here.
+  const KR2 = PHYS.KART_R * 2;
+  for (let i = 0; i < sim.karts.length; i++) {
+    const a = sim.karts[i];
+    if (!a.alive || a.gone) continue;
+    for (let j = i + 1; j < sim.karts.length; j++) {
+      const b = sim.karts[j];
+      if (!b.alive || b.gone) continue;
+      if (Math.abs((a.y || 0) - (b.y || 0)) >= KART_COLLIDE_DY) continue;
+      const dx = b.x - a.x, dz = b.z - a.z;
+      let dist = Math.hypot(dx, dz);
+      if (dist >= KR2) continue;
+      let nx, nz;
+      if (dist > 1e-6) { nx = dx / dist; nz = dz / dist; } else { nx = 1; nz = 0; dist = 0; }
+      const pen = (KR2 - dist) / 2;
+      a.x -= nx * pen; a.z -= nz * pen;
+      b.x += nx * pen; b.z += nz * pen;
+      // recoil whoever is driving into the other (velocity points along the contact normal)
+      if (Math.sin(a.heading) * a.vel * nx + Math.cos(a.heading) * a.vel * nz > 0) a.vel = -KART_BOUNCE * a.vel;
+      if (Math.sin(b.heading) * b.vel * -nx + Math.cos(b.heading) * b.vel * -nz > 0) b.vel = -KART_BOUNCE * b.vel;
+    }
   }
 
   // projectiles

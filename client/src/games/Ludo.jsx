@@ -1,15 +1,26 @@
-// Ludo board UI — classic boxed-board look. Renders authoritative server state
-// and emits {action:'roll'} / {action:'move',token}. Per-player dice boxes with a
-// rolling animation; pawn-shaped tokens. Board geometry from board.js (unchanged).
+// Ludo board UI — realistic boxed-board look. Renders authoritative server state
+// and emits {action:'roll'} / {action:'move',token}. Solid color trays with a
+// classic white "yard" of 4 symmetric coin wells, starred safe cells, pawn tokens,
+// and per-player dice boxes with a rolling animation. Geometry from board.js.
 import { useEffect, useRef, useState } from 'react';
 import { LOOP_CELLS, HOME_COLUMN, BASE_SLOTS, cellFor } from './ludo/board.js';
 
-const COLORS = ['#e0382f', '#37a24a', '#e7b91f', '#2f7fd6']; // 0 red, 1 green, 2 yellow, 3 blue
+const COLORS = ['#e63946', '#2a9d4a', '#f1b40a', '#2877c9']; // 0 red, 1 green, 2 yellow, 3 blue
 const COLOR_NAMES = ['Red', 'Green', 'Yellow', 'Blue'];
-const CORNER = { 0: 'tl', 1: 'tr', 2: 'br', 3: 'bl' }; // color -> board corner
+const CORNER = { 0: 'tl', 1: 'tr', 2: 'br', 3: 'bl' };
 const START_INDEX = { 0: 0, 13: 1, 26: 2, 39: 3 };
 const SAFE = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
 const key = (r, c) => `${r},${c}`;
+
+// 6x6 colored quadrant spans (grid-line based), and the inner 3x3 white "yard".
+const QUAD = {
+  0: { r: '1 / 7', c: '1 / 7' }, 1: { r: '1 / 7', c: '10 / 16' },
+  2: { r: '10 / 16', c: '10 / 16' }, 3: { r: '10 / 16', c: '1 / 7' },
+};
+const YARD = {
+  0: { r: '2 / 5', c: '2 / 5' }, 1: { r: '2 / 5', c: '12 / 15' },
+  2: { r: '12 / 15', c: '12 / 15' }, 3: { r: '12 / 15', c: '2 / 5' },
+};
 
 const loopAt = new Map(LOOP_CELLS.map(([r, c], i) => [key(r, c), i]));
 const homeAt = new Map();
@@ -28,7 +39,7 @@ function cellRole(r, c) {
   if (homeAt.has(k)) return { type: 'home', color: homeAt.get(k) };
   if (loopAt.has(k)) {
     const idx = loopAt.get(k);
-    if (idx in START_INDEX) return { type: 'start', color: START_INDEX[idx] };
+    if (idx in START_INDEX) return { type: 'start', color: START_INDEX[idx], safe: true };
     return { type: 'track', safe: SAFE.has(idx) };
   }
   if (r >= 6 && r <= 8 && c >= 6 && c <= 8) return { type: 'center' };
@@ -40,12 +51,14 @@ function cellRole(r, c) {
 const CELLS = [];
 for (let r = 0; r < 15; r++) for (let c = 0; c < 15; c++) CELLS.push({ r, c, role: cellRole(r, c) });
 
-function rgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+function Star({ onColor }) {
+  return (
+    <svg className={`ludo-star ${onColor ? 'on-color' : 'on-light'}`} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2.4l2.8 6.2 6.8.6-5.1 4.4 1.5 6.6L12 16.8 5.9 20.2l1.5-6.6L2.3 9.2l6.8-.6z" />
+    </svg>
+  );
 }
 
-// Pip layout per die value (9-cell grid: TL TM TR / ML MM MR / BL BM BR).
 const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 function DieFace({ value }) {
   const on = new Set(PIPS[value] || []);
@@ -74,13 +87,13 @@ export function Thumbnail() {
   const sq = (x, y, fill) => <rect x={x} y={y} width="34" height="34" rx="6" fill={fill} />;
   return (
     <svg viewBox="0 0 120 120" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-      <rect width="120" height="120" rx="10" fill="#cdb083" />
-      <rect x="8" y="8" width="104" height="104" rx="6" fill="#1b2236" />
-      {sq(14, 14, '#e0382f')}{sq(72, 14, '#37a24a')}
-      {sq(14, 72, '#2f7fd6')}{sq(72, 72, '#e7b91f')}
-      <rect x="52" y="14" width="16" height="92" fill="#f3ead6" />
-      <rect x="14" y="52" width="92" height="16" fill="#f3ead6" />
-      <circle cx="60" cy="60" r="10" fill="#cdd6f0" />
+      <rect width="120" height="120" rx="10" fill="#c89456" />
+      <rect x="8" y="8" width="104" height="104" rx="6" fill="#fbf6e9" />
+      {sq(14, 14, '#e63946')}{sq(72, 14, '#2a9d4a')}
+      {sq(14, 72, '#2877c9')}{sq(72, 72, '#f1b40a')}
+      <rect x="52" y="14" width="16" height="92" fill="#fff" />
+      <rect x="14" y="52" width="92" height="16" fill="#fff" />
+      <circle cx="60" cy="60" r="10" fill="#9fb0d8" />
     </svg>
   );
 }
@@ -91,7 +104,6 @@ export default function Ludo({ room, youAreIndex, onMove }) {
   const myTurn = room.status === 'playing' && current === youAreIndex;
   const myColor = colors[youAreIndex];
 
-  // Dice roll animation: when `dice` becomes a number, tumble the current box's die.
   const [rollFace, setRollFace] = useState(null);
   const timer = useRef(null);
   useEffect(() => {
@@ -110,7 +122,6 @@ export default function Ludo({ room, youAreIndex, onMove }) {
 
   const nameFor = (seat) => (seat === youAreIndex ? 'You' : (room.players[seat]?.username || COLOR_NAMES[colors[seat]]));
 
-  // Tokens grouped by cell so co-located pawns fan out.
   const placed = [];
   players.forEach((p, seat) => {
     p.tokens.forEach((progress, token) => {
@@ -140,24 +151,34 @@ export default function Ludo({ room, youAreIndex, onMove }) {
     <div className="ludo">
       <div className="ludo-table">
         <div className="ludo-board">
+          {/* cells: solid color trays (no inner grid), white track tiles, safe stars */}
           {CELLS.map(({ r, c, role }) => {
             const cls = ['ludo-cell', `ludo-${role.type}`];
-            if (role.safe) cls.push('ludo-safe');
             const style = { gridRow: r + 1, gridColumn: c + 1 };
-            if (role.type === 'base') style.background = rgba(COLORS[role.color], 0.9);
+            if (role.type === 'base') style.background = COLORS[role.color];
             if (role.type === 'home' || role.type === 'start') style.background = COLORS[role.color];
             return (
               <div key={key(r, c)} className={cls.join(' ')} style={style}>
-                {role.safe && <span className="ludo-star">★</span>}
+                {role.safe && <Star onColor={role.type === 'start'} />}
               </div>
             );
           })}
 
-          {/* base parking wells */}
+          {/* glossy highlight over each colored quadrant */}
+          {[0, 1, 2, 3].map((color) => (
+            <div key={`q-${color}`} className="ludo-quadrant" style={{ gridRow: QUAD[color].r, gridColumn: QUAD[color].c }} />
+          ))}
+
+          {/* classic white "yard" panel per quadrant */}
+          {[0, 1, 2, 3].map((color) => (
+            <div key={`yard-${color}`} className="ludo-yard" style={{ gridRow: YARD[color].r, gridColumn: YARD[color].c }} />
+          ))}
+
+          {/* four symmetric coin wells per yard */}
           {[0, 1, 2, 3].map((color) =>
             BASE_SLOTS[color].map(([r, c], i) => (
               <div key={`slot-${color}-${i}`} className="ludo-slot"
-                style={{ gridRow: r + 1, gridColumn: c + 1, borderColor: COLORS[color] }} />
+                style={{ gridRow: r + 1, gridColumn: c + 1, '--pc': COLORS[color] }} />
             )),
           )}
 

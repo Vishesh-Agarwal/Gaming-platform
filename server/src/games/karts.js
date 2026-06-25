@@ -12,11 +12,10 @@ const TEAM_COLORS = ['#ff5d6c', '#5cc8ff'];
 const COUNTDOWN_MS = 3000, MATCH_MS = 90000, RESPAWN_MS = 2000, HP_MAX = 100;
 
 // weapons: ammo + behaviour
-const WEAPONS = ['mg', 'rocket', 'mine', 'shield'];
+export const WEAPONS = ['mg', 'rocket', 'mine'];
 const MG = { dmg: 8, speed: 70, life: 0.55, ammo: 24, cadence: 90, r: 0.8 };
 const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
-const SHIELD = { dur: 4000 };
 const MG_RANGE = 15, MG_DMG_NEAR = 8, MG_DMG_FAR = 2.5;
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
 const BARREL = 1.0, KART_CENTER = 1.0, GRAVITY_PROJ = 9, ROCKET_VY = 4;
@@ -299,8 +298,6 @@ function step(sim, inputs, dt, now = Date.now()) {
         k.ammo -= 1;
       }
       if (k.ammo <= 0 && k.queue.length === 0) k.weapon = null;
-    } else if (k.weapon === 'shield') {
-      if (rising) { k.shieldUntil = now + SHIELD.dur; k.weapon = null; k.ammo = 0; }
     }
     k.prevFire = fire;
   }

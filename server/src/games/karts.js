@@ -18,7 +18,7 @@ const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
 const MG_RANGE = 15, MG_DMG_NEAR = 8, MG_DMG_FAR = 2.5;
 const CRATE_R = 3, CRATE_RESPAWN = 6000, HIT_R = 2.6;
-const KART_BOUNCE = 0.45, KART_COLLIDE_DY = 2; // kart-kart recoil + max height delta to collide
+const KART_BOUNCE = 0.65, KART_COLLIDE_DY = 2; // kart-kart recoil + max height delta to collide
 const BARREL = 1.0, KART_CENTER = 1.0, GRAVITY_PROJ = 9, ROCKET_VY = 4;
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));

@@ -979,6 +979,9 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   filter: drop-shadow(0 0 5px #fff) drop-shadow(0 2px 2px rgba(0,0,0,0.45));
 }
 @keyframes ludo-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-16%); } }
+/* a token mid-hop: little jump on each grid step + brighter shadow */
+.ludo-token.hopping .ludo-pawn { animation: ludo-hop 0.15s ease-in-out infinite; filter: drop-shadow(0 0 6px #fff) drop-shadow(0 3px 3px rgba(0,0,0,0.5)); }
+@keyframes ludo-hop { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-34%) scale(1.08); } }
 
 /* dice boxes, one per player corner */
 .ludo-dicebox {
@@ -1021,10 +1024,19 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .ludo-roll:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.35); }
 .ludo-hint { font-size: 11px; color: var(--muted); }
 
-/* turn countdown + elimination */
-.ludo-clock { font-size: 13px; font-weight: 800; color: #cdd6f4; font-variant-numeric: tabular-nums; }
-.ludo-clock.low { color: #ff5b5b; animation: ludo-pulse 1s ease-in-out infinite; }
-@keyframes ludo-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.22); } }
+/* depleting square timeline tracing the active player's profile */
+.ludo-timer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 1; }
+.ludo-timer-track { fill: none; stroke: rgba(255,255,255,0.10); stroke-width: 4; }
+.ludo-timer-bar {
+  fill: none; stroke: var(--pc); stroke-width: 4.5; stroke-linecap: round;
+  stroke-dasharray: 100; stroke-dashoffset: 0;
+  animation: ludo-timer-deplete var(--turn-ms) linear forwards;
+}
+@keyframes ludo-timer-deplete { to { stroke-dashoffset: 100; } }
+/* blink (on the container, so the deplete animation isn't restarted) under 5s */
+.ludo-timer.low { animation: ludo-timer-blink 0.6s steps(1, end) infinite; }
+.ludo-timer.low .ludo-timer-bar { stroke: #ff3b3b; stroke-width: 5.5; }
+@keyframes ludo-timer-blink { 50% { opacity: 0.2; } }
 .ludo-dicebox.out { opacity: 0.4; filter: grayscale(0.7); }
 .ludo-dicebox.out .ludo-hint { color: #ff7a7a; font-weight: 700; }
 

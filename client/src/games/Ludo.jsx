@@ -2,8 +2,10 @@
 // and emits {action:'roll'} / {action:'move',token}. Solid color trays with a
 // classic white "yard" of 4 symmetric coin wells, starred safe cells, pawn tokens,
 // and per-player dice boxes with a rolling animation. Geometry from board.js.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LOOP_CELLS, HOME_COLUMN, BASE_SLOTS, cellFor } from './ludo/board.js';
+
+const STEP_MS = 150; // per-cell hop duration when a token advances
 
 const COLORS = ['#e63946', '#2a9d4a', '#f1b40a', '#2877c9']; // 0 red, 1 green, 2 yellow, 3 blue
 const COLOR_NAMES = ['Red', 'Green', 'Yellow', 'Blue'];
@@ -148,7 +150,7 @@ export default function Ludo({ room, youAreIndex, onMove }) {
   }, [seq]);
   const rolling = anim?.seq === seq;
 
-  // Tick once a second so the turn countdown re-renders while a deadline is live.
+  // Tick once a second so the low-time warning re-renders while a deadline is live.
   const [, setNowTick] = useState(0);
   useEffect(() => {
     if (!turnEndsAt) return undefined;
@@ -156,14 +158,62 @@ export default function Ludo({ room, youAreIndex, onMove }) {
     return () => clearInterval(id);
   }, [turnEndsAt]);
   const secondsLeft = turnEndsAt ? Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000)) : null;
+  // Full turn length captured once per turn so the depleting ring runs smoothly
+  // (recomputing every tick would jitter the running CSS animation).
+  const turnMs = useMemo(() => (turnEndsAt ? Math.max(0, turnEndsAt - Date.now()) : 0), [turnEndsAt]);
+
+  // --- step-by-step token movement ---
+  // The board renders a lagging "display" copy of token positions. When the
+  // authoritative state advances exactly one token, we hold everyone in place and
+  // hop the mover one grid cell at a time; captures pop home when the mover lands.
+  const [display, setDisplay] = useState(() => players.map((p) => p.tokens.slice()));
+  const [hop, setHop] = useState(null); // { seat, token, cell:[r,c] } mid-step
+  const hopTimer = useRef(null);
+  const prevTokensRef = useRef(players.map((p) => p.tokens.slice()));
+  useEffect(() => {
+    const prev = prevTokensRef.current;
+    const next = players.map((p) => p.tokens.slice());
+    prevTokensRef.current = next;
+
+    const advanced = [];
+    for (let s = 0; s < next.length; s++) {
+      for (let t = 0; t < 4; t++) {
+        const a = prev[s]?.[t] ?? 0;
+        if (next[s][t] > a) advanced.push({ seat: s, token: t, from: a, to: next[s][t], color: players[s].color });
+      }
+    }
+
+    clearInterval(hopTimer.current);
+    if (advanced.length !== 1) { setHop(null); setDisplay(next); return undefined; }
+
+    const mv = advanced[0];
+    const path = [];
+    for (let p = Math.max(1, mv.from + 1); p <= mv.to; p++) {
+      const c = cellFor(mv.color, p);
+      if (c) path.push(c);
+    }
+    if (path.length < 1) { setHop(null); setDisplay(next); return undefined; }
+
+    setDisplay(prev); // hold everyone (incl. soon-to-be-captured) until the mover lands
+    let i = 0;
+    setHop({ seat: mv.seat, token: mv.token, cell: path[0] });
+    hopTimer.current = setInterval(() => {
+      i += 1;
+      if (i >= path.length) { clearInterval(hopTimer.current); setHop(null); setDisplay(next); }
+      else setHop({ seat: mv.seat, token: mv.token, cell: path[i] });
+    }, STEP_MS);
+    return () => clearInterval(hopTimer.current);
+  }, [players]);
 
   const nameFor = (seat) => (seat === youAreIndex ? 'You' : (room.players[seat]?.username || COLOR_NAMES[colors[seat]]));
 
   const placed = [];
   players.forEach((p, seat) => {
-    p.tokens.forEach((progress, token) => {
-      const cell = progress <= 0 ? BASE_SLOTS[p.color][token] : cellFor(p.color, progress);
-      if (cell) placed.push({ seat, color: p.color, token, r: cell[0], c: cell[1] });
+    const tokens = display[seat] || p.tokens;
+    tokens.forEach((progress, token) => {
+      const hopping = hop && hop.seat === seat && hop.token === token;
+      const cell = hopping ? hop.cell : (progress <= 0 ? BASE_SLOTS[p.color][token] : cellFor(p.color, progress));
+      if (cell) placed.push({ seat, color: p.color, token, r: cell[0], c: cell[1], hopping });
     });
   });
   const byCell = new Map();
@@ -240,8 +290,8 @@ export default function Ludo({ room, youAreIndex, onMove }) {
             return (
               <button
                 key={`tok-${t.seat}-${t.token}`}
-                className={`ludo-token${clickable ? ' movable' : ''}`}
-                style={{ gridRow: t.r + 1, gridColumn: t.c + 1, transform: `translateX(${off}%)`, zIndex: 20 + idx }}
+                className={`ludo-token${clickable ? ' movable' : ''}${t.hopping ? ' hopping' : ''}`}
+                style={{ gridRow: t.r + 1, gridColumn: t.c + 1, transform: `translateX(${off}%)`, zIndex: t.hopping ? 60 : 20 + idx }}
                 disabled={!clickable}
                 onClick={() => clickable && onMove({ action: 'move', token: t.token })}
                 title={nameFor(t.seat)}
@@ -271,14 +321,19 @@ export default function Ludo({ room, youAreIndex, onMove }) {
               className={`ludo-dicebox corner-${CORNER[p.color]}${active ? ' active' : ''}${eliminated ? ' out' : ''}`}
               style={{ '--pc': COLORS[p.color] }}
             >
+              {/* depleting square timeline tracing the profile; blinks red near zero */}
+              {active && turnMs > 0 && (
+                <svg key={turnEndsAt} className={`ludo-timer${lowTime ? ' low' : ''}`} viewBox="0 0 100 100"
+                  preserveAspectRatio="none" aria-hidden="true" style={{ '--turn-ms': `${turnMs}ms` }}>
+                  <rect className="ludo-timer-track" x="3" y="3" width="94" height="94" rx="13" pathLength="100" />
+                  <rect className="ludo-timer-bar" x="3" y="3" width="94" height="94" rx="13" pathLength="100" />
+                </svg>
+              )}
               <div className="ludo-dice-name">{nameFor(seat)}</div>
               <div className={`ludo-die${animating ? ' rolling' : ''}`}>
                 {faceVal ? <DieFace value={faceVal} /> : <span className="ludo-die-empty">{active && phase === 'roll' ? '?' : ''}</span>}
               </div>
               {eliminated ? <div className="ludo-hint">Eliminated</div> : <>
-                {active && secondsLeft != null && (
-                  <div className={`ludo-clock${lowTime ? ' low' : ''}`}>{secondsLeft}s</div>
-                )}
                 {showRoll && <button className="ludo-roll" onClick={() => onMove({ action: 'roll' })}>Roll</button>}
                 {active && isMe && phase === 'move' && <div className="ludo-hint">Move a piece</div>}
                 {active && !isMe && <div className="ludo-hint">Rolling…</div>}

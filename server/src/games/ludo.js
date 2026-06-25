@@ -121,7 +121,15 @@ export function applyMove(state, seat, move) {
   return { error: 'Unknown action.' };
 }
 
-export function getResult() { return { over: false, winner: null, draw: false }; }
+export function getResult(state) {
+  const scores = state.players.map((p) => p.tokens.filter((t) => t === 57).length);
+  const over = state.finishedOrder.length >= state.seatCount - 1;
+  if (!over) return { over: false, winner: null, draw: false, scores };
+  const remaining = [];
+  for (let s = 0; s < state.seatCount; s++) if (!state.finishedOrder.includes(s)) remaining.push(s);
+  const ranking = [...state.finishedOrder, ...remaining];
+  return { over: true, winner: ranking[0], draw: false, ranking, scores };
+}
 
 export default {
   id: 'ludo', name: 'Ludo', type: 'turn-based',

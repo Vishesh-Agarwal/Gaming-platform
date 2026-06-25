@@ -12,7 +12,8 @@ import { integrateKart, SIM_DT, surfaceHeight } from './karts/kartPhysics.js';
 import { getMap } from './karts/kartMaps.js';
 
 const INTERP_MS = 100;
-const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a'];
+const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a', '#c87bff', '#ff9f43', '#2ee6c0', '#f25fbf'];
+const TEAM_COLORS = ['#ff5d6c', '#5cc8ff'];
 const WEAPON_COLOR = { mg: '#22e0ff', rocket: '#ff7a3c', mine: '#ffd24a', shield: '#8bd450' };
 const WEAPON_LABEL = { mg: 'Machine gun', rocket: 'Rockets', mine: 'Mines', shield: 'Shield' };
 
@@ -25,7 +26,7 @@ const lerpAngle = (a, b, t) => {
 
 export default function Karts({ room, youAreIndex }) {
   const mountRef = useRef(null);
-  const [hud, setHud] = useState({ phase: 'countdown', countdown: 3, timeLeft: 90, players: [], me: null });
+  const [hud, setHud] = useState({ phase: 'countdown', countdown: 3, timeLeft: 90, players: [], me: null, teamMode: false, teams: null });
   const [muted, setMuted] = useState(false);
   const audioRef = useRef(null);
 
@@ -34,6 +35,9 @@ export default function Karts({ room, youAreIndex }) {
     const mount = mountRef.current;
     const cfg = room.state || {};
     const colors = cfg.colors || COLORS;
+    const teamColors = cfg.teamColors || TEAM_COLORS;
+    const teamMode = cfg.mode === 'teams' && Array.isArray(cfg.teams);
+    const bodyColor = (i) => (teamMode ? teamColors[cfg.teams[i] === 1 ? 1 : 0] : colors[i % colors.length]);
     const playerCount = room.players.length;
     const names = room.players.map((p) => p.username);
     const roomId = room.id;
@@ -51,7 +55,7 @@ export default function Karts({ room, youAreIndex }) {
     // karts (with a shield bubble child)
     const karts = [];
     for (let i = 0; i < playerCount; i++) {
-      const k = makeKart(colors[i % colors.length]);
+      const k = makeKart(bodyColor(i), colors[i % colors.length]);
       scene.add(k); karts.push(k);
     }
     // Per-kart previous render transform, to derive speed/turn for wheel spin + bank.
@@ -180,7 +184,8 @@ export default function Karts({ room, youAreIndex }) {
       if (!s) return;
       setHud({
         phase: s.phase, countdown: s.countdown, timeLeft: s.timeLeft,
-        players: s.karts.map((k) => ({ i: k.i, name: names[k.i] || `P${k.i + 1}`, kills: k.kills, hp: k.hp, alive: k.alive, gone: k.gone, color: colors[k.i % colors.length] })),
+        teamMode, teams: s.teams || null,
+        players: s.karts.map((k) => ({ i: k.i, name: names[k.i] || `P${k.i + 1}`, kills: k.kills, hp: k.hp, alive: k.alive, gone: k.gone, color: teamMode ? teamColors[k.team === 1 ? 1 : 0] : colors[k.i % colors.length] })),
         me: s.karts.find((k) => k.i === youAreIndex) || null,
       });
     }, 160);
@@ -374,15 +379,30 @@ export default function Karts({ room, youAreIndex }) {
             {hud.phase === 'countdown' ? (hud.countdown > 0 ? hud.countdown : 'GO!')
               : hud.phase === 'over' ? "TIME!" : fmtTime(hud.timeLeft)}
           </div>
-          <div className="kt-scores">
-            {hud.players.map((p) => (
-              <div key={p.i} className={`kt-score ${p.gone ? 'gone' : ''}`}>
-                <span className="kt-dot" style={{ background: p.color }} />
-                <span className="kt-name">{p.i === youAreIndex ? 'You' : p.name}</span>
-                <span className="kt-kills">{p.kills}</span>
+          {hud.teamMode ? (
+            <div className="kt-scores kt-teamscores">
+              <div className="kt-score">
+                <span className="kt-dot" style={{ background: TEAM_COLORS[0] }} />
+                <span className="kt-name">Team A</span>
+                <span className="kt-kills">{hud.teams?.[0] ?? 0}</span>
               </div>
-            ))}
-          </div>
+              <div className="kt-score">
+                <span className="kt-dot" style={{ background: TEAM_COLORS[1] }} />
+                <span className="kt-name">Team B</span>
+                <span className="kt-kills">{hud.teams?.[1] ?? 0}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="kt-scores">
+              {hud.players.map((p) => (
+                <div key={p.i} className={`kt-score ${p.gone ? 'gone' : ''}`}>
+                  <span className="kt-dot" style={{ background: p.color }} />
+                  <span className="kt-name">{p.i === youAreIndex ? 'You' : p.name}</span>
+                  <span className="kt-kills">{p.kills}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {hud.me && (

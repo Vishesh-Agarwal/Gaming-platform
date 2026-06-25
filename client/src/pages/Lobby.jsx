@@ -38,6 +38,8 @@ export default function Lobby({
   onLeaveLobby,
   onLobbyReady,
   onSetLobbyMap,
+  onSetLobbyMode,
+  onSetLobbyTeam,
   onInviteToLobby,
   onStartLobby,
   onSelectFriend,
@@ -207,6 +209,9 @@ export default function Lobby({
           onLeave={onLeaveLobby}
           maps={lobby.gameId === 'karts' ? listMaps() : null}
           onSetMap={onSetLobbyMap}
+          modes={lobby.gameId === 'karts' ? [{ id: 'ffa', name: 'Free-for-all' }, { id: 'teams', name: 'Teams' }] : null}
+          onSetMode={onSetLobbyMode}
+          onSetTeam={onSetLobbyTeam}
         />
       )}
 

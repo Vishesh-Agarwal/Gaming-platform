@@ -64,6 +64,47 @@ export function applyRoll(state, dice) {
   return { ...state, dice, movable, sixesInRow: sixes, phase: 'move', lastEvent: null };
 }
 
+// Apply a move of `token` for state.current by state.dice (testable core of the move action).
+export function applyTokenMove(state, token) {
+  const seat = state.current;
+  const dice = state.dice;
+  const players = state.players.map((p) => ({ color: p.color, tokens: p.tokens.slice() }));
+  const me = players[seat];
+  const from = me.tokens[token];
+  const to = from === 0 ? 1 : from + dice;
+  me.tokens[token] = to;
+
+  let captured = false;
+  const cell = loopCell(me.color, to);
+  if (cell !== -1 && !SAFE.has(cell)) {
+    for (let s = 0; s < players.length; s++) {
+      if (s === seat) continue;
+      const op = players[s];
+      for (let i = 0; i < 4; i++) {
+        if (op.tokens[i] !== 0 && loopCell(op.color, op.tokens[i]) === cell) {
+          op.tokens[i] = 0; captured = true;
+        }
+      }
+    }
+  }
+
+  const reachedHome = to === 57;
+  const finishedOrder = state.finishedOrder.slice();
+  if (me.tokens.every((p) => p === 57) && !finishedOrder.includes(seat)) finishedOrder.push(seat);
+
+  const extraTurn = dice === 6 || captured || reachedHome;
+  const base = { ...state, players, finishedOrder, dice: null, movable: [], phase: 'roll' };
+  base.lastEvent = captured ? { type: 'capture', seat } : reachedHome ? { type: 'home', seat } : null;
+  if (extraTurn) {
+    base.sixesInRow = dice === 6 ? state.sixesInRow : 0;
+    base.current = seat;
+  } else {
+    base.sixesInRow = 0;
+    base.current = nextActiveSeat(state, seat);
+  }
+  return base;
+}
+
 export function applyMove(state, seat, move) {
   if (getResult(state).over) return { error: 'Game is over.' };
   if (seat !== state.current) return { error: 'Not your turn.' };
@@ -71,6 +112,11 @@ export function applyMove(state, seat, move) {
     if (state.phase !== 'roll') return { error: 'Roll already done.' };
     const dice = 1 + Math.floor(Math.random() * 6);
     return { state: applyRoll(state, dice) };
+  }
+  if (move?.action === 'move') {
+    if (state.phase !== 'move') return { error: 'Roll first.' };
+    if (!state.movable.includes(move.token)) return { error: 'That token cannot move.' };
+    return { state: applyTokenMove(state, move.token) };
   }
   return { error: 'Unknown action.' };
 }

@@ -134,7 +134,7 @@ function createSim(players, now = Date.now(), options) {
       x: s.x, z: s.z, heading: s.heading, vel: 0,
       y: surfaceHeight(map, s.x, s.z), vy: 0, grounded: true,
       hp: HP_MAX, alive: true, respawnAt: 0, kills: 0,
-      weapon: null, ammo: 0, shieldUntil: 0,
+      weapon: null, ammo: 0, shieldUntil: 0, mgAuto: false,
       prevFire: false, queue: [], nextShotAt: 0, gone: false, lastSeq: 0,
       team, spawnIdx,
     };
@@ -155,7 +155,7 @@ function createSim(players, now = Date.now(), options) {
 function giveWeapon(k, type) {
   k.weapon = type;
   k.ammo = type === 'mg' ? MG.ammo : type === 'rocket' ? ROCKET.ammo : type === 'mine' ? MINE.ammo : 1;
-  k.queue = [];
+  k.queue = []; k.mgAuto = false;
 }
 
 function fireProjectile(sim, k, owner, type, now, map, target = null) {
@@ -198,7 +198,7 @@ function killKart(sim, victimIdx, ownerIdx, now) {
   const v = sim.karts[victimIdx];
   v.alive = false;
   v.respawnAt = now + RESPAWN_MS;
-  v.weapon = null; v.ammo = 0; v.queue = [];
+  v.weapon = null; v.ammo = 0; v.queue = []; v.mgAuto = false;
   if (ownerIdx != null && ownerIdx !== victimIdx && sim.karts[ownerIdx] && !sim.karts[ownerIdx].gone) {
     sim.karts[ownerIdx].kills += 1;
   }
@@ -267,7 +267,8 @@ function step(sim, inputs, dt, now = Date.now()) {
     // firing
     const rising = fire && !k.prevFire;
     if (k.weapon === 'mg') {
-      if (fire && k.ammo > 0 && now >= k.nextShotAt) {
+      if (rising) k.mgAuto = true; // one press dumps the whole magazine
+      if (k.mgAuto && k.ammo > 0 && now >= k.nextShotAt) {
         const t = nearestTarget(sim, i, map);
         if (t != null) {
           const tg = sim.karts[t];
@@ -278,7 +279,7 @@ function step(sim, inputs, dt, now = Date.now()) {
           fireProjectile(sim, k, i, 'mg', now, map, null); // idle fire
         }
         k.ammo -= 1; k.nextShotAt = now + MG.cadence;
-        if (k.ammo <= 0) k.weapon = null;
+        if (k.ammo <= 0) { k.weapon = null; k.mgAuto = false; }
       }
     } else if (k.weapon === 'rocket' || k.weapon === 'mine') {
       const spec = k.weapon === 'rocket' ? ROCKET : MINE;

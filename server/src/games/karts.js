@@ -195,6 +195,27 @@ function fireProjectile(sim, k, owner, type, now, map, target = null) {
   });
 }
 
+// Spawn index farthest from the nearest living other kart (so a respawn lands
+// away from a fight). Falls back to the kart's own spawnIdx if nobody's around.
+export function safeSpawnIndex(sim, selfIdx, map) {
+  let best = sim.karts[selfIdx].spawnIdx, bestScore = -Infinity, found = false;
+  for (let s = 0; s < map.spawns.length; s++) {
+    const sp = map.spawns[s];
+    let nearest = Infinity;
+    for (let j = 0; j < sim.karts.length; j++) {
+      if (j === selfIdx) continue;
+      const k = sim.karts[j];
+      if (!k.alive || k.gone) continue;
+      const d2 = (k.x - sp.x) ** 2 + (k.z - sp.z) ** 2;
+      if (d2 < nearest) nearest = d2;
+    }
+    if (nearest === Infinity) continue; // no living others to consider
+    found = true;
+    if (nearest > bestScore) { bestScore = nearest; best = s; }
+  }
+  return found ? best : sim.karts[selfIdx].spawnIdx;
+}
+
 function killKart(sim, victimIdx, ownerIdx, now) {
   const v = sim.karts[victimIdx];
   v.alive = false;
@@ -235,7 +256,7 @@ function step(sim, inputs, dt, now = Date.now()) {
         dslot.queue.length = 0;
       }
       if (now >= k.respawnAt) {
-        const s = map.spawns[k.spawnIdx];
+        const s = map.spawns[safeSpawnIndex(sim, i, map)];
         k.x = s.x; k.z = s.z; k.heading = s.heading; k.vel = 0;
         k.y = surfaceHeight(map, s.x, s.z); k.vy = 0; k.grounded = true;
         k.hp = HP_MAX; k.alive = true; k.shieldUntil = now + 1200; // brief spawn protection

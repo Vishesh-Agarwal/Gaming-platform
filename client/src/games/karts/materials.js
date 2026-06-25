@@ -84,12 +84,12 @@ export function createMaterials(renderer, map) {
   const track = (t) => { if (t) disposables.push(t); return t; };
 
   // Ground textures, tiled to roughly 1 repeat / 16 world units.
-  const asphaltTex = track(grainTexture(gp.asphalt, ['#2c2e33', '#54565c'], 256, 0.22));
+  const asphaltTex = track(grainTexture(gp.asphalt, gp.asphaltGrains || ['#2c2e33', '#54565c'], 256, 0.22));
   const asphaltNrm = track(grainNormal(256, 0.22));
   asphaltTex.repeat.set(arena.w / 16, arena.d / 16);
   asphaltNrm.repeat.set(arena.w / 16, arena.d / 16);
 
-  const grassTex = track(grainTexture(gp.grass, ['#3c5a28', '#5a7e3a', '#33491f'], 256, 0.4));
+  const grassTex = track(grainTexture(gp.grass, gp.grassGrains || ['#3c5a28', '#5a7e3a', '#33491f'], 256, 0.4));
   grassTex.repeat.set(arena.w / 10, arena.d / 10);
 
   const sky = track(buildSky());

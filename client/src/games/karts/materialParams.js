@@ -10,6 +10,9 @@ const GROUND_PARAMS = {
   gauntlet:  { grassRatio: 0.20, asphalt: '#37393e', grass: '#456530' },
   launchpad: { grassRatio: 0.25, asphalt: '#3c3e44', grass: '#4c6e34' },
   coliseum:  { grassRatio: 0.28, asphalt: '#3a3c41', grass: '#4a6b32' },
+  carnival:  { grassRatio: 0.22, asphalt: '#c2a86a', grass: '#d9bf86',
+               asphaltGrains: ['#b39655', '#d8c08a'],
+               grassGrains: ['#cdb277', '#e3cd99', '#bfa468'] },
 };
 const GROUND_DEFAULT = { grassRatio: 0.30, asphalt: '#3b3d42', grass: '#4a6b32' };
 

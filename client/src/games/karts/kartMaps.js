@@ -136,6 +136,65 @@ export const MAPS = {
     ],
     pads: [[-18, 0], [18, 0], [-42, 0], [42, 0], [-22, -22], [22, 22]],
   },
+  carnival: {
+    id: 'carnival', name: 'Desert Carnival', theme: 'carnival', arena: { w: 200, d: 200 },
+    obstacles: [
+      // round landmarks (tagged for the carnival renderer)
+      { kind: 'cyl', x: 0, z: -62, r: 7, prop: 'ferris' },
+      { kind: 'cyl', x: -62, z: 0, r: 6, prop: 'carousel' },
+      { kind: 'cyl', x: 62, z: 0, r: 5, prop: 'fountain' },
+      { kind: 'cyl', x: 0, z: 62, r: 6, prop: 'carousel' },
+      // tent clusters (quadrants)
+      { kind: 'box', x: -45, z: -45, w: 8, d: 8 },
+      { kind: 'box', x: -30, z: -58, w: 7, d: 7 },
+      { kind: 'box', x: 45, z: -45, w: 8, d: 8 },
+      { kind: 'box', x: 30, z: -58, w: 7, d: 7 },
+      { kind: 'box', x: -45, z: 45, w: 8, d: 8 },
+      { kind: 'box', x: -30, z: 58, w: 7, d: 7 },
+      { kind: 'box', x: 45, z: 45, w: 8, d: 8 },
+      { kind: 'box', x: 30, z: 58, w: 7, d: 7 },
+      // ticket booths near the side edges
+      { kind: 'box', x: -82, z: -22, w: 6, d: 6 },
+      { kind: 'box', x: 82, z: -22, w: 6, d: 6 },
+      { kind: 'box', x: -82, z: 22, w: 6, d: 6 },
+      { kind: 'box', x: 82, z: 22, w: 6, d: 6 },
+    ],
+    ramps: [
+      // central drive-up stage plateau (x:-15..15, z:-15..15), height 5
+      { kind: 'wedge', x: 0, z: 0, w: 30, d: 30, axis: 'z', loY: 5, hiY: 5 },
+      // north connector ramp: high edge (5) abuts plateau z=-15
+      { kind: 'wedge', x: 0, z: -23, w: 14, d: 16, axis: 'z', loY: 0, hiY: 5 },
+      // south connector ramp: high edge (5) abuts plateau z=15
+      { kind: 'wedge', x: 0, z: 23, w: 14, d: 16, axis: 'z', loY: 5, hiY: 0 },
+    ],
+    boosts: [
+      { x: -22, z: -40, r: 6, strength: 46 },
+      { x: 22, z: -40, r: 6, strength: 46 },
+      { x: -22, z: 40, r: 6, strength: 46 },
+      { x: 22, z: 40, r: 6, strength: 46 },
+    ],
+    spawns: [
+      { x: -70, z: -85, heading: 0 },
+      { x: -24, z: -85, heading: 0 },
+      { x: 24, z: -85, heading: 0 },
+      { x: 70, z: -85, heading: 0 },
+      { x: -70, z: 85, heading: 3.1416 },
+      { x: -24, z: 85, heading: 3.1416 },
+      { x: 24, z: 85, heading: 3.1416 },
+      { x: 70, z: 85, heading: 3.1416 },
+    ],
+    pads: [[0, -40], [0, 40], [-52, -18], [52, -18], [-52, 18], [52, 18], [-52, -72], [52, 72]],
+    decor: [
+      { kind: 'arch', x: 0, z: -92 },
+      { kind: 'arch', x: 0, z: 92 },
+      { kind: 'balloons', x: -88, z: -88 },
+      { kind: 'balloons', x: 88, z: -88 },
+      { kind: 'balloons', x: -88, z: 88 },
+      { kind: 'balloons', x: 88, z: 88 },
+      { kind: 'bunting', x: -40, z: -78, x2: 40, z2: -78 },
+      { kind: 'bunting', x: -40, z: 78, x2: 40, z2: 78 },
+    ],
+  },
 };
 
 export const DEFAULT_MAP = 'arena';

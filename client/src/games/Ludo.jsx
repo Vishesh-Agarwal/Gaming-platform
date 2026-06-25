@@ -9,20 +9,29 @@ const STEP_MS = 150; // per-cell hop duration when a token advances
 
 const COLORS = ['#e63946', '#2a9d4a', '#f1b40a', '#2877c9']; // 0 red, 1 green, 2 yellow, 3 blue
 const COLOR_NAMES = ['Red', 'Green', 'Yellow', 'Blue'];
-const CORNER = { 0: 'tl', 1: 'tr', 2: 'br', 3: 'bl' };
+const CORNER_IDX = ['tl', 'tr', 'br', 'bl']; // screen corners, clockwise from top-left
 const START_INDEX = { 0: 0, 13: 1, 26: 2, 39: 3 };
 const SAFE = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
 const key = (r, c) => `${r},${c}`;
 
-// 6x6 colored quadrant spans (grid-line based), and the inner 3x3 white "yard".
-const QUAD = {
-  0: { r: '1 / 7', c: '1 / 7' }, 1: { r: '1 / 7', c: '10 / 16' },
-  2: { r: '10 / 16', c: '10 / 16' }, 3: { r: '10 / 16', c: '1 / 7' },
-};
-const YARD = {
-  0: { r: '2 / 5', c: '2 / 5' }, 1: { r: '2 / 5', c: '12 / 15' },
-  2: { r: '12 / 15', c: '12 / 15' }, 3: { r: '12 / 15', c: '2 / 5' },
-};
+// 6x6 colored quadrant blocks and inner 3x3 "yard", as inclusive [r0,c0,r1,c1] cells.
+const QUAD = { 0: [0, 0, 5, 5], 1: [0, 9, 5, 14], 2: [9, 9, 14, 14], 3: [9, 0, 14, 5] };
+const YARD = { 1: [1, 11, 3, 13], 0: [1, 1, 3, 3], 2: [11, 11, 13, 13], 3: [11, 1, 13, 3] };
+
+// Rotate a 15x15 cell (indices 0..14) by k quarter-turns clockwise. Used to draw the
+// board from each viewer's perspective so their own color quadrant sits at the bottom.
+function rotCell(k, r, c) {
+  let R = r, C = c;
+  for (let i = 0; i < k; i++) { const nr = C, nc = 14 - R; R = nr; C = nc; }
+  return [R, C];
+}
+// Rotate an inclusive cell block; returns grid-line span strings.
+function rotBlock(k, [r0, c0, r1, c1]) {
+  const a = rotCell(k, r0, c0), b = rotCell(k, r1, c1);
+  const rs = Math.min(a[0], b[0]), re = Math.max(a[0], b[0]);
+  const cs = Math.min(a[1], b[1]), ce = Math.max(a[1], b[1]);
+  return { gridRow: `${rs + 1} / ${re + 2}`, gridColumn: `${cs + 1} / ${ce + 2}` };
+}
 
 const loopAt = new Map(LOOP_CELLS.map(([r, c], i) => [key(r, c), i]));
 const homeAt = new Map();
@@ -129,6 +138,9 @@ export default function Ludo({ room, youAreIndex, onMove }) {
   const turnEndsAt = room.turnEndsAt || null;
   const myTurn = room.status === 'playing' && current === youAreIndex;
   const myColor = colors[youAreIndex];
+  // Rotate the board so the viewer's own color quadrant lands at bottom-left.
+  const rotK = (3 - myColor + 4) % 4;
+  const rot = (r, c) => rotCell(rotK, r, c);
 
   // Animate each new roll (keyed on lastRoll.seq) by tumbling random faces in the
   // roller's dice box, then settle on the real value. The settled value persists
@@ -243,7 +255,8 @@ export default function Ludo({ room, youAreIndex, onMove }) {
           {/* cells: solid color trays (no inner grid), white track tiles, safe stars */}
           {CELLS.map(({ r, c, role }) => {
             const cls = ['ludo-cell', `ludo-${role.type}`];
-            const style = { gridRow: r + 1, gridColumn: c + 1 };
+            const [dr, dc] = rot(r, c);
+            const style = { gridRow: dr + 1, gridColumn: dc + 1 };
             if (role.type === 'base') style.background = COLORS[role.color];
             if (role.type === 'home' || role.type === 'start') style.background = COLORS[role.color];
             return (
@@ -255,25 +268,28 @@ export default function Ludo({ room, youAreIndex, onMove }) {
 
           {/* glossy highlight over each colored quadrant */}
           {[0, 1, 2, 3].map((color) => (
-            <div key={`q-${color}`} className="ludo-quadrant" style={{ gridRow: QUAD[color].r, gridColumn: QUAD[color].c }} />
+            <div key={`q-${color}`} className="ludo-quadrant" style={rotBlock(rotK, QUAD[color])} />
           ))}
 
           {/* classic white "yard" panel per quadrant */}
           {[0, 1, 2, 3].map((color) => (
-            <div key={`yard-${color}`} className="ludo-yard" style={{ gridRow: YARD[color].r, gridColumn: YARD[color].c }} />
+            <div key={`yard-${color}`} className="ludo-yard" style={rotBlock(rotK, YARD[color])} />
           ))}
 
           {/* four symmetric coin wells per yard */}
           {[0, 1, 2, 3].map((color) =>
-            BASE_SLOTS[color].map(([r, c], i) => (
-              <div key={`slot-${color}-${i}`} className="ludo-slot"
-                style={{ gridRow: r + 1, gridColumn: c + 1, '--pc': COLORS[color] }} />
-            )),
+            BASE_SLOTS[color].map(([r, c], i) => {
+              const [dr, dc] = rot(r, c);
+              return (
+                <div key={`slot-${color}-${i}`} className="ludo-slot"
+                  style={{ gridRow: dr + 1, gridColumn: dc + 1, '--pc': COLORS[color] }} />
+              );
+            }),
           )}
 
-          {/* center goal — four triangles meeting in the middle */}
+          {/* center goal — four triangles meeting in the middle (rotated with the board) */}
           <svg className="ludo-goal" viewBox="0 0 40 40" preserveAspectRatio="none"
-            style={{ gridRow: '7 / 10', gridColumn: '7 / 10' }}>
+            style={{ gridRow: '7 / 10', gridColumn: '7 / 10', transform: `rotate(${rotK * 90}deg)` }}>
             <polygon points="0,0 0,40 20,20" fill={COLORS[0]} />
             <polygon points="0,0 40,0 20,20" fill={COLORS[1]} />
             <polygon points="40,0 40,40 20,20" fill={COLORS[2]} />
@@ -287,11 +303,12 @@ export default function Ludo({ room, youAreIndex, onMove }) {
             const n = stack.length;
             const off = n > 1 ? (idx - (n - 1) / 2) * 30 : 0;
             const clickable = canMoveToken(t.seat, t.token);
+            const [dr, dc] = rot(t.r, t.c);
             return (
               <button
                 key={`tok-${t.seat}-${t.token}`}
                 className={`ludo-token${clickable ? ' movable' : ''}${t.hopping ? ' hopping' : ''}`}
-                style={{ gridRow: t.r + 1, gridColumn: t.c + 1, transform: `translateX(${off}%)`, zIndex: t.hopping ? 60 : 20 + idx }}
+                style={{ gridRow: dr + 1, gridColumn: dc + 1, transform: `translateX(${off}%)`, zIndex: t.hopping ? 60 : 20 + idx }}
                 disabled={!clickable}
                 onClick={() => clickable && onMove({ action: 'move', token: t.token })}
                 title={nameFor(t.seat)}
@@ -315,29 +332,40 @@ export default function Ludo({ room, youAreIndex, onMove }) {
           const isRoller = lastRoll && seat === lastRoll.seat;
           const animating = rolling && isRoller;
           const faceVal = animating ? anim.face : (isRoller ? lastRoll.value : null);
+          const corner = CORNER_IDX[(p.color + rotK) % 4]; // viewer-relative screen corner
+          const name = nameFor(seat);
           return (
             <div
               key={`box-${seat}`}
-              className={`ludo-dicebox corner-${CORNER[p.color]}${active ? ' active' : ''}${eliminated ? ' out' : ''}`}
+              className={`ludo-dicebox corner-${corner}${active ? ' active' : ''}${eliminated ? ' out' : ''}`}
               style={{ '--pc': COLORS[p.color] }}
             >
-              {/* depleting square timeline tracing the profile; blinks red near zero */}
-              {active && turnMs > 0 && (
-                <svg key={turnEndsAt} className={`ludo-timer${lowTime ? ' low' : ''}`} viewBox="0 0 100 100"
-                  preserveAspectRatio="none" aria-hidden="true" style={{ '--turn-ms': `${turnMs}ms` }}>
-                  <rect className="ludo-timer-track" x="3" y="3" width="94" height="94" rx="13" pathLength="100" />
-                  <rect className="ludo-timer-bar" x="3" y="3" width="94" height="94" rx="13" pathLength="100" />
-                </svg>
-              )}
-              <div className="ludo-dice-name">{nameFor(seat)}</div>
-              <div className={`ludo-die${animating ? ' rolling' : ''}`}>
-                {faceVal ? <DieFace value={faceVal} /> : <span className="ludo-die-empty">{active && phase === 'roll' ? '?' : ''}</span>}
+              {/* user profile: avatar with the depleting square timeline tracing it */}
+              <div className="ludo-profile">
+                <div className="ludo-avatar">
+                  {active && turnMs > 0 && (
+                    <svg key={turnEndsAt} className={`ludo-timer${lowTime ? ' low' : ''}`} viewBox="0 0 100 100"
+                      preserveAspectRatio="none" aria-hidden="true" style={{ '--turn-ms': `${turnMs}ms` }}>
+                      <rect className="ludo-timer-track" x="4" y="4" width="92" height="92" rx="16" pathLength="100" />
+                      <rect className="ludo-timer-bar" x="4" y="4" width="92" height="92" rx="16" pathLength="100" />
+                    </svg>
+                  )}
+                  <span className="ludo-initial">{(name[0] || '?').toUpperCase()}</span>
+                </div>
+                <div className="ludo-dice-name">{name}</div>
               </div>
-              {eliminated ? <div className="ludo-hint">Eliminated</div> : <>
-                {showRoll && <button className="ludo-roll" onClick={() => onMove({ action: 'roll' })}>Roll</button>}
-                {active && isMe && phase === 'move' && <div className="ludo-hint">Move a piece</div>}
-                {active && !isMe && <div className="ludo-hint">Rolling…</div>}
-              </>}
+
+              {/* dice, separate from the profile */}
+              <div className="ludo-dieside">
+                <div className={`ludo-die${animating ? ' rolling' : ''}`}>
+                  {faceVal ? <DieFace value={faceVal} /> : <span className="ludo-die-empty">{active && phase === 'roll' ? '?' : ''}</span>}
+                </div>
+                {eliminated ? <div className="ludo-hint">Eliminated</div> : <>
+                  {showRoll && <button className="ludo-roll" onClick={() => onMove({ action: 'roll' })}>Roll</button>}
+                  {active && isMe && phase === 'move' && <div className="ludo-hint">Move a piece</div>}
+                  {active && !isMe && <div className="ludo-hint">Rolling…</div>}
+                </>}
+              </div>
             </div>
           );
         })}

@@ -27,7 +27,54 @@ export function createInitialState(_options, seatCount = 2) {
   };
 }
 
-export function applyMove() { return { error: 'not implemented' }; }
+export function legalMoves(state, seat, dice) {
+  const t = state.players[seat].tokens;
+  const out = [];
+  for (let i = 0; i < 4; i++) {
+    const p = t[i];
+    if (p === 0) { if (dice === 6) out.push(i); }
+    else if (p < 57 && p + dice <= 57) out.push(i);
+  }
+  return out;
+}
+
+export function nextActiveSeat(state, from) {
+  let s = from;
+  for (let k = 0; k < state.seatCount; k++) {
+    s = (s + 1) % state.seatCount;
+    if (!state.finishedOrder.includes(s)) return s;
+  }
+  return from;
+}
+
+// Apply a concrete dice value to state.current (the testable core of the roll action).
+export function applyRoll(state, dice) {
+  const seat = state.current;
+  // three consecutive 6s -> void the turn
+  if (dice === 6 && state.sixesInRow >= 2) {
+    return { ...state, dice: null, movable: [], sixesInRow: 0,
+      phase: 'roll', current: nextActiveSeat(state, seat), lastEvent: { type: 'sixes', seat } };
+  }
+  const sixes = dice === 6 ? state.sixesInRow + 1 : state.sixesInRow;
+  const movable = legalMoves(state, seat, dice);
+  if (movable.length === 0) {
+    return { ...state, dice: null, movable: [], sixesInRow: dice === 6 ? sixes : 0,
+      phase: 'roll', current: nextActiveSeat(state, seat), lastEvent: { type: 'pass', seat } };
+  }
+  return { ...state, dice, movable, sixesInRow: sixes, phase: 'move', lastEvent: null };
+}
+
+export function applyMove(state, seat, move) {
+  if (getResult(state).over) return { error: 'Game is over.' };
+  if (seat !== state.current) return { error: 'Not your turn.' };
+  if (move?.action === 'roll') {
+    if (state.phase !== 'roll') return { error: 'Roll already done.' };
+    const dice = 1 + Math.floor(Math.random() * 6);
+    return { state: applyRoll(state, dice) };
+  }
+  return { error: 'Unknown action.' };
+}
+
 export function getResult() { return { over: false, winner: null, draw: false }; }
 
 export default {

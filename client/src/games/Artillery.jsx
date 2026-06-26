@@ -23,6 +23,14 @@ const DRIVE_FRICTION = 0.78;
 const COLORS = ['#5cc8ff', '#ff8a4c']; // tank index 0 / 1
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// Mirrors server WEAPONS — the per-match arsenal the gunner picks from.
+const WEAPON_META = [
+  { id: 'standard', name: 'Shell', icon: '●' },
+  { id: 'bigbomb', name: 'Big Bomb', icon: '💣' },
+  { id: 'sniper', name: 'Sniper', icon: '🎯' },
+  { id: 'digger', name: 'Digger', icon: '⛏' },
+];
+
 function gAt(ground, step, x) {
   if (x <= 0) return ground[0];
   const maxX = step * (ground.length - 1);
@@ -99,6 +107,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
   const canvasRef = useRef(null);
   const [angle, setAngle] = useState(45);
   const [power, setPower] = useState(60);
+  const [weapon, setWeapon] = useState('standard');
   const [busy, setBusy] = useState(false);
   const [moved, setMoved] = useState(0);
   const [countdown, setCountdown] = useState(null);
@@ -118,6 +127,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
   const uiRef = useRef({ angle, power, you: youAreIndex, myTurn });
   const angleRef = useRef(angle);
   const powerRef = useRef(power);
+  const weaponRef = useRef(weapon);
   const canFireRef = useRef(canFire);
   const onMoveRef = useRef(onMove);
   const animRef = useRef({ active: false });
@@ -142,8 +152,16 @@ export default function Artillery({ room, youAreIndex, onMove }) {
   uiRef.current = { angle, power, you: youAreIndex, myTurn };
   angleRef.current = angle;
   powerRef.current = power;
+  weaponRef.current = weapon;
   canFireRef.current = canFire;
   onMoveRef.current = onMove;
+
+  // selected a limited weapon that's now empty? fall back to the unlimited shell
+  useEffect(() => {
+    if (weapon !== 'standard' && (room.state.ammo?.[youAreIndex]?.[weapon] ?? 0) <= 0) {
+      setWeapon('standard');
+    }
+  }, [room.state, weapon, youAreIndex]);
 
   const fire = () => {
     if (!canFireRef.current) return;
@@ -153,6 +171,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
       angle: angleRef.current,
       power: powerRef.current,
       x: Math.round(localXRef.current),
+      weapon: weaponRef.current,
     });
   };
   fireRef.current = fire;
@@ -170,6 +189,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
         path: st.lastShot.path,
         impact: st.lastShot.impact,
         crater: st.lastShot.crater,
+        blast: st.lastShot.blast || 95,
         boom: 0,
         carved: false,
       };
@@ -405,6 +425,22 @@ export default function Artillery({ room, youAreIndex, onMove }) {
           </span>
           <span className={`art-badge ${myTurn && !busy ? 'live' : ''}`}>{statusLabel}</span>
         </div>
+        <div className="art-weapons">
+          {WEAPON_META.map((w) => {
+            const ammo = w.id === 'standard' ? null : (room.state.ammo?.[youAreIndex]?.[w.id] ?? 0);
+            const out = ammo !== null && ammo <= 0;
+            return (
+              <button key={w.id} type="button"
+                className={`art-weapon${weapon === w.id ? ' sel' : ''}`}
+                disabled={!canFire || out}
+                onClick={() => setWeapon(w.id)}>
+                <span className="art-weapon-icon">{w.icon}</span>
+                <span className="art-weapon-name">{w.name}</span>
+                <span className="art-weapon-ammo">{ammo === null ? '∞' : `×${ammo}`}</span>
+              </button>
+            );
+          })}
+        </div>
         <div className="art-grid">
           <div className="art-cell">
             <span className="art-label">Angle</span>
@@ -575,7 +611,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
     const anim = animRef.current;
     if (anim.active) {
       if (anim.phase === 'fly') drawShell(ctx, anim);
-      else drawBoom(ctx, anim.impact, anim.boom);
+      else drawBoom(ctx, anim.impact, anim.boom, anim.blast);
     }
   }
 
@@ -714,9 +750,9 @@ export default function Artillery({ room, youAreIndex, onMove }) {
     ctx.fill();
   }
 
-  function drawBoom(ctx, impact, t) {
+  function drawBoom(ctx, impact, t, blast = 95) {
     if (!impact) return;
-    const r = 8 + t * 3.4;
+    const r = (8 + t * 3.4) * (blast / 95);
     const alpha = Math.max(0, 1 - t / 28);
     const g = ctx.createRadialGradient(impact.x, impact.y, 2, impact.x, impact.y, r);
     g.addColorStop(0, `rgba(255,240,180,${alpha})`);

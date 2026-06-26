@@ -22,6 +22,23 @@ const MOVE_BUDGET = 150;    // how far a tank may drive on its own turn (px)
 const EDGE = 40;            // keep tanks this far from the map edges
 const CRATER_R = 58;        // radius of the crater carved on impact (px)
 
+// Weapon arsenal — "standard" is unlimited; the rest are a per-match loadout.
+// blast = splash radius (px), dmg = damage at the blast centre, crater = terrain bite.
+const WEAPONS = {
+  standard: { name: 'Shell', blast: BLAST, dmg: MAX_DMG, crater: CRATER_R, ammo: Infinity },
+  bigbomb: { name: 'Big Bomb', blast: 150, dmg: 85, crater: 96, ammo: 2 },
+  sniper: { name: 'Sniper', blast: 46, dmg: 78, crater: 26, ammo: 4 },
+  digger: { name: 'Digger', blast: 64, dmg: 16, crater: 124, ammo: 3 },
+};
+export const WEAPON_LIST = Object.entries(WEAPONS).map(([id, w]) => ({
+  id, name: w.name, ammo: w.ammo === Infinity ? null : w.ammo,
+}));
+function freshAmmo() {
+  const a = {};
+  for (const [id, w] of Object.entries(WEAPONS)) if (w.ammo !== Infinity) a[id] = w.ammo;
+  return a;
+}
+
 const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 // Carve a circular bite out of the heightmap at the impact point (y grows down,
@@ -111,6 +128,8 @@ function createInitialState() {
     round: 1,
     phase: 'playing',
     roundResult: null,
+    weapons: WEAPON_LIST,          // static loadout descriptor for the client
+    ammo: [freshAmmo(), freshAmmo()], // per-player remaining ammo (persists across rounds)
     seq: 0,
     ...freshRound(0),
   };
@@ -151,6 +170,13 @@ function applyMove(state, playerIndex, move) {
   }
   angle = Math.max(1, Math.min(89, angle));
   power = Math.max(5, Math.min(100, power));
+
+  // resolve the chosen weapon + ammo
+  const weapon = WEAPONS[move?.weapon] ? move.weapon : 'standard';
+  const wdef = WEAPONS[weapon];
+  if (weapon !== 'standard' && !(state.ammo?.[playerIndex]?.[weapon] > 0)) {
+    return { error: 'Out of ammo for that weapon.' };
+  }
 
   const dir = playerIndex === 0 ? 1 : -1; // left player fires right, right fires left
   const shooter = state.tanks[playerIndex];
@@ -202,23 +228,30 @@ function applyMove(state, playerIndex, move) {
     for (const t of tanks) {
       const ty = groundYAt(state, t.x) - TANK_R * 0.5;
       const d = Math.hypot(impact.x - t.x, impact.y - ty);
-      if (d < BLAST) {
-        const dmg = Math.round(MAX_DMG * (1 - d / BLAST));
+      if (d < wdef.blast) {
+        const dmg = Math.round(wdef.dmg * (1 - d / wdef.blast));
         t.hp = Math.max(0, t.hp - dmg);
       }
     }
     // deform the terrain (permanent, accumulates across the match)
-    ground = carveCrater(state.ground, state.step, impact.x, impact.y, CRATER_R);
-    crater = { x: impact.x, y: impact.y, r: CRATER_R };
+    ground = carveCrater(state.ground, state.step, impact.x, impact.y, wdef.crater);
+    crater = { x: impact.x, y: impact.y, r: wdef.crater };
+  }
+
+  // spend ammo for limited weapons
+  let ammo = state.ammo;
+  if (weapon !== 'standard') {
+    ammo = state.ammo.map((a, i) => (i === playerIndex ? { ...a, [weapon]: a[weapon] - 1 } : a));
   }
 
   const next = {
     ...state,
     tanks,
     ground,
+    ammo,
     turn: playerIndex === 0 ? 1 : 0,
     wind: pickWind(),
-    lastShot: { by: playerIndex, angle, power, path, impact, crater, blast: BLAST },
+    lastShot: { by: playerIndex, weapon, angle, power, path, impact, crater, blast: wdef.blast },
     seq: (state.seq || 0) + 1,
   };
 

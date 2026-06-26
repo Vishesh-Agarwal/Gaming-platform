@@ -729,6 +729,25 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .art-ro-count { color: #9a9476; margin: 12px 0 16px; font-size: 14px; }
 .art-skip { padding: 8px 22px; font-family: var(--display); letter-spacing: 0.08em; background: #23261a; border: 1px solid #3a3f24; color: #ece7d2; box-shadow: none; }
 .art-skip:hover { border-color: #d9a441; background: #2d3120; }
+/* weapon loadout picker */
+.art-weapons {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+  margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #3a3f24;
+}
+.art-weapon {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: 78px; padding: 6px 10px;
+  background: #181a10; color: #cdd6b0;
+  border: 1px solid #3a3f24; border-radius: 9px; box-shadow: none;
+  font-family: var(--display); cursor: pointer;
+}
+.art-weapon:hover:not(:disabled) { border-color: #8bd450; transform: none; box-shadow: none; }
+.art-weapon.sel { border-color: #8bd450; background: #20260f; box-shadow: inset 0 0 0 1px #8bd450; }
+.art-weapon:disabled { opacity: 0.4; cursor: not-allowed; }
+.art-weapon-icon { font-size: 17px; line-height: 1; }
+.art-weapon-name { font-size: 10px; letter-spacing: 0.06em; }
+.art-weapon-ammo { font-size: 11px; font-weight: 700; color: #ffd24a; }
+
 .art-grid {
   display: flex;
   align-items: flex-end;

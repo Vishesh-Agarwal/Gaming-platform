@@ -1,7 +1,7 @@
 // Tic-Tac-Toe board UI. Renders authoritative server state and emits moves.
 // Player index 0 = X, 1 = O. Two modes: 'classic' and 'shifting' (Three Men's
 // Morris — place 3, then slide a piece to a connected empty cell).
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 const SYMBOLS = ['X', 'O'];
 const PIECES_PER_PLAYER = 3;
@@ -25,6 +25,31 @@ const winningCells = (board) => {
   }
   return [];
 };
+
+// Blitz move clock — a depleting bar driven by the room's server deadline.
+// The full turn length is captured once per turn so the bar animates smoothly
+// instead of jittering as we re-tick. Goes red in the final few seconds.
+function TurnClock({ room }) {
+  const turnEndsAt = (room.status === 'playing' && room.turnEndsAt) || null;
+  const [, tick] = useState(0);
+  const turnMs = useMemo(() => (turnEndsAt ? Math.max(0, turnEndsAt - Date.now()) : 0), [turnEndsAt]);
+  useEffect(() => {
+    if (!turnEndsAt) return undefined;
+    const id = setInterval(() => tick((n) => n + 1), 200);
+    return () => clearInterval(id);
+  }, [turnEndsAt]);
+  if (!turnEndsAt) return null;
+  const left = Math.max(0, turnEndsAt - Date.now());
+  const pct = turnMs > 0 ? Math.max(0, Math.min(100, (left / turnMs) * 100)) : 0;
+  const seconds = Math.ceil(left / 1000);
+  const low = seconds <= 5;
+  return (
+    <div className={`ttt-clock${low ? ' low' : ''}`}>
+      <div className="ttt-clock-bar" style={{ width: `${pct}%` }} />
+      <span className="ttt-clock-num">{seconds}s</span>
+    </div>
+  );
+}
 
 // Card artwork for the lobby games grid.
 export function Thumbnail() {
@@ -138,6 +163,7 @@ function ClassicTTT({ room, youAreIndex, onMove }) {
         {' · '}
         {status()}
       </div>
+      <TurnClock room={room} />
       <div className="ttt-board">
         {board.map((v, i) => (
           <button
@@ -183,6 +209,7 @@ function UltimateTTT({ room, youAreIndex, onMove }) {
         {' · '}
         {status()}
       </div>
+      <TurnClock room={room} />
       <div className="ttt-ultimate">
         {boards.map((bd, b) => {
           const owner = won[b];

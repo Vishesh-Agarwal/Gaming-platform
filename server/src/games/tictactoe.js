@@ -143,6 +143,50 @@ function applyMove(state, playerIndex, move) {
   return { state: { ...state, board: nb, turn: playerIndex === 0 ? 1 : 0 } };
 }
 
+// Blitz move clock: every turn is capped at TURN_TIMEOUT_MS. When a player runs
+// out of time the server plays a random legal move for them so the game can't
+// stall on an idle/disconnected opponent.
+const TURN_TIMEOUT_MS = 30000;
+
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// A random legal move for the side to move, in whatever mode/phase we're in.
+function legalRandomMove(state) {
+  const seat = state.turn;
+  if (state.mode === 'ultimate') {
+    const boards = state.active !== null && state.won[state.active] === null
+      ? [state.active]
+      : state.won.map((w, i) => (w === null ? i : -1)).filter((i) => i >= 0);
+    const opts = [];
+    for (const b of boards) {
+      state.boards[b].forEach((v, c) => { if (v === null) opts.push({ board: b, cell: c }); });
+    }
+    return opts.length ? pick(opts) : null;
+  }
+
+  if (inMovePhase(state)) {
+    // shifting slide phase: any of my pieces -> a connected empty cell
+    const slides = [];
+    state.board.forEach((v, from) => {
+      if (v !== seat) return;
+      for (const to of ADJ[from]) if (state.board[to] === null) slides.push({ from, to });
+    });
+    return slides.length ? pick(slides) : null;
+  }
+
+  // placement (classic + shifting placement): any empty cell
+  const empties = state.board.map((v, i) => (v === null ? i : -1)).filter((i) => i >= 0);
+  return empties.length ? { cell: pick(empties) } : null;
+}
+
+// Turn expired — auto-play a random legal move for the current player.
+function onTimeout(state) {
+  const move = legalRandomMove(state);
+  if (!move) return { state }; // nothing legal (e.g. stalemate); let getResult decide
+  const out = applyMove(state, state.turn, move);
+  return out.state ? { state: out.state } : { state };
+}
+
 function getResult(state) {
   if (state.mode === 'ultimate') return ultimateResult(state);
   const { board, mode } = state;
@@ -173,7 +217,9 @@ export default {
   minPlayers: 2,
   maxPlayers: 2,
   modes: MODES,
+  turnTimeoutMs: TURN_TIMEOUT_MS,
   createInitialState,
   applyMove,
   getResult,
+  onTimeout,
 };

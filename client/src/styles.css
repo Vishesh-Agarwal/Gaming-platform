@@ -482,6 +482,32 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 
 .ttt { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .ttt-turn { color: var(--muted); }
+.ttt-clock {
+  position: relative;
+  width: 220px;
+  max-width: 100%;
+  height: 8px;
+  margin: 8px auto 4px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.ttt-clock-bar {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--teal);
+  transition: width 0.2s linear;
+}
+.ttt-clock.low .ttt-clock-bar { background: var(--coral); }
+.ttt-clock-num {
+  position: absolute;
+  top: 12px;
+  right: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.ttt-clock.low .ttt-clock-num { color: var(--coral); }
 .ttt-board { display: grid; grid-template-columns: repeat(3, 100px); grid-template-rows: repeat(3, 100px); gap: 10px; }
 .ttt-cell {
   background: var(--panel);

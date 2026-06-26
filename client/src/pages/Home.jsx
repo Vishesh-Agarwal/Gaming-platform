@@ -24,6 +24,7 @@ export default function Home() {
   const [youAreIndex, setYouAreIndex] = useState(null);
   const [gameError, setGameError] = useState('');
   const [rematch, setRematch] = useState(null); // { accepted:[], waitingOn:[] } post-game
+  const [emotes, setEmotes] = useState([]); // transient in-game reaction bubbles
 
   const [lobby, setLobby] = useState(null);
   const [lobbyInvites, setLobbyInvites] = useState([]);
@@ -103,6 +104,11 @@ export default function Home() {
     socket.on('game:rematch:cancelled', () => {
       setRematch(null);
       flash('Opponent left — no rematch.');
+    });
+    socket.on('game:emote', (e) => {
+      const id = `${Date.now()}-${Math.random()}`;
+      setEmotes((prev) => [...prev, { ...e, id }]);
+      setTimeout(() => setEmotes((prev) => prev.filter((x) => x.id !== id)), 3500);
     });
 
     // Multiplayer lobby
@@ -219,6 +225,9 @@ export default function Home() {
     if (res.error) return flash(res.error);
     // game:start (if everyone's in) or game:rematch:status (still waiting) follows.
   };
+  const onEmote = (emote) => {
+    getSocket()?.emit('game:emote', { roomId: activeRoom.id, emote });
+  };
   const onLeave = () => {
     getSocket()?.emit('game:leave');
     setActiveRoom(null);
@@ -241,6 +250,8 @@ export default function Home() {
         onLeave={onLeave}
         onRematch={onRematch}
         rematch={rematch}
+        onEmote={onEmote}
+        emotes={emotes}
         error={gameError}
       />
     );

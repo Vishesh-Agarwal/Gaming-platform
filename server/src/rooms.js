@@ -298,6 +298,12 @@ export function getOpponentId(roomId, userId) {
   return opp ? opp.user.id : null;
 }
 
+// All user ids in a room (for broadcasting in-game emotes to everyone present).
+export function getRoomPlayerIds(roomId) {
+  const room = rooms.get(roomId);
+  return room ? room.players.map((p) => p.user.id) : [];
+}
+
 // First player to report finishing wins. Returns { room, players } or { error } or
 // { already: true } if the race was already decided.
 export function recordFinish(roomId, userId) {

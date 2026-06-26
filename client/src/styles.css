@@ -628,6 +628,29 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .overlay-card h3 { margin: 0; font-family: var(--display); font-size: 24px; }
 .overlay-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .overlay-rematch-hint { margin: 0; font-size: 13px; color: var(--amber); font-weight: 600; }
+
+/* in-game emotes — tray (bottom-right) + floating reaction bubbles (bottom-left) */
+.emote-bar { position: fixed; right: 18px; bottom: 18px; z-index: 70; display: flex; align-items: flex-end; gap: 8px; }
+.emote-toggle { width: 46px; height: 46px; padding: 0; font-size: 22px; border-radius: 50%; line-height: 1; }
+.emote-tray {
+  display: flex; flex-wrap: wrap; gap: 4px; max-width: 220px; padding: 8px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow-3); animation: popin 0.14s ease;
+}
+.emote-pick {
+  width: 38px; height: 38px; padding: 0; font-size: 21px; line-height: 1;
+  background: transparent; box-shadow: none; border-radius: 9px;
+}
+.emote-pick:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.12); box-shadow: none; }
+.emote-bubbles { position: fixed; left: 18px; bottom: 18px; z-index: 70; display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none; }
+.emote-bubble {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px;
+  box-shadow: var(--shadow-2); animation: emote-pop 0.25s var(--ease);
+}
+.emote-glyph { font-size: 22px; line-height: 1; }
+.emote-who { font-size: 13px; font-weight: 600; color: var(--muted); }
+@keyframes emote-pop { from { opacity: 0; transform: translateY(8px) scale(0.85); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .overlay-scores { margin: 0; color: var(--muted); font-size: 15px; }
 .overlay-scores b { color: var(--text); font-family: var(--display); }
 .overlay-standings { display: flex; flex-direction: column; gap: 4px; min-width: 200px; }

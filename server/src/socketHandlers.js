@@ -18,6 +18,7 @@ import {
   makeMove,
   forfeit,
   getOpponentId,
+  getRoomPlayerIds,
   recordFinish,
   isRealtimeRoom,
   setInput,
@@ -42,6 +43,9 @@ import {
   getLobbyForUser,
   publicLobby,
 } from './lobbies.js';
+
+// Allow-list of in-game reaction emojis (keeps the relay from carrying arbitrary text).
+const GAME_EMOTES = ['👍', '😂', '😮', '😢', '🔥', '🎉', '😎', '💀', '❤️', '🤝'];
 
 export function initSockets(io) {
   io.on('connection', (socket) => {
@@ -271,6 +275,17 @@ export function initSockets(io) {
       };
       for (const id of offer.userIds) emitToUser(io, id, 'game:rematch:status', status);
       ack?.({ ok: true, waiting: true });
+    });
+
+    // ---- In-game emotes (all games) ----
+    // A player taps a reaction; relay it to everyone in their room (allow-list only).
+    socket.on('game:emote', (payload) => {
+      const roomId = String(payload?.roomId || '') || getRoomIdForUser(me.id);
+      const emote = String(payload?.emote || '');
+      if (!roomId || !GAME_EMOTES.includes(emote)) return;
+      const ids = getRoomPlayerIds(roomId);
+      if (!ids.includes(me.id)) return;
+      for (const id of ids) emitToUser(io, id, 'game:emote', { from: me.id, name: me.username, emote });
     });
 
     // Leaving a game: realtime N-player drops out; turn-based/1v1 forfeits.

@@ -30,10 +30,13 @@ class GameErrorBoundary extends Component {
   }
 }
 
-export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, rematch, error }) {
+const EMOTES = ['👍', '😂', '😮', '😢', '🔥', '🎉', '😎', '💀', '❤️', '🤝'];
+
+export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, rematch, onEmote, emotes = [], error }) {
   const def = getGame(room.gameId);
   const opponent = room.players.find((p) => p.index !== youAreIndex);
   const myId = room.players.find((p) => p.index === youAreIndex)?.id;
+  const [emoteOpen, setEmoteOpen] = useState(false);
 
   // Let the final play/animation finish before the result overlay appears.
   const [showResult, setShowResult] = useState(false);
@@ -88,6 +91,34 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
           <Component room={room} youAreIndex={youAreIndex} onMove={onMove} />
         </Suspense>
       </GameErrorBoundary>
+
+      {/* floating reaction bubbles from any player */}
+      {emotes.length > 0 && (
+        <div className="emote-bubbles">
+          {emotes.map((e) => (
+            <div key={e.id} className="emote-bubble">
+              <span className="emote-glyph">{e.emote}</span>
+              <span className="emote-who">{e.from === myId ? 'You' : e.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* emote tray — available in every game */}
+      {onEmote && (
+        <div className={`emote-bar${emoteOpen ? ' open' : ''}`}>
+          {emoteOpen && (
+            <div className="emote-tray">
+              {EMOTES.map((em) => (
+                <button key={em} className="emote-pick" onClick={() => { onEmote(em); setEmoteOpen(false); }}>{em}</button>
+              ))}
+            </div>
+          )}
+          <button className="emote-toggle ghost" onClick={() => setEmoteOpen((o) => !o)} aria-label="Send a reaction">
+            {emoteOpen ? '✕' : '😀'}
+          </button>
+        </div>
+      )}
 
       {room.status === 'over' && showResult && (
         <div className="overlay">

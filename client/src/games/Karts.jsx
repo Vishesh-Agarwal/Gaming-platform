@@ -14,8 +14,8 @@ import { getMap } from './karts/kartMaps.js';
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a', '#c87bff', '#ff9f43', '#2ee6c0', '#f25fbf'];
 const TEAM_COLORS = ['#ff5d6c', '#5cc8ff'];
-const WEAPON_COLOR = { mg: '#22e0ff', rocket: '#ff7a3c', mine: '#ffd24a' };
-const WEAPON_LABEL = { mg: 'Machine gun', rocket: 'Rockets', mine: 'Mines' };
+const WEAPON_COLOR = { mg: '#22e0ff', rocket: '#ff7a3c', mine: '#ffd24a', shield: '#7cffb2' };
+const WEAPON_LABEL = { mg: 'Machine gun', rocket: 'Rockets', mine: 'Mines', shield: 'Shield' };
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const lerpAngle = (a, b, t) => {
@@ -187,7 +187,7 @@ export default function Karts({ room, youAreIndex }) {
       setHud({
         phase: s.phase, countdown: s.countdown, timeLeft: s.timeLeft,
         teamMode, teams: s.teams || null,
-        players: s.karts.map((k) => ({ i: k.i, name: names[k.i] || `P${k.i + 1}`, kills: k.kills, hp: k.hp, alive: k.alive, gone: k.gone, color: teamMode ? teamColors[k.team === 1 ? 1 : 0] : colors[k.i % colors.length] })),
+        players: s.karts.map((k) => ({ i: k.i, name: names[k.i] || (k.bot ? `Bot ${k.i + 1}` : `P${k.i + 1}`), bot: !!k.bot, kills: k.kills, hp: k.hp, alive: k.alive, gone: k.gone, color: teamMode ? teamColors[k.team === 1 ? 1 : 0] : colors[k.i % colors.length] })),
         me: s.karts.find((k) => k.i === youAreIndex) || null,
       });
     }, 160);
@@ -399,7 +399,7 @@ export default function Karts({ room, youAreIndex }) {
               {hud.players.map((p) => (
                 <div key={p.i} className={`kt-score ${p.gone ? 'gone' : ''}`}>
                   <span className="kt-dot" style={{ background: p.color }} />
-                  <span className="kt-name">{p.i === youAreIndex ? 'You' : p.name}</span>
+                  <span className="kt-name">{p.i === youAreIndex ? 'You' : p.name}{p.bot ? ' 🤖' : ''}</span>
                   <span className="kt-kills">{p.kills}</span>
                 </div>
               ))}

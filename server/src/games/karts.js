@@ -13,6 +13,10 @@ const COUNTDOWN_MS = 3000, MATCH_MS = 90000, RESPAWN_MS = 2000, HP_MAX = 100;
 
 // weapons: ammo + behaviour
 export const WEAPONS = ['mg', 'rocket', 'mine'];
+// crate contents: the weapons plus a 'shield' power-up (instant, not held).
+const PICKUPS = [...WEAPONS, 'shield'];
+const SHIELD_MS = 6000;
+const MAX_KARTS = 8;
 const MG = { dmg: 8, speed: 70, life: 0.55, ammo: 24, cadence: 90, r: 0.8 };
 const ROCKET = { dmg: 45, speed: 42, life: 2.6, ammo: 3, cadence: 150, r: 1.4 };
 const MINE = { dmg: 999, ammo: 3, cadence: 220, arm: 400, trigger: 3.2, life: 12000 };
@@ -111,11 +115,74 @@ export function nearestTarget(sim, self, map) {
   return best;
 }
 
+// --- bot AI ---------------------------------------------------------------
+// Nearest living enemy (not self, not teammate), ignoring range/LOS — used for
+// navigation. Returns the kart or null.
+function nearestEnemy(sim, self) {
+  const k = sim.karts[self];
+  let best = null, bestD2 = Infinity;
+  for (let i = 0; i < sim.karts.length; i++) {
+    if (i === self) continue;
+    const t = sim.karts[i];
+    if (!t.alive || t.gone || sameTeam(k, t)) continue;
+    const d2 = (t.x - k.x) ** 2 + (t.z - k.z) ** 2;
+    if (d2 < bestD2) { best = t; bestD2 = d2; }
+  }
+  return best;
+}
+
+// Nearest crate that currently holds a pickup (type !== null), or null.
+function nearestReadyCrate(sim, k) {
+  let best = null, bestD2 = Infinity;
+  for (const c of sim.crates) {
+    if (!c.type) continue;
+    const d2 = (c.x - k.x) ** 2 + (c.z - k.z) ** 2;
+    if (d2 < bestD2) { best = c; bestD2 = d2; }
+  }
+  return best;
+}
+
+// Synthesize one input command for an AI kart: head for a weapon when unarmed,
+// otherwise hunt the nearest enemy and fire in range with a clear shot.
+function botCommand(sim, self, map, now) {
+  const k = sim.karts[self];
+  let goal = null, wantFire = false;
+  if (k.weapon) {
+    const enemy = nearestEnemy(sim, self);
+    if (enemy) {
+      goal = enemy;
+      const dist = Math.hypot(enemy.x - k.x, enemy.z - k.z);
+      const range = k.weapon === 'mg' ? MG_RANGE : k.weapon === 'rocket' ? 24 : 6;
+      if (dist < range && lineOfSightClear(map, k.x, k.z, enemy.x, enemy.z)) wantFire = true;
+    }
+  } else {
+    goal = nearestReadyCrate(sim, k) || nearestEnemy(sim, self);
+  }
+  if (!goal) {
+    // nothing to chase — wander toward a slowly-rotating point so bots keep moving
+    if (now >= k.aiNextThink) { k.aiWander = Math.random() * Math.PI * 2; k.aiNextThink = now + 2000; }
+    goal = { x: Math.sin(k.aiWander) * 20, z: Math.cos(k.aiWander) * 20 };
+  }
+  const desired = Math.atan2(goal.x - k.x, goal.z - k.z);
+  const err = Math.atan2(Math.sin(desired - k.heading), Math.cos(desired - k.heading));
+  // integrator does heading -= steer*... (when moving forward), so steer = -err
+  const steer = clamp(-err * 1.6, -1, 1);
+  const throttle = Math.abs(err) > 2.2 ? -0.6 : 1; // back up to swing around if facing away
+  return { throttle, steer, fire: wantFire, seq: (k.lastSeq || 0) + 1 };
+}
+
 function createInitialState(options) {
   const map = getMap(options?.map);
   const mode = options?.mode === 'teams' ? 'teams' : 'ffa';
   const teams = mode === 'teams' && Array.isArray(options?.teams) ? options.teams : null;
   return { arena: map.arena, colors: COLORS, teamColors: TEAM_COLORS, mode, teams, realtime: true, maxPlayers: 8, mapId: map.id };
+}
+
+// How many AI karts to add for a match: the requested count, clamped so the
+// grid never exceeds MAX_KARTS (and never goes negative).
+export function botCount(playerCount, options) {
+  const want = Math.floor(Number(options?.bots) || 0);
+  return clamp(want, 0, MAX_KARTS - playerCount);
 }
 
 function createSim(players, now = Date.now(), options) {
@@ -124,12 +191,12 @@ function createSim(players, now = Date.now(), options) {
   const teams = mode === 'teams' && Array.isArray(options?.teams) ? options.teams : null;
   const h = Math.floor(map.spawns.length / 2);
   let aIdx = 0, bIdx = 0;
-  const karts = players.map((p, i) => {
-    const team = teams ? (teams[i] === 1 ? 1 : 0) : null;
+  const spawnsLen = map.spawns.length;
+  const makeKart = (team, occupied, bot) => {
     let spawnIdx;
     if (team === 0) { spawnIdx = aIdx % h; aIdx++; }
-    else if (team === 1) { spawnIdx = h + (bIdx % (map.spawns.length - h)); bIdx++; }
-    else { spawnIdx = i % map.spawns.length; }
+    else if (team === 1) { spawnIdx = h + (bIdx % (spawnsLen - h)); bIdx++; }
+    else { spawnIdx = occupied % spawnsLen; }
     const s = map.spawns[spawnIdx];
     return {
       x: s.x, z: s.z, heading: s.heading, vel: 0,
@@ -137,9 +204,21 @@ function createSim(players, now = Date.now(), options) {
       hp: HP_MAX, alive: true, respawnAt: 0, kills: 0,
       weapon: null, ammo: 0, shieldUntil: 0, mgAuto: false,
       prevFire: false, queue: [], nextShotAt: 0, gone: false, lastSeq: 0,
-      team, spawnIdx,
+      team, spawnIdx, bot: !!bot, aiNextThink: 0, aiWander: 0,
     };
-  });
+  };
+  const karts = players.map((p, i) => makeKart(teams ? (teams[i] === 1 ? 1 : 0) : null, i, false));
+  // append AI karts, team-balanced in teams mode
+  const nBots = botCount(players.length, options);
+  for (let b = 0; b < nBots; b++) {
+    let team = null;
+    if (teams) {
+      const c0 = karts.filter((k) => k.team === 0).length;
+      const c1 = karts.filter((k) => k.team === 1).length;
+      team = c0 <= c1 ? 0 : 1;
+    }
+    karts.push(makeKart(team, karts.length, true));
+  }
   return {
     mapId: map.id,
     mode,
@@ -242,7 +321,7 @@ function step(sim, inputs, dt, now = Date.now()) {
 
   // recharge crates
   for (const c of sim.crates) {
-    if (c.type === null && now >= c.readyAt) c.type = rand(WEAPONS);
+    if (c.type === null && now >= c.readyAt) c.type = rand(PICKUPS);
   }
 
   for (let i = 0; i < sim.karts.length; i++) {
@@ -264,22 +343,32 @@ function step(sim, inputs, dt, now = Date.now()) {
       continue;
     }
     const slot = inputs[i] || {};
-    const q = slot.queue || [];
     let drained = null;
-    while (q.length) {
-      const cmd = q.shift();
+    let fire;
+    if (k.bot) {
+      // AI karts have no socket input — generate and apply one command per tick
+      const cmd = botCommand(sim, i, map, now);
       integrateKart(k, cmd, SIM_DT, map);
-      k.lastSeq = cmd.seq || 0;
-      drained = cmd;
+      k.lastSeq = cmd.seq;
+      fire = !!cmd.fire;
+    } else {
+      const q = slot.queue || [];
+      while (q.length) {
+        const cmd = q.shift();
+        integrateKart(k, cmd, SIM_DT, map);
+        k.lastSeq = cmd.seq || 0;
+        drained = cmd;
+      }
+      if (drained) slot.last = drained;
+      fire = !!(drained || slot.last || {}).fire;
     }
-    if (drained) slot.last = drained;
-    const fire = !!(drained || slot.last || {}).fire;
 
-    // pick up a weapon when unarmed
+    // pick up a crate when unarmed: a weapon to hold, or an instant shield power-up
     if (!k.weapon) {
       for (const c of sim.crates) {
         if (c.type && Math.hypot(k.x - c.x, k.z - c.z) < CRATE_R) {
-          giveWeapon(k, c.type);
+          if (c.type === 'shield') k.shieldUntil = now + SHIELD_MS;
+          else giveWeapon(k, c.type);
           c.type = null; c.readyAt = now + CRATE_RESPAWN;
           break;
         }
@@ -395,7 +484,7 @@ function snapshot(sim, now = Date.now()) {
       y: r1(k.y || 0), vy: r1(k.vy || 0), g: !!k.grounded,
       hp: Math.round(k.hp), alive: k.alive, kills: k.kills,
       weapon: k.weapon, ammo: k.ammo, shield: now < k.shieldUntil, gone: k.gone,
-      team: k.team ?? null,
+      team: k.team ?? null, bot: !!k.bot,
     })),
     crates: sim.crates.map((c) => ({ x: r1(c.x), z: r1(c.z), type: c.type })),
     proj: sim.projectiles.map((p) => ({ id: p.id, type: p.type, owner: p.owner, x: r1(p.x), y: r1(p.y || 0), z: r1(p.z), h: r1(p.h || 0) })),
@@ -422,10 +511,11 @@ function result(sim) {
   return { over: true, winner: tie ? null : winner, draw: tie, scores: kills };
 }
 
-// Mark a player's kart as gone (left/disconnected). Returns count still active.
+// Mark a player's kart as gone (left/disconnected). Returns the number of HUMAN
+// karts still active — bots don't count, so a match ends once the people leave.
 function dropPlayer(sim, index) {
   if (sim.karts[index]) { sim.karts[index].gone = true; sim.karts[index].alive = false; }
-  return sim.karts.filter((k) => !k.gone).length;
+  return sim.karts.filter((k) => !k.gone && !k.bot).length;
 }
 
 export default {

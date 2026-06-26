@@ -22,6 +22,6 @@ export default {
   name: 'Ghost Rider',
   type: 'realtime',
   minPlayers: 2,
-  maxPlayers: 2,
+  maxPlayers: 4,
   createInitialState,
 };

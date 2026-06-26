@@ -25,6 +25,15 @@ const CRASH_TIME = 1300;   // ms downed before respawn
 const WHEEL_R = 11;
 const SEND_HZ = 15;
 
+// Boost pickups: deterministic pads along the track give a short speed surge.
+const BOOST_MS = 1500;     // how long the surge lasts after grabbing a pad
+const BOOST_MAX = 14;      // raised speed ceiling while boosting (vs MAX_SPEED)
+const BOOST_KICK = 3.5;    // instant speed added on pickup
+const PICKUP_R = 30;       // grab radius (world units)
+
+// Ghost colors for opponents (the local rider is always orange).
+const GHOST_COLORS = ['#22e0ff', '#c08bff', '#ffd84d', '#5dff9b'];
+
 const norm = (x) => Math.atan2(Math.sin(x), Math.cos(x)); // wrap to [-PI, PI]
 
 export function Thumbnail() {
@@ -122,12 +131,34 @@ export default function GhostRider({ room }) {
       a: groundAngle(startX), av: 0,
       onGround: true, finished: false,
       crashed: false, crashUntil: 0, crashes: 0,
+      boostUntil: 0,
     };
-    const ghost = {
-      x: startX, y: terrainY(startX), angle: 0,
-      tx: startX, ty: terrainY(startX), tAngle: 0,
-    };
+    // Opponents arrive over the wire keyed by player id; each gets its own color
+    // and is interpolated toward its last reported pose. Supports N racers.
+    const ghosts = new Map(); // id -> { x,y,angle, tx,ty,tAngle, color }
     const input = { gas: false, brake: false };
+
+    // Deterministic boost pads floating just above the track (same for everyone).
+    const pickups = [];
+    for (let px = 600, i = 0; px < trackLength - 300; i++) {
+      pickups.push({ x: px, taken: false });
+      px += 520 + frand(120 + i) * 520;
+    }
+    const pickupY = (x) => terrainY(x) - 38;
+    const boosting = () => performance.now() < car.boostUntil;
+    const speedCap = () => (boosting() ? BOOST_MAX : MAX_SPEED);
+    // Grab any pad we're overlapping (ignores the vertical gap a bit so you can
+    // snag them mid-jump too).
+    const grabPickups = () => {
+      for (const p of pickups) {
+        if (p.taken) continue;
+        if (Math.abs(car.x - p.x) < PICKUP_R && Math.abs(car.y - pickupY(p.x)) < PICKUP_R + 24) {
+          p.taken = true;
+          car.boostUntil = performance.now() + BOOST_MS;
+          car.spd = Math.min(BOOST_MAX, Math.max(car.spd, 0) + BOOST_KICK);
+        }
+      }
+    };
 
     // --- canvas sizing (DPR-aware) ---
     let W = 0, H = 0;
@@ -175,10 +206,19 @@ export default function GhostRider({ room }) {
 
     // --- networking ---
     const onGhost = (msg) => {
-      if (!msg?.s) return;
-      ghost.tx = msg.s.x;
-      ghost.ty = msg.s.y;
-      ghost.tAngle = msg.s.angle || 0;
+      if (!msg?.s || msg.from == null) return;
+      let g = ghosts.get(msg.from);
+      if (!g) {
+        g = {
+          x: msg.s.x, y: msg.s.y, angle: msg.s.angle || 0,
+          tx: msg.s.x, ty: msg.s.y, tAngle: msg.s.angle || 0,
+          color: GHOST_COLORS[ghosts.size % GHOST_COLORS.length],
+        };
+        ghosts.set(msg.from, g);
+      }
+      g.tx = msg.s.x;
+      g.ty = msg.s.y;
+      g.tAngle = msg.s.angle || 0;
     };
     socket?.on('game:rt:ghost', onGhost);
 
@@ -218,7 +258,7 @@ export default function GhostRider({ room }) {
         if (input.gas) car.spd += ACCEL * dt;
         else if (input.brake) car.spd -= BRAKE * dt;
         car.spd *= Math.pow(DRAG, dt);
-        if (car.spd > MAX_SPEED) car.spd = MAX_SPEED;
+        if (car.spd > speedCap()) car.spd = speedCap();
         if (car.spd < -REVERSE_MAX) car.spd = -REVERSE_MAX;
 
         // slope just BEHIND us (the face we're riding) — avoids the lip discontinuity
@@ -275,7 +315,7 @@ export default function GhostRider({ room }) {
             car.av = 0;
             car.onGround = true;
             car.spd = car.vx * Math.cos(ga) + car.vy * Math.sin(ga);
-            if (car.spd > MAX_SPEED) car.spd = MAX_SPEED;
+            if (car.spd > speedCap()) car.spd = speedCap();
           }
         }
 
@@ -285,12 +325,16 @@ export default function GhostRider({ room }) {
         }
       }
 
+      if (live) grabPickups();
+
       sendState(now);
 
       const k = Math.min(1, 0.25 * dt);
-      ghost.x += (ghost.tx - ghost.x) * k;
-      ghost.y += (ghost.ty - ghost.y) * k;
-      ghost.angle += norm(ghost.tAngle - ghost.angle) * k;
+      for (const g of ghosts.values()) {
+        g.x += (g.tx - g.x) * k;
+        g.y += (g.ty - g.y) * k;
+        g.angle += norm(g.tAngle - g.angle) * k;
+      }
 
       draw(now);
     };
@@ -310,7 +354,11 @@ export default function GhostRider({ room }) {
       const fsx = trackLength - camX;
       if (fsx > -40 && fsx < W + 40) drawFinish(fsx, terrainY(trackLength) - camY);
 
-      drawBike(ghost.x - camX, ghost.y - camY, ghost.angle, '#22e0ff', true, ghost.x / WHEEL_R);
+      drawPickups(now, camX, camY);
+
+      for (const g of ghosts.values()) {
+        drawBike(g.x - camX, g.y - camY, g.angle, g.color, true, g.x / WHEEL_R);
+      }
       drawBike(car.x - camX, car.y - camY, car.a, '#ff7a3c', false, car.x / WHEEL_R);
 
       drawHUD();
@@ -410,6 +458,34 @@ export default function GhostRider({ room }) {
         }
     };
 
+    const drawPickups = (now, camX, camY) => {
+      for (const p of pickups) {
+        if (p.taken) continue;
+        const sx = p.x - camX;
+        if (sx < -40 || sx > W + 40) continue;
+        const bob = Math.sin(now * 0.005 + p.x) * 4;
+        const sy = pickupY(p.x) - camY + bob;
+        ctx.save();
+        ctx.translate(sx, sy);
+        // soft glow disc
+        const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 20);
+        g.addColorStop(0, 'rgba(255,224,120,0.85)');
+        g.addColorStop(1, 'rgba(255,160,60,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+        // lightning bolt
+        ctx.fillStyle = '#ffdf5a';
+        ctx.strokeStyle = '#7a4a00';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(2, -10); ctx.lineTo(-5, 1); ctx.lineTo(-1, 1);
+        ctx.lineTo(-2, 10); ctx.lineTo(5, -2); ctx.lineTo(1, -2);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+    };
+
     const drawBike = (sx, sy, angle, color, isGhost, spin) => {
       const R = WHEEL_R;
       ctx.save();
@@ -502,18 +578,29 @@ export default function GhostRider({ room }) {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(pad, by, barW, barH);
       const myP = Math.max(0, Math.min(1, car.x / trackLength));
-      const ghP = Math.max(0, Math.min(1, ghost.x / trackLength));
-      ctx.fillStyle = '#22e0ff';
-      ctx.fillRect(pad + ghP * barW - 2, by - 3, 4, barH + 6);
+      for (const g of ghosts.values()) {
+        const ghP = Math.max(0, Math.min(1, g.x / trackLength));
+        ctx.fillStyle = g.color;
+        ctx.fillRect(pad + ghP * barW - 2, by - 3, 4, barH + 6);
+      }
       ctx.fillStyle = '#ff7a3c';
       ctx.fillRect(pad, by, myP * barW, barH);
       ctx.font = '600 13px Inter, sans-serif';
       ctx.fillStyle = '#f0f2fb';
       ctx.textAlign = 'left';
+      const racers = ghosts.size + 1;
       ctx.fillText('You', pad, by + 26);
       ctx.textAlign = 'right';
-      ctx.fillText('Opponent (ghost)', W - pad, by + 26);
+      ctx.fillText(racers > 2 ? `${racers} racers` : 'Opponent (ghost)', W - pad, by + 26);
       ctx.textAlign = 'left';
+
+      if (boosting()) {
+        ctx.fillStyle = '#ffdf5a';
+        ctx.font = '800 18px "Chakra Petch", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('⚡ BOOST', W / 2, by + 30);
+        ctx.textAlign = 'left';
+      }
 
       if (car.crashed) {
         ctx.fillStyle = '#ff5d6c';
@@ -574,7 +661,8 @@ export default function GhostRider({ room }) {
       <p className="gr-hint muted">
         <b>→</b>/<b>Space</b> gas · <b>←</b> brake. Hit a ramp fast for big air — the more speed,
         the longer you hang. In the air <b>gas</b> backflips, <b>brake</b> frontflips; release to
-        hold. Finish the rotation and land on your wheels, or you wreck and respawn.
+        hold. Finish the rotation and land on your wheels, or you wreck and respawn. Grab the
+        glowing <b>⚡ boost pads</b> for a speed surge — first across the line wins.
       </p>
     </div>
   );

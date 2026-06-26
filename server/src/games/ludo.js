@@ -12,12 +12,16 @@ export function loopCell(color, progress) {
   return (START[color] + (progress - 1)) % 52;
 }
 
-export function createInitialState(_options, seatCount = 2) {
+export function createInitialState(options, seatCount = 2) {
   const n = Math.max(2, Math.min(4, seatCount));
   const colors = SEAT_COLORS[n];
+  // 2v2 teams (only with a full table): partners sit opposite — seats 0&2 vs 1&3.
+  const teamMode = options?.mode === 'teams' && n === 4;
   return {
     seatCount: n,
     colors,
+    mode: teamMode ? 'teams' : 'classic',
+    teams: teamMode ? colors.map((_, seat) => seat % 2) : null, // seat -> team (0|1)
     players: colors.map((color) => ({ color, tokens: [0, 0, 0, 0] })),
     current: 0,
     phase: 'roll',
@@ -86,6 +90,7 @@ export function applyTokenMove(state, token) {
   if (cell !== -1 && !SAFE.has(cell)) {
     for (let s = 0; s < players.length; s++) {
       if (s === seat) continue;
+      if (state.teams && state.teams[s] === state.teams[seat]) continue; // never capture a teammate
       const op = players[s];
       for (let i = 0; i < 4; i++) {
         if (op.tokens[i] !== 0 && loopCell(op.color, op.tokens[i]) === cell) {
@@ -137,6 +142,24 @@ export function applyMove(state, seat, move) {
 export function getResult(state) {
   const out = state.out || [];
   const scores = state.players.map((p) => p.tokens.filter((t) => t === 57).length);
+
+  // 2v2 teams: a team wins when BOTH partners get every token home (or the other
+  // team is wiped out by eliminations). Partners share the result.
+  if (state.mode === 'teams' && state.teams) {
+    const finishedOrder = state.finishedOrder;
+    const seatsOf = (t) => [0, 1, 2, 3].filter((s) => state.teams[s] === t);
+    const teamDone = (t) => seatsOf(t).every((s) => finishedOrder.includes(s));
+    const teamDead = (t) => seatsOf(t).every((s) => out.includes(s));
+    const t0done = teamDone(0), t1done = teamDone(1);
+    const over = t0done || t1done || teamDead(0) || teamDead(1);
+    // team score = total tokens home across both partners (matches the shared overlay)
+    const teamScores = [0, 1].map((t) => seatsOf(t).reduce((sum, s) => sum + scores[s], 0));
+    if (!over) return { over: false, mode: 'teams', winner: null, draw: false, scores, teams: teamScores };
+    const winnerTeam = t0done ? 0 : t1done ? 1 : (teamDead(0) ? 1 : 0);
+    // winner is the TEAM id (Game.jsx compares it against the viewer's team)
+    return { over: true, mode: 'teams', winner: winnerTeam, winnerTeam, teams: teamScores, draw: false, scores };
+  }
+
   // over once all but one seat is done (finished or eliminated)
   const over = state.finishedOrder.length + out.length >= state.seatCount - 1;
   if (!over) return { over: false, winner: null, draw: false, scores };
@@ -191,6 +214,10 @@ export function onTimeout(state) {
 export default {
   id: 'ludo', name: 'Ludo', type: 'turn-based',
   minPlayers: 2, maxPlayers: 4,
+  modes: [
+    { id: 'classic', name: 'Classic' },
+    { id: 'teams', name: '2v2 Teams' },
+  ],
   turnTimeoutMs: TURN_TIMEOUT_MS,
   createInitialState, applyMove, getResult, onTimeout,
 };

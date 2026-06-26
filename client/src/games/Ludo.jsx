@@ -407,7 +407,10 @@ export default function Ludo({ room, youAreIndex, onMove }) {
       </div>
 
       <div className="ludo-footer">
-        <div className="ludo-you">You are <b style={{ color: COLORS[myColor] }}>{COLOR_NAMES[myColor]}</b></div>
+        <div className="ludo-you">
+          You are <b style={{ color: COLORS[myColor] }}>{COLOR_NAMES[myColor]}</b>
+          {st.teams && <span className="ludo-team-badge">2v2 · Team {st.teams[youAreIndex] === 0 ? 'A' : 'B'}</span>}
+        </div>
         {eventText() && <div className="ludo-event">{eventText()}</div>}
         <div className="ludo-standings">
           {players.map((p, seat) => {
@@ -418,7 +421,10 @@ export default function Ludo({ room, youAreIndex, onMove }) {
             return (
               <div key={seat} className={`ludo-rank${seat === current ? ' active' : ''}${eliminated ? ' out' : ''}`}>
                 <span className="ludo-swatch" style={{ background: COLORS[p.color] }} />
-                <span className="ludo-pname">{nameFor(seat)}</span>
+                <span className="ludo-pname">
+                  {nameFor(seat)}
+                  {st.teams && <span className="ludo-team-tag">{st.teams[seat] === 0 ? 'A' : 'B'}</span>}
+                </span>
                 {miss > 0 && !eliminated && <span className="ludo-misses" title="Timed-out turns">⏱{miss}/5</span>}
                 {eliminated ? <b className="ludo-place out">OUT</b>
                   : rank >= 0 ? <b className="ludo-place">#{rank + 1}</b>

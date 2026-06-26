@@ -6,6 +6,8 @@
 // The secret word lives in state.secret, which rooms.publicRoom strips before
 // broadcasting; the hint is public so the guesser sees it.
 
+import { randomWord, isCategory } from './hangmanWords.js';
+
 const MAX_WRONG = 6;
 const MIN_LEN = 3;
 const MAX_LEN = 12;
@@ -16,7 +18,7 @@ const MAX_ROUNDS = 10;
 const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function emptyBoard() {
-  return { hint: null, wordLength: 0, revealed: [], guessed: [], wrong: 0, secret: null };
+  return { hint: null, category: null, wordLength: 0, revealed: [], guessed: [], wrong: 0, secret: null };
 }
 
 function createInitialState(options) {
@@ -55,8 +57,19 @@ function applyMove(state, playerIndex, move) {
   if (state.turn !== playerIndex) return { error: 'Not your turn.' };
 
   if (state.phase === 'setting') {
-    const word = String(move?.word || '').toUpperCase().replace(/[^A-Z]/g, '');
-    const hint = String(move?.hint || '').trim().slice(0, MAX_HINT);
+    // Setter can type a word, or pull a random one from the word bank (optionally
+    // from a chosen category). The category is public; it doubles as a default hint.
+    let word, hint, category;
+    if (move?.random) {
+      const r = randomWord(move?.category);
+      word = r.word;
+      category = r.category;
+      hint = String(move?.hint || '').trim().slice(0, MAX_HINT) || r.hint;
+    } else {
+      word = String(move?.word || '').toUpperCase().replace(/[^A-Z]/g, '');
+      hint = String(move?.hint || '').trim().slice(0, MAX_HINT);
+      category = isCategory(move?.category) ? move.category : null;
+    }
     if (word.length < MIN_LEN || word.length > MAX_LEN) {
       return { error: `Word must be ${MIN_LEN}–${MAX_LEN} letters (A–Z only).` };
     }
@@ -65,6 +78,7 @@ function applyMove(state, playerIndex, move) {
       state: bump(state, {
         secret: { word },
         hint,
+        category,
         wordLength: word.length,
         revealed: Array(word.length).fill(null),
         guessed: [],

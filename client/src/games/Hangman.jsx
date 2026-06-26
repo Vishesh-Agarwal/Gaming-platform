@@ -7,6 +7,17 @@ import { useEffect, useRef, useState } from 'react';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
+// Mirrors server/src/games/hangmanWords.js CATEGORIES.
+const CATEGORIES = [
+  { id: 'animals', label: 'Animals' },
+  { id: 'countries', label: 'Countries' },
+  { id: 'food', label: 'Food' },
+  { id: 'sports', label: 'Sports' },
+  { id: 'movies', label: 'Movies' },
+  { id: 'science', label: 'Science' },
+];
+const catLabel = (id) => CATEGORIES.find((c) => c.id === id)?.label || null;
+
 export function Thumbnail() {
   return (
     <svg viewBox="0 0 120 120" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
@@ -58,7 +69,7 @@ export default function Hangman({ room, youAreIndex, onMove }) {
   const st = room.state;
   const {
     phase, round, totalRounds, leg, setter, guesser, wordLength, revealed, guessed,
-    wrong, maxWrong, hint, scores, roundPoints, legResult, history,
+    wrong, maxWrong, hint, category, scores, roundPoints, legResult, history,
   } = st;
   const iAmSetter = youAreIndex === setter;
   const iAmGuesser = youAreIndex === guesser;
@@ -67,6 +78,7 @@ export default function Hangman({ room, youAreIndex, onMove }) {
 
   const [wordInput, setWordInput] = useState('');
   const [hintInput, setHintInput] = useState('');
+  const [catInput, setCatInput] = useState('');
   const [countdown, setCountdown] = useState(null);
   const nextSentRef = useRef(false);
   const lastSeqRef = useRef(st.seq);
@@ -75,7 +87,7 @@ export default function Hangman({ room, youAreIndex, onMove }) {
   const them = (idx) =>
     idx === youAreIndex ? 'You' : room.players.find((p) => p.index === idx)?.username || 'Opponent';
 
-  useEffect(() => { setWordInput(''); setHintInput(''); }, [phase, round, leg]);
+  useEffect(() => { setWordInput(''); setHintInput(''); setCatInput(''); }, [phase, round, leg]);
 
   // reset the advance guard whenever the server state changes
   useEffect(() => {
@@ -161,7 +173,7 @@ export default function Hangman({ room, youAreIndex, onMove }) {
     const w = wordInput.toUpperCase().replace(/[^A-Z]/g, '');
     const h = hintInput.trim();
     if (w.length < 3 || w.length > 12 || !h) return;
-    onMove({ word: w, hint: h });
+    onMove({ word: w, hint: h, category: catInput || undefined });
   };
 
   const wrongLetters = guessed.filter((L) => !(revealed || []).includes(L));
@@ -204,8 +216,18 @@ export default function Hangman({ room, youAreIndex, onMove }) {
             onChange={(e) => setWordInput(e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 12))} />
           <input className="hm-hintinput" value={hintInput} placeholder="Hint for your opponent"
             maxLength={60} onChange={(e) => setHintInput(e.target.value)} />
+          <div className="hm-setrow">
+            <select className="hm-cat" value={catInput} onChange={(e) => setCatInput(e.target.value)}>
+              <option value="">No category</option>
+              {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+            <button type="button" className="ghost"
+              onClick={() => onMove({ random: true, category: catInput || undefined })}>
+              🎲 Random word
+            </button>
+          </div>
           <button type="submit" disabled={wordInput.length < 3 || !hintInput.trim()}>Set word</button>
-          <p className="hm-hint muted">3–12 letters + a hint. {them(guesser)} sees only the hint.</p>
+          <p className="hm-hint muted">Type a word + hint, or pick a category and hit Random. {them(guesser)} sees the hint{catInput ? ' and category' : ''}.</p>
         </form>
       )}
 
@@ -215,7 +237,10 @@ export default function Hangman({ room, youAreIndex, onMove }) {
 
       {(phase === 'guessing' || phase === 'legover') && (
         <>
-          {hint && <div className="hm-hintbar">💡 <b>Hint:</b> {hint}</div>}
+          <div className="hm-clues">
+            {category && <span className="hm-cat-chip">📚 {catLabel(category)}</span>}
+            {hint && <div className="hm-hintbar">💡 <b>Hint:</b> {hint}</div>}
+          </div>
           <div className="hm-stage">
             <div className="hm-gallows-wrap">
               <Gallows wrong={wrong} />

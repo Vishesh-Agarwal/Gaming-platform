@@ -118,7 +118,13 @@ export function applyMove(state, seat, move) {
   if (move?.action === 'roll') {
     if (state.phase !== 'roll') return { error: 'Roll already done.' };
     const dice = 1 + Math.floor(Math.random() * 6);
-    return { state: applyRoll(state, dice) };
+    const rolled = applyRoll(state, dice);
+    // Only one legal move? Play it for the player — no point making them click the
+    // single eligible token. (The client still animates the roll and the hop.)
+    if (rolled.phase === 'move' && rolled.movable.length === 1) {
+      return { state: applyTokenMove(rolled, rolled.movable[0]) };
+    }
+    return { state: rolled };
   }
   if (move?.action === 'move') {
     if (state.phase !== 'move') return { error: 'Roll first.' };
@@ -174,10 +180,10 @@ export function onTimeout(state) {
   while (s.current === seat && !getResult(s).over && guard++ < 24) {
     if (s.phase === 'roll') {
       const dice = 1 + Math.floor(Math.random() * 6);
-      s = applyRoll(s, dice);
-      if (s.phase !== 'move') break; // no legal move (or three-6s) -> turn ended
+      s = applyRoll(s, dice); // may auto-resolve a single-move roll on its own
+    } else {
+      s = applyTokenMove(s, bestMovable(s, seat));
     }
-    s = applyTokenMove(s, bestMovable(s, seat));
   }
   return { state: { ...s, lastEvent: { type: 'timeout', seat } } };
 }

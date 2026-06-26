@@ -117,16 +117,20 @@ function Pawn({ color, id }) {
 
 // Card artwork for the lobby games grid.
 export function Thumbnail() {
-  const sq = (x, y, fill) => <rect x={x} y={y} width="34" height="34" rx="6" fill={fill} />;
+  const sq = (x, y, fill) => (
+    <rect x={x} y={y} width="34" height="34" rx="8" fill={fill} opacity="0.92"
+      style={{ filter: `drop-shadow(0 0 5px ${fill})` }} />
+  );
   return (
     <svg viewBox="0 0 120 120" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-      <rect width="120" height="120" rx="10" fill="#c89456" />
-      <rect x="8" y="8" width="104" height="104" rx="6" fill="#fbf6e9" />
+      <rect width="120" height="120" rx="10" fill="#0a0d1c" />
+      <rect x="6" y="6" width="108" height="108" rx="9" fill="none" stroke="rgba(120,150,255,0.32)" />
       {sq(14, 14, '#e63946')}{sq(72, 14, '#2a9d4a')}
       {sq(14, 72, '#2877c9')}{sq(72, 72, '#f1b40a')}
-      <rect x="52" y="14" width="16" height="92" fill="#fff" />
-      <rect x="14" y="52" width="92" height="16" fill="#fff" />
-      <circle cx="60" cy="60" r="10" fill="#9fb0d8" />
+      <rect x="52" y="14" width="16" height="92" rx="4" fill="rgba(150,175,235,0.12)" />
+      <rect x="14" y="52" width="92" height="16" rx="4" fill="rgba(150,175,235,0.12)" />
+      <circle cx="60" cy="60" r="11" fill="#9fb0d8" opacity="0.9"
+        style={{ filter: 'drop-shadow(0 0 5px #9fb0d8)' }} />
     </svg>
   );
 }
@@ -177,9 +181,10 @@ export default function Ludo({ room, youAreIndex, onMove }) {
   // --- step-by-step token movement ---
   // The board renders a lagging "display" copy of token positions. When the
   // authoritative state advances exactly one token, we hold everyone in place and
-  // hop the mover one grid cell at a time; captures pop home when the mover lands.
+  // animate frame by frame: the mover hops forward to its cell, then anything it
+  // captured retreats back along its own path into its yard before we settle.
   const [display, setDisplay] = useState(() => players.map((p) => p.tokens.slice()));
-  const [hop, setHop] = useState(null); // { seat, token, cell:[r,c] } mid-step
+  const [hops, setHops] = useState({}); // `${seat}-${token}` -> { cell:[r,c], back:bool }
   const hopTimer = useRef(null);
   const prevTokensRef = useRef(players.map((p) => p.tokens.slice()));
   useEffect(() => {
@@ -188,31 +193,59 @@ export default function Ludo({ room, youAreIndex, onMove }) {
     prevTokensRef.current = next;
 
     const advanced = [];
+    const captured = [];
     for (let s = 0; s < next.length; s++) {
       for (let t = 0; t < 4; t++) {
         const a = prev[s]?.[t] ?? 0;
-        if (next[s][t] > a) advanced.push({ seat: s, token: t, from: a, to: next[s][t], color: players[s].color });
+        const b = next[s][t];
+        if (b > a) advanced.push({ seat: s, token: t, from: a, to: b, color: players[s].color });
+        else if (a > 0 && b === 0) captured.push({ seat: s, token: t, from: a, color: players[s].color });
       }
     }
 
     clearInterval(hopTimer.current);
-    if (advanced.length !== 1) { setHop(null); setDisplay(next); return undefined; }
+    // Only animate the common single-token advance; auto-played multi-step turns snap.
+    if (advanced.length !== 1) { setHops({}); setDisplay(next); return undefined; }
 
     const mv = advanced[0];
-    const path = [];
+    const mvKey = `${mv.seat}-${mv.token}`;
+    const frames = [];
+
+    // Phase 1 — the mover hops forward one cell at a time to its destination.
     for (let p = Math.max(1, mv.from + 1); p <= mv.to; p++) {
       const c = cellFor(mv.color, p);
-      if (c) path.push(c);
+      if (c) frames.push({ [mvKey]: { cell: c, back: false } });
     }
-    if (path.length < 1) { setHop(null); setDisplay(next); return undefined; }
+    if (frames.length === 0) { setHops({}); setDisplay(next); return undefined; }
 
-    setDisplay(prev); // hold everyone (incl. soon-to-be-captured) until the mover lands
+    // Phase 2 — captured tokens retreat back along their own loop path to their
+    // yard (in parallel), while the mover stays parked on the capture cell.
+    if (captured.length) {
+      const landed = cellFor(mv.color, mv.to);
+      const backPaths = captured.map((cap) => {
+        const path = [];
+        for (let p = cap.from - 1; p >= 1; p--) { const c = cellFor(cap.color, p); if (c) path.push(c); }
+        path.push(BASE_SLOTS[cap.color][cap.token]); // finally settle into the yard well
+        return path;
+      });
+      const steps = Math.max(...backPaths.map((p) => p.length));
+      for (let i = 0; i < steps; i++) {
+        const frame = { [mvKey]: { cell: landed, back: false } };
+        captured.forEach((cap, ci) => {
+          const path = backPaths[ci];
+          frame[`${cap.seat}-${cap.token}`] = { cell: path[Math.min(i, path.length - 1)], back: true };
+        });
+        frames.push(frame);
+      }
+    }
+
+    setDisplay(prev); // hold everyone at their previous spots; frames drive the movers
     let i = 0;
-    setHop({ seat: mv.seat, token: mv.token, cell: path[0] });
+    setHops(frames[0]);
     hopTimer.current = setInterval(() => {
       i += 1;
-      if (i >= path.length) { clearInterval(hopTimer.current); setHop(null); setDisplay(next); }
-      else setHop({ seat: mv.seat, token: mv.token, cell: path[i] });
+      if (i >= frames.length) { clearInterval(hopTimer.current); setHops({}); setDisplay(next); }
+      else setHops(frames[i]);
     }, STEP_MS);
     return () => clearInterval(hopTimer.current);
   }, [players]);
@@ -223,9 +256,9 @@ export default function Ludo({ room, youAreIndex, onMove }) {
   players.forEach((p, seat) => {
     const tokens = display[seat] || p.tokens;
     tokens.forEach((progress, token) => {
-      const hopping = hop && hop.seat === seat && hop.token === token;
-      const cell = hopping ? hop.cell : (progress <= 0 ? BASE_SLOTS[p.color][token] : cellFor(p.color, progress));
-      if (cell) placed.push({ seat, color: p.color, token, r: cell[0], c: cell[1], hopping });
+      const ov = hops[`${seat}-${token}`];
+      const cell = ov ? ov.cell : (progress <= 0 ? BASE_SLOTS[p.color][token] : cellFor(p.color, progress));
+      if (cell) placed.push({ seat, color: p.color, token, r: cell[0], c: cell[1], hopping: !!ov, back: ov?.back });
     });
   });
   const byCell = new Map();
@@ -257,8 +290,8 @@ export default function Ludo({ room, youAreIndex, onMove }) {
             const cls = ['ludo-cell', `ludo-${role.type}`];
             const [dr, dc] = rot(r, c);
             const style = { gridRow: dr + 1, gridColumn: dc + 1 };
-            if (role.type === 'base') style.background = COLORS[role.color];
-            if (role.type === 'home' || role.type === 'start') style.background = COLORS[role.color];
+            // colored cells take a CSS var so the glass tint + neon glow live in CSS
+            if (role.color != null) style['--cc'] = COLORS[role.color];
             return (
               <div key={key(r, c)} className={cls.join(' ')} style={style}>
                 {role.safe && <Star onColor={role.type === 'start'} />}
@@ -268,12 +301,14 @@ export default function Ludo({ room, youAreIndex, onMove }) {
 
           {/* glossy highlight over each colored quadrant */}
           {[0, 1, 2, 3].map((color) => (
-            <div key={`q-${color}`} className="ludo-quadrant" style={rotBlock(rotK, QUAD[color])} />
+            <div key={`q-${color}`} className="ludo-quadrant"
+              style={{ ...rotBlock(rotK, QUAD[color]), '--qc': COLORS[color] }} />
           ))}
 
           {/* classic white "yard" panel per quadrant */}
           {[0, 1, 2, 3].map((color) => (
-            <div key={`yard-${color}`} className="ludo-yard" style={rotBlock(rotK, YARD[color])} />
+            <div key={`yard-${color}`} className="ludo-yard"
+              style={{ ...rotBlock(rotK, YARD[color]), '--yc': COLORS[color] }} />
           ))}
 
           {/* four symmetric coin wells per yard */}
@@ -307,8 +342,8 @@ export default function Ludo({ room, youAreIndex, onMove }) {
             return (
               <button
                 key={`tok-${t.seat}-${t.token}`}
-                className={`ludo-token${clickable ? ' movable' : ''}${t.hopping ? ' hopping' : ''}`}
-                style={{ gridRow: dr + 1, gridColumn: dc + 1, transform: `translateX(${off}%)`, zIndex: t.hopping ? 60 : 20 + idx }}
+                className={`ludo-token${clickable ? ' movable' : ''}${t.hopping ? ' hopping' : ''}${t.back ? ' captured' : ''}`}
+                style={{ gridRow: dr + 1, gridColumn: dc + 1, transform: `translateX(${off}%)`, zIndex: t.hopping ? 60 : 20 + idx, '--tc': COLORS[t.color] }}
                 disabled={!clickable}
                 onClick={() => clickable && onMove({ action: 'move', token: t.token })}
                 title={nameFor(t.seat)}

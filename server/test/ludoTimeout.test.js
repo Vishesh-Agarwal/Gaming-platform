@@ -43,6 +43,32 @@ test('reaching MAX_MISSES eliminates the seat; 2p -> the other player wins', () 
   assert.equal(r.winner, 1);
 });
 
+// Force a specific die: dice = 1 + floor(r*6), so r=0.4 -> 3.
+const withDie = (value, fn) => {
+  const orig = Math.random;
+  Math.random = () => (value - 1 + 0.5) / 6;
+  try { return fn(); } finally { Math.random = orig; }
+};
+
+test('rolling with exactly one legal move auto-plays it', () => {
+  const st = fresh(2);
+  st.players[0].tokens = [10, 0, 0, 0]; // only the mid-board token can move on a non-6
+  const { state } = withDie(3, () => ludo.applyMove(st, 0, { action: 'roll' }));
+  assert.equal(state.players[0].tokens[0], 13); // advanced 10 -> 13 without a click
+  assert.equal(state.phase, 'roll');            // turn resolved
+  assert.equal(state.current, 1);               // handed to the next seat
+  assert.equal(state.lastRoll.value, 3);        // die still reflects the roll
+});
+
+test('rolling with two legal moves waits for the player to choose', () => {
+  const st = fresh(2);
+  st.players[0].tokens = [10, 20, 0, 0]; // two movable tokens on a non-6
+  const { state } = withDie(3, () => ludo.applyMove(st, 0, { action: 'roll' }));
+  assert.equal(state.phase, 'move');
+  assert.deepEqual(state.movable, [0, 1]);
+  assert.equal(state.players[0].tokens[0], 10); // nothing moved yet
+});
+
 test('nextActiveSeat skips eliminated seats', () => {
   const st = fresh(3);
   st.out = [1];

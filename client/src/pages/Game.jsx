@@ -30,9 +30,10 @@ class GameErrorBoundary extends Component {
   }
 }
 
-export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
+export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, rematch, error }) {
   const def = getGame(room.gameId);
   const opponent = room.players.find((p) => p.index !== youAreIndex);
+  const myId = room.players.find((p) => p.index === youAreIndex)?.id;
 
   // Let the final play/animation finish before the result overlay appears.
   const [showResult, setShowResult] = useState(false);
@@ -117,7 +118,25 @@ export default function Game({ room, youAreIndex, onMove, onLeave, error }) {
                 </p>
               )
             )}
-            <button onClick={onLeave}>Back to lobby</button>
+            <div className="overlay-actions">
+              {onRematch && !room.result?.forfeit && (() => {
+                const accepted = rematch?.accepted || [];
+                const iAccepted = myId != null && accepted.includes(myId);
+                const someoneElse = accepted.some((id) => id !== myId);
+                if (iAccepted) {
+                  return <button disabled className="ghost">Waiting for {room.players.length > 2 ? 'players' : 'opponent'}…</button>;
+                }
+                return (
+                  <button onClick={onRematch}>
+                    {someoneElse ? 'Accept rematch 🔁' : 'Rematch 🔁'}
+                  </button>
+                );
+              })()}
+              <button className="ghost" onClick={onLeave}>Back to lobby</button>
+            </div>
+            {rematch?.accepted?.some((id) => id !== myId) && !rematch.accepted.includes(myId) && (
+              <p className="overlay-rematch-hint">{room.players.length > 2 ? 'Someone wants' : 'Opponent wants'} a rematch!</p>
+            )}
           </div>
         </div>
       )}

@@ -110,6 +110,7 @@ export function acceptInvite(inviteId, acceptingUserId) {
       { index: 1, user: getUserById(acceptingUserId) },
     ],
     state: game.createInitialState(invite.options || undefined, 2),
+    options: invite.options || null, // kept so a rematch can reuse the same settings
     status: 'playing',
     result: null,
   };
@@ -138,6 +139,7 @@ export function createRoom(gameId, options, userIds) {
     game,
     players: userIds.map((uid, i) => ({ index: i, user: getUserById(uid) })),
     state: game.createInitialState(options || undefined, userIds.length),
+    options: options || null, // kept so a rematch can reuse the same settings
     status: 'playing',
     result: null,
   };
@@ -196,6 +198,7 @@ export function stepRoom(roomId, dt) {
     room.status = 'over';
     room.result = room.game.result(room.sim);
     const snap = publicRoom(room);
+    registerRematch(room);
     endRoom(room);
     return { players, data, over: true, room: snap };
   }
@@ -251,7 +254,7 @@ export function makeMove(roomId, userId, move) {
   }
   armTurnDeadline(room); // fresh deadline for the next turn (cleared if the game ended)
   const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id) };
-  if (result.over) endRoom(room);
+  if (result.over) { registerRematch(room); endRoom(room); }
   return out;
 }
 
@@ -281,7 +284,7 @@ export function applyTimeout(roomId) {
   }
   armTurnDeadline(room);
   const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id), over: result.over };
-  if (result.over) endRoom(room);
+  if (result.over) { registerRematch(room); endRoom(room); }
   return out;
 }
 
@@ -307,6 +310,7 @@ export function recordFinish(roomId, userId) {
   room.status = 'over';
   room.result = { over: true, winner: player.index, draw: false };
   const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id) };
+  registerRematch(room);
   endRoom(room);
   return out;
 }
@@ -333,4 +337,54 @@ export function forfeit(userId) {
   const players = room.players.map((p) => p.user.id);
   endRoom(room);
   return { room: snapshot, players, quitterId: userId, opponentId: opponent?.user.id };
+}
+
+// ---- Rematch ----
+// When a game ends naturally (not a forfeit/disconnect), we keep a small offer
+// describing how to rebuild it. Either player accepting recreates the room with
+// the same game + settings + seats once everyone still present has agreed.
+const rematchOffers = new Map(); // offerId (the ended room id) -> offer
+const REMATCH_TTL_MS = 5 * 60 * 1000;
+
+function registerRematch(room) {
+  // prune stale offers so abandoned ones don't accumulate
+  const cutoff = Date.now() - REMATCH_TTL_MS;
+  for (const [id, o] of rematchOffers) if (o.createdAt < cutoff) rematchOffers.delete(id);
+  rematchOffers.set(room.id, {
+    gameId: room.gameId,
+    options: room.options || null,
+    userIds: room.players.map((p) => p.user.id),
+    names: Object.fromEntries(room.players.map((p) => [p.user.id, p.user.username])),
+    accepted: new Set(),
+    createdAt: Date.now(),
+  });
+}
+
+export function getRematchOffer(offerId) {
+  return rematchOffers.get(offerId) || null;
+}
+
+// Record a player's wish to rematch. Returns { offer } or { error }.
+export function acceptRematch(offerId, userId) {
+  const offer = rematchOffers.get(offerId);
+  if (!offer) return { error: 'Rematch is no longer available.' };
+  if (!offer.userIds.includes(userId)) return { error: 'You were not in this game.' };
+  offer.accepted.add(userId);
+  return { offer };
+}
+
+export function clearRematch(offerId) {
+  rematchOffers.delete(offerId);
+}
+
+// A player left the post-game screen (or disconnected): cancel any rematch they
+// were part of. Returns [{ offerId, others }] so the caller can notify the rest.
+export function cancelRematchForUser(userId) {
+  const cancelled = [];
+  for (const [id, offer] of rematchOffers) {
+    if (!offer.userIds.includes(userId)) continue;
+    rematchOffers.delete(id);
+    cancelled.push({ offerId: id, others: offer.userIds.filter((u) => u !== userId) });
+  }
+  return cancelled;
 }

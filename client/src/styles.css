@@ -568,6 +568,8 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
 }
 .overlay-card h3 { margin: 0; font-family: var(--display); font-size: 24px; }
+.overlay-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.overlay-rematch-hint { margin: 0; font-size: 13px; color: var(--amber); font-weight: 600; }
 .overlay-scores { margin: 0; color: var(--muted); font-size: 15px; }
 .overlay-scores b { color: var(--text); font-family: var(--display); }
 .overlay-standings { display: flex; flex-direction: column; gap: 4px; min-width: 200px; }

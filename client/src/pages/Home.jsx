@@ -23,6 +23,7 @@ export default function Home() {
   const [activeRoom, setActiveRoom] = useState(null);
   const [youAreIndex, setYouAreIndex] = useState(null);
   const [gameError, setGameError] = useState('');
+  const [rematch, setRematch] = useState(null); // { accepted:[], waitingOn:[] } post-game
 
   const [lobby, setLobby] = useState(null);
   const [lobbyInvites, setLobbyInvites] = useState([]);
@@ -92,11 +93,17 @@ export default function Home() {
       setLobby(null);
       setLobbyInvites([]);
       setGameError('');
+      setRematch(null);
       setYouAreIndex(youAreIndex);
       setActiveRoom(room);
     });
     socket.on('game:state', ({ room }) => setActiveRoom(room));
     socket.on('game:over', ({ room }) => setActiveRoom(room));
+    socket.on('game:rematch:status', (s) => setRematch(s));
+    socket.on('game:rematch:cancelled', () => {
+      setRematch(null);
+      flash('Opponent left — no rematch.');
+    });
 
     // Multiplayer lobby
     socket.on('lobby:update', ({ lobby }) => setLobby(lobby));
@@ -207,11 +214,17 @@ export default function Home() {
     const res = await emitAck('game:move', { roomId: activeRoom.id, move });
     setGameError(res.error || '');
   };
+  const onRematch = async () => {
+    const res = await emitAck('game:rematch', { roomId: activeRoom.id });
+    if (res.error) return flash(res.error);
+    // game:start (if everyone's in) or game:rematch:status (still waiting) follows.
+  };
   const onLeave = () => {
     getSocket()?.emit('game:leave');
     setActiveRoom(null);
     setYouAreIndex(null);
     setGameError('');
+    setRematch(null);
   };
 
   const onLogout = () => {
@@ -226,6 +239,8 @@ export default function Home() {
         youAreIndex={youAreIndex}
         onMove={onMove}
         onLeave={onLeave}
+        onRematch={onRematch}
+        rematch={rematch}
         error={gameError}
       />
     );

@@ -25,6 +25,9 @@ import {
   createRoom,
   dropFromRealtime,
   hasTurnClock,
+  acceptRematch,
+  clearRematch,
+  cancelRematchForUser,
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
 import { armTurnClock, stopTurnClock } from './turnclock.js';
@@ -236,6 +239,40 @@ export function initSockets(io) {
       ack?.({ ok: true });
     });
 
+    // ---- Rematch ----
+    // Either player can ask to run it back. Once everyone still online has agreed,
+    // rebuild the room with the same game + settings + seats and start it.
+    socket.on('game:rematch', (payload, ack) => {
+      const offerId = String(payload?.roomId || '');
+      if (getRoomIdForUser(me.id)) return ack?.({ error: 'Finish your current game first.' });
+      const { offer, error } = acceptRematch(offerId, me.id);
+      if (error) return ack?.({ error });
+
+      const eligible = offer.userIds.filter((id) => isOnline(id));
+      const ready = eligible.length >= 2 && eligible.every((id) => offer.accepted.has(id));
+      if (ready) {
+        clearRematch(offerId);
+        const { room, error: createErr } = createRoom(offer.gameId, offer.options, eligible);
+        if (createErr) return ack?.({ error: createErr });
+        for (const p of room.players) {
+          emitToUser(io, p.id, 'game:start', { room, youAreIndex: p.index });
+        }
+        if (isRealtimeRoom(room.id)) startMatch(io, room.id);
+        else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
+        return ack?.({ ok: true, roomId: room.id });
+      }
+
+      // still waiting on others — tell everyone who has agreed so far
+      const status = {
+        roomId: offerId,
+        accepted: [...offer.accepted],
+        waitingOn: eligible.filter((id) => !offer.accepted.has(id)),
+        by: me.username,
+      };
+      for (const id of offer.userIds) emitToUser(io, id, 'game:rematch:status', status);
+      ack?.({ ok: true, waiting: true });
+    });
+
     // Leaving a game: realtime N-player drops out; turn-based/1v1 forfeits.
     socket.on('game:leave', () => handleLeave(io, me.id));
 
@@ -255,6 +292,10 @@ export function initSockets(io) {
 // Realtime N-player rooms: dropping out marks the kart gone (match continues, or
 // ends if <2 remain). Other games forfeit to the opponent.
 function handleLeave(io, userId) {
+  // If they were lingering on a post-game rematch offer, cancel it and tell the rest.
+  for (const { offerId, others } of cancelRematchForUser(userId)) {
+    for (const id of others) emitToUser(io, id, 'game:rematch:cancelled', { roomId: offerId });
+  }
   const rid = getRoomIdForUser(userId);
   if (rid && isRealtimeRoom(rid)) {
     const res = dropFromRealtime(userId);

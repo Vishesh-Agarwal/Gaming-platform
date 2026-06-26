@@ -525,6 +525,64 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   padding: 2px 7px;
 }
 
+/* Ultimate Tic-Tac-Toe: 3x3 meta-grid of mini-boards */
+.ttt-ultimate {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  width: min(92vw, 460px);
+  aspect-ratio: 1;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-2);
+}
+.ttt-mini {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 3px;
+  padding: 5px;
+  min-height: 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition: box-shadow 0.15s, background 0.15s;
+}
+.ttt-mini.active {
+  background: color-mix(in srgb, var(--amber) 12%, rgba(0, 0, 0, 0.2));
+  box-shadow: inset 0 0 0 2px var(--amber);
+}
+.ttt-mini.won-x { background: color-mix(in srgb, var(--teal) 16%, transparent); }
+.ttt-mini.won-o { background: color-mix(in srgb, var(--coral) 16%, transparent); }
+.ttt-mini.won-draw { background: rgba(255, 255, 255, 0.05); }
+.ttt-mini.meta-win { box-shadow: inset 0 0 0 2px var(--amber), 0 0 0 2px var(--amber); }
+.ttt-minicell {
+  min-width: 0; min-height: 0; padding: 0;
+  background: var(--panel-solid);
+  border-radius: 5px;
+  display: grid; place-items: center;
+  font-family: var(--display); font-weight: 800;
+  font-size: clamp(12px, 3.4vw, 22px);
+  color: var(--text); box-shadow: none;
+}
+.ttt-minicell:hover { transform: none; box-shadow: none; }
+.ttt-minicell.playable { cursor: pointer; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 45%, transparent); }
+.ttt-minicell.playable:hover { background: var(--surface-2); }
+.ttt-minicell.mark-x { color: var(--teal); }
+.ttt-minicell.mark-o { color: var(--coral); }
+.ttt-minicell:disabled { cursor: default; }
+.ttt-mini-owner {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--display); font-weight: 900; font-size: clamp(40px, 12vw, 88px);
+  opacity: 0.5; pointer-events: none;
+}
+.ttt-mini-owner.mark-x { color: var(--teal); }
+.ttt-mini-owner.mark-o { color: var(--coral); }
+
 /* invite mode picker */
 .mode-picker { margin: 6px 0 14px; }
 .mode-label { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }

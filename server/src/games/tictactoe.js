@@ -31,11 +31,69 @@ const PIECES_PER_PLAYER = 3;
 const MODES = [
   { id: 'classic', name: 'Classic' },
   { id: 'shifting', name: 'Shifting' },
+  { id: 'ultimate', name: 'Ultimate' },
 ];
 
 function createInitialState(options) {
-  const mode = options?.mode === 'shifting' ? 'shifting' : 'classic';
+  const mode = options?.mode === 'shifting' ? 'shifting'
+    : options?.mode === 'ultimate' ? 'ultimate'
+    : 'classic';
+  if (mode === 'ultimate') return createUltimate();
   return { board: Array(9).fill(null), turn: 0, mode };
+}
+
+// ---- Ultimate Tic-Tac-Toe ----
+// Nine small boards in a 3x3 meta-grid. The cell you play in dictates which
+// small board your opponent must play in next; if that board is already decided
+// they may play anywhere. Win three small boards in a line to win the game.
+function createUltimate() {
+  return {
+    mode: 'ultimate',
+    boards: Array.from({ length: 9 }, () => Array(9).fill(null)),
+    won: Array(9).fill(null), // per small board: null | 0 | 1 | 'draw'
+    active: null,             // forced small board (0..8), or null = play anywhere
+    turn: 0,
+  };
+}
+
+function metaWinner(won) {
+  for (const [a, b, c] of LINES) {
+    const v = won[a];
+    if ((v === 0 || v === 1) && v === won[b] && v === won[c]) return v;
+  }
+  return null;
+}
+
+function applyUltimate(state, playerIndex, move) {
+  if (ultimateResult(state).over) return { error: 'Game is already over.' };
+  if (state.turn !== playerIndex) return { error: 'Not your turn.' };
+  const b = move?.board;
+  const c = move?.cell;
+  if (!Number.isInteger(b) || b < 0 || b > 8 || !Number.isInteger(c) || c < 0 || c > 8) {
+    return { error: 'Invalid move.' };
+  }
+  if (state.active !== null && b !== state.active) return { error: 'Play in the highlighted board.' };
+  if (state.won[b] !== null) return { error: 'That board is already finished.' };
+  if (state.boards[b][c] !== null) return { error: 'Cell already taken.' };
+
+  const boards = state.boards.map((bd, i) => (i === b ? bd.slice() : bd));
+  boards[b][c] = playerIndex;
+
+  const won = state.won.slice();
+  const w = lineWinner(boards[b]);
+  if (w !== null) won[b] = w;
+  else if (boards[b].every((x) => x !== null)) won[b] = 'draw';
+
+  // the cell index just played points at the next board; free move if it's decided
+  const active = won[c] !== null ? null : c;
+  return { state: { ...state, boards, won, active, turn: playerIndex === 0 ? 1 : 0 } };
+}
+
+function ultimateResult(state) {
+  const w = metaWinner(state.won);
+  if (w !== null) return { over: true, winner: w, draw: false };
+  if (state.won.every((x) => x !== null)) return { over: true, winner: null, draw: true };
+  return { over: false, winner: null, draw: false };
 }
 
 function lineWinner(board) {
@@ -51,6 +109,7 @@ const inMovePhase = (state) =>
 
 // move = { cell } during placement (and all of classic), or { from, to } when sliding.
 function applyMove(state, playerIndex, move) {
+  if (state.mode === 'ultimate') return applyUltimate(state, playerIndex, move);
   if (getResult(state).over) return { error: 'Game is already over.' };
   if (state.turn !== playerIndex) return { error: 'Not your turn.' };
   const board = state.board;
@@ -85,6 +144,7 @@ function applyMove(state, playerIndex, move) {
 }
 
 function getResult(state) {
+  if (state.mode === 'ultimate') return ultimateResult(state);
   const { board, mode } = state;
 
   const w = lineWinner(board);

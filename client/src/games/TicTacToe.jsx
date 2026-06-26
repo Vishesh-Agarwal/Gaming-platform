@@ -59,7 +59,14 @@ export function Thumbnail() {
   );
 }
 
-export default function TicTacToe({ room, youAreIndex, onMove }) {
+// Mode dispatcher — Ultimate has its own state shape + layout, so it's a
+// separate component (keeps hook usage unconditional in each).
+export default function TicTacToe(props) {
+  if (props.room.state.mode === 'ultimate') return <UltimateTTT {...props} />;
+  return <ClassicTTT {...props} />;
+}
+
+function ClassicTTT({ room, youAreIndex, onMove }) {
   const { board, turn, mode = 'classic' } = room.state;
   const myTurn = room.status === 'playing' && turn === youAreIndex;
 
@@ -144,6 +151,65 @@ export default function TicTacToe({ room, youAreIndex, onMove }) {
               : <span className="ttt-mark" key={`${i}-${v}`}>{SYMBOLS[v]}</span>}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Ultimate Tic-Tac-Toe: nine small boards in a 3x3 meta-grid. Your cell choice
+// sends the opponent to the matching board; win three boards in a line.
+function UltimateTTT({ room, youAreIndex, onMove }) {
+  const { boards, won, active, turn } = room.state;
+  const myTurn = room.status === 'playing' && turn === youAreIndex;
+  // meta-win highlight: treat only owned (0/1) boards as marks
+  const metaLine = room.status === 'over'
+    ? winningCells(won.map((w) => (w === 0 || w === 1 ? w : null)))
+    : [];
+
+  const boardOpen = (b) => won[b] === null && (active === null || active === b);
+  const canPlay = (b, ci) => myTurn && boardOpen(b) && boards[b][ci] === null;
+
+  const status = () => {
+    if (room.status === 'over') return 'Game over';
+    if (!myTurn) return "Opponent's move";
+    return active === null ? 'Your move — play any board' : 'Your move — play the glowing board';
+  };
+
+  return (
+    <div className="ttt">
+      <div className="ttt-turn">
+        You are <b>{SYMBOLS[youAreIndex]}</b>
+        <span className="ttt-mode">Ultimate</span>
+        {' · '}
+        {status()}
+      </div>
+      <div className="ttt-ultimate">
+        {boards.map((bd, b) => {
+          const owner = won[b];
+          const cls = ['ttt-mini'];
+          if (myTurn && boardOpen(b)) cls.push('active');
+          if (owner === 0) cls.push('won-x');
+          else if (owner === 1) cls.push('won-o');
+          else if (owner === 'draw') cls.push('won-draw');
+          if (metaLine.includes(b)) cls.push('meta-win');
+          return (
+            <div key={b} className={cls.join(' ')}>
+              {bd.map((v, ci) => (
+                <button
+                  key={ci}
+                  className={`ttt-minicell${v !== null ? ` filled ${v === 0 ? 'mark-x' : 'mark-o'}` : ''}${canPlay(b, ci) ? ' playable' : ''}`}
+                  disabled={!canPlay(b, ci)}
+                  onClick={() => canPlay(b, ci) && onMove({ board: b, cell: ci })}
+                >
+                  {v !== null ? <span className="ttt-mark" key={`${ci}-${v}`}>{SYMBOLS[v]}</span> : null}
+                </button>
+              ))}
+              {owner === 0 || owner === 1 ? (
+                <span className={`ttt-mini-owner ${owner === 0 ? 'mark-x' : 'mark-o'}`}>{SYMBOLS[owner]}</span>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

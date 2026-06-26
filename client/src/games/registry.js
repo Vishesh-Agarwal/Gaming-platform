@@ -24,6 +24,7 @@ const registry = {
     modes: [
       { id: 'classic', name: 'Classic', hint: 'Standard 3-in-a-row.' },
       { id: 'shifting', name: 'Shifting', hint: 'Place 3, then slide to make a line.' },
+      { id: 'ultimate', name: 'Ultimate', hint: '9 boards — your move sends them to the next.' },
     ],
   },
   ghostrider: {

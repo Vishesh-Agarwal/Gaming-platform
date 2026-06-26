@@ -52,6 +52,10 @@ const registry = {
     thumbnail: KartsThumb,
     accent: '#ff5d6c',
     maxPlayers: 4,
+    modes: [
+      { id: 'ffa', name: 'Free-for-all', hint: 'Most kills wins.' },
+      { id: 'teams', name: 'Teams', hint: 'Two squads — team kills decide it.' },
+    ],
   },
   ludo: {
     name: 'Ludo',
@@ -59,6 +63,10 @@ const registry = {
     thumbnail: LudoThumb,
     accent: '#e4453a',
     maxPlayers: 4,
+    modes: [
+      { id: 'classic', name: 'Classic', hint: 'Every player for themselves.' },
+      { id: 'teams', name: '2v2 Teams', hint: 'Needs 4 players — partners sit opposite.' },
+    ],
   },
 };
 

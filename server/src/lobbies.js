@@ -65,6 +65,30 @@ export function createLobby(user, gameId, options) {
   return { lobby };
 }
 
+// Quick Play matchmaking: drop the user into an open PUBLIC lobby for the game
+// (joining the fullest one to fill matches fast), or open a fresh public lobby if
+// none exist. Private friend/code lobbies are never matched into.
+// Returns { lobby, joined } or { error }.
+export function quickPlay(user, gameId) {
+  const game = getGame(gameId);
+  if (!game) return { error: 'Unknown game.' };
+  let best = null;
+  for (const lobby of lobbies.values()) {
+    if (!lobby.public || lobby.gameId !== gameId) continue;
+    if (lobby.members.length >= lobby.maxPlayers) continue;
+    if (lobby.members.some((m) => m.id === user.id)) continue;
+    if (!best || lobby.members.length > best.members.length) best = lobby;
+  }
+  if (best) {
+    const { lobby, error } = joinLobby(best.id, user);
+    if (!error) return { lobby, joined: true };
+  }
+  const { lobby, error } = createLobby(user, gameId, null);
+  if (error) return { error };
+  lobby.public = true; // open to matchmaking
+  return { lobby, joined: false };
+}
+
 // idOrCode: a lobbyId or a room code. Returns { lobby } or { error }.
 export function joinLobby(idOrCode, user) {
   const key = String(idOrCode || '');
@@ -130,14 +154,25 @@ export function startLobby(hostId) {
   if (lobby.hostId !== hostId) return { error: 'Only the host can start.' };
   const game = getGame(lobby.gameId);
   const min = Math.max(2, game?.minPlayers || 2);
-  if (lobby.members.length < min) return { error: `Need at least ${min} players.` };
+  // AI karts (Smash Karts) count toward the minimum, so a single human can start
+  // a match against bots. Clamp to the game's seat cap.
+  const max = game?.maxPlayers || min;
+  const bots = Math.max(0, Math.min(Math.floor(Number(lobby.options?.bots) || 0), max - lobby.members.length));
+  if (lobby.members.length < 1) return { error: 'Need at least one player.' };
+  if (lobby.members.length + bots < min) return { error: `Need at least ${min} players (add bots to fill in).` };
   if (!lobby.members.every((m) => m.ready)) return { error: 'Everyone must be ready.' };
 
   if (lobby.options?.mode === 'teams') {
-    const a = lobby.members.filter((m) => (m.team ?? 0) === 0).length;
-    const b = lobby.members.filter((m) => (m.team ?? 0) === 1).length;
-    if (a === 0 || b === 0 || Math.abs(a - b) > 1) {
-      return { error: 'Teams must be balanced (and non-empty).' };
+    if (lobby.gameId === 'ludo') {
+      // Ludo teams are positional (partners sit opposite) — needs a full table.
+      if (lobby.members.length !== 4) return { error: '2v2 Teams needs exactly 4 players.' };
+    } else {
+      // manually-assigned teams (Smash Karts) must be balanced and non-empty
+      const a = lobby.members.filter((m) => (m.team ?? 0) === 0).length;
+      const b = lobby.members.filter((m) => (m.team ?? 0) === 1).length;
+      if (a === 0 || b === 0 || Math.abs(a - b) > 1) {
+        return { error: 'Teams must be balanced (and non-empty).' };
+      }
     }
   }
   const userIds = lobby.members.map((m) => m.id);

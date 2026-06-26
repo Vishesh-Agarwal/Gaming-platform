@@ -279,6 +279,27 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   transition: opacity 0.16s, transform 0.16s;
 }
 .game-card:hover .play-cta { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.quick-cta {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 3;
+  transform: translate(-50%, 6px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--teal);
+  border: 1px solid color-mix(in srgb, var(--teal) 45%, transparent);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--shadow-1);
+  transition: opacity 0.16s, transform 0.16s, background 0.16s;
+}
+.game-card:hover .quick-cta { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.quick-cta:hover { background: color-mix(in srgb, var(--teal) 22%, var(--surface-2)); }
 .game-name {
   position: relative;
   z-index: 1;
@@ -1226,6 +1247,26 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .ludo-place.out { color: #ff5b5b; }
 .ludo-misses { color: #ff9c4a; font-size: 11px; font-variant-numeric: tabular-nums; }
 .ludo-rank.out { opacity: 0.55; }
+.ludo-team-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ludo-team-tag {
+  display: inline-grid;
+  place-items: center;
+  width: 15px; height: 15px;
+  margin-left: 4px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
 
 @media (max-width: 720px) {
   .ludo-table { padding: 78px 8px; }

@@ -191,6 +191,12 @@ export default function Home() {
     setLobby(res.lobby);
     setLobbyInvites((prev) => prev.filter((i) => i.lobbyId !== res.lobby.id));
   };
+  const onQuickPlay = async (gameId) => {
+    const res = await emitAck('lobby:quick', { gameId });
+    if (res.error) return flash(res.error);
+    setLobby(res.lobby);
+    flash(res.joined ? 'Matched into an open lobby!' : 'Opened a lobby — waiting for players…');
+  };
   const onLeaveLobby = async () => {
     await emitAck('lobby:leave', {});
     setLobby(null);
@@ -203,6 +209,9 @@ export default function Home() {
   };
   const onSetLobbyMode = async (mode) => {
     await emitAck('lobby:options', { options: { mode } });
+  };
+  const onSetLobbyBots = async (bots) => {
+    await emitAck('lobby:options', { options: { bots } });
   };
   const onSetLobbyTeam = async (team) => {
     await emitAck('lobby:team', { team });
@@ -276,11 +285,13 @@ export default function Home() {
       onAcceptInvite={onAcceptInvite}
       onDeclineInvite={onDeclineInvite}
       onCreateLobby={onCreateLobby}
+      onQuickPlay={onQuickPlay}
       onJoinLobby={onJoinLobby}
       onLeaveLobby={onLeaveLobby}
       onLobbyReady={onLobbyReady}
       onSetLobbyMap={onSetLobbyMap}
       onSetLobbyMode={onSetLobbyMode}
+      onSetLobbyBots={onSetLobbyBots}
       onSetLobbyTeam={onSetLobbyTeam}
       onInviteToLobby={onInviteToLobby}
       onStartLobby={onStartLobby}

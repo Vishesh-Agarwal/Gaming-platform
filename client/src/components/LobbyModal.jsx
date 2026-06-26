@@ -3,14 +3,18 @@
 import { useState } from 'react';
 import Modal from './Modal.jsx';
 
-export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave, maps, onSetMap, modes, onSetMode, onSetTeam }) {
+export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave, maps, onSetMap, modes, onSetMode, onSetBots, botCap = 0, manualTeams = false, onSetTeam }) {
   const [copied, setCopied] = useState(false);
   const isHost = lobby.hostId === currentUser.id;
   const mode = lobby.options?.mode || 'ffa';
   const me = lobby.members.find((m) => m.id === currentUser.id);
   const memberIds = new Set(lobby.members.map((m) => m.id));
   const invitable = friends.filter((f) => onlineIds.has(f.id) && !memberIds.has(f.id));
-  const allReady = lobby.members.length >= 2 && lobby.members.every((m) => m.ready);
+  // Bots count toward the 2-player minimum, so a lone host can start vs AI.
+  const bots = Math.min(lobby.options?.bots || 0, botCap);
+  const allReady = lobby.members.length >= 1
+    && lobby.members.length + bots >= 2
+    && lobby.members.every((m) => m.ready);
 
   const copyCode = () => {
     navigator.clipboard?.writeText(lobby.code).then(() => {
@@ -73,7 +77,27 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
         </div>
       )}
 
-      {modes && mode === 'teams' && (
+      {botCap > 0 && (
+        <div className="lb-map">
+          <span className="mode-label">Bots</span>
+          <select
+            value={Math.min(lobby.options?.bots || 0, botCap)}
+            disabled={!isHost}
+            onChange={(e) => onSetBots(Number(e.target.value))}
+          >
+            {Array.from({ length: botCap + 1 }, (_, n) => (
+              <option key={n} value={n}>{n === 0 ? 'None' : `${n} bot${n > 1 ? 's' : ''}`}</option>
+            ))}
+          </select>
+          {!isHost && <span className="muted lb-map-hint">host adds bots</span>}
+        </div>
+      )}
+
+      {modes && mode === 'teams' && !manualTeams && (
+        <p className="lb-note muted">2v2 — partners are seated opposite automatically. Needs exactly 4 players.</p>
+      )}
+
+      {modes && mode === 'teams' && manualTeams && (
         <div className="lb-teams">
           {[0, 1].map((t) => (
             <div key={t} className="lb-team">
@@ -117,7 +141,7 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
         <button className="ghost" onClick={close}>Leave</button>
       </div>
       {isHost && !allReady && (
-        <p className="lb-note muted">Start unlocks when there are at least 2 players and everyone is ready.</p>
+        <p className="lb-note muted">Start unlocks when there are at least 2 racers (add bots to fill in) and everyone is ready.</p>
       )}
     </Modal>
   );

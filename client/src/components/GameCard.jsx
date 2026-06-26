@@ -2,7 +2,7 @@
 // toward the cursor and moves a highlight; click opens the invite flow.
 import { useRef } from 'react';
 
-export default function GameCard({ game, onClick }) {
+export default function GameCard({ game, onClick, onQuickPlay }) {
   const Thumb = game.thumbnail;
   const ref = useRef(null);
 
@@ -36,6 +36,18 @@ export default function GameCard({ game, onClick }) {
       <div className="game-thumb">
         {Thumb ? <Thumb /> : <div className="game-thumb-fallback">🎮</div>}
         <span className="play-cta">▶ Play</span>
+        {onQuickPlay && (
+          <span
+            className="quick-cta"
+            role="button"
+            tabIndex={0}
+            title="Match with anyone online"
+            onClick={(e) => { e.stopPropagation(); onQuickPlay(game); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onQuickPlay(game); } }}
+          >
+            ⚡ Quick Play
+          </span>
+        )}
       </div>
       <div className="game-name">
         <span>{game.name}</span>

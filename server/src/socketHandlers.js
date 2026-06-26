@@ -17,7 +17,6 @@ import {
   getInvite,
   makeMove,
   forfeit,
-  getOpponentId,
   getRoomPlayerIds,
   recordFinish,
   isRealtimeRoom,
@@ -34,6 +33,7 @@ import { startMatch, stopMatch } from './realtime.js';
 import { armTurnClock, stopTurnClock } from './turnclock.js';
 import {
   createLobby,
+  quickPlay,
   joinLobby,
   leaveLobby,
   setReady,
@@ -138,6 +138,14 @@ export function initSockets(io) {
       ack?.({ ok: true, lobby: publicLobby(lobby) });
     });
 
+    socket.on('lobby:quick', (payload, ack) => {
+      if (getRoomIdForUser(me.id)) return ack?.({ error: 'Finish your current game first.' });
+      const { lobby, joined, error } = quickPlay(me, String(payload?.gameId || ''));
+      if (error) return ack?.({ error });
+      if (joined) broadcastLobby(lobby); // tell the others someone joined
+      ack?.({ ok: true, lobby: publicLobby(lobby), joined });
+    });
+
     socket.on('lobby:join', (payload, ack) => {
       if (getRoomIdForUser(me.id)) return ack?.({ error: 'Finish your current game first.' });
       const { lobby, error } = joinLobby(payload?.lobbyId || payload?.code, me);
@@ -220,10 +228,13 @@ export function initSockets(io) {
     });
 
     // ---- Realtime gameplay (Ghost Rider) ----
-    // Relay this player's car position to the opponent (no server-side physics).
+    // Relay this player's car position to every other racer (no server-side
+    // physics). Broadcasting to all (not just one opponent) supports N-player races.
     socket.on('game:rt:state', (payload) => {
-      const oppId = getOpponentId(payload?.roomId, me.id);
-      if (oppId) emitToUser(io, oppId, 'game:rt:ghost', { from: me.id, s: payload?.s });
+      const roomId = payload?.roomId || getRoomIdForUser(me.id);
+      for (const pid of getRoomPlayerIds(roomId)) {
+        if (pid !== me.id) emitToUser(io, pid, 'game:rt:ghost', { from: me.id, s: payload?.s });
+      }
     });
 
     // Server-authoritative realtime (Smash Karts): buffer the player's input.

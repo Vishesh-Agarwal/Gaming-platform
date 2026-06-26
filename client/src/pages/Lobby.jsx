@@ -34,11 +34,13 @@ export default function Lobby({
   onAcceptInvite,
   onDeclineInvite,
   onCreateLobby,
+  onQuickPlay,
   onJoinLobby,
   onLeaveLobby,
   onLobbyReady,
   onSetLobbyMap,
   onSetLobbyMode,
+  onSetLobbyBots,
   onSetLobbyTeam,
   onInviteToLobby,
   onStartLobby,
@@ -155,10 +157,10 @@ export default function Lobby({
       <div className="app-body" style={{ '--chat-w': `${chatWidth}px` }}>
         <main className="games-area">
           <h2>Games</h2>
-          <p className="muted">Pick a game, then invite a friend to play.</p>
+          <p className="muted">Pick a game to invite a friend, or hit ⚡ Quick Play to match with anyone online.</p>
           <div className="games-grid">
             {availableGames.map((g) => (
-              <GameCard key={g.id} game={g} onClick={pickGame} />
+              <GameCard key={g.id} game={g} onClick={pickGame} onQuickPlay={(game) => onQuickPlay(game.id)} />
             ))}
           </div>
         </main>
@@ -209,8 +211,11 @@ export default function Lobby({
           onLeave={onLeaveLobby}
           maps={lobby.gameId === 'karts' ? listMaps() : null}
           onSetMap={onSetLobbyMap}
-          modes={lobby.gameId === 'karts' ? [{ id: 'ffa', name: 'Free-for-all' }, { id: 'teams', name: 'Teams' }] : null}
+          modes={availableGames.find((g) => g.id === lobby.gameId)?.modes || null}
           onSetMode={onSetLobbyMode}
+          onSetBots={onSetLobbyBots}
+          botCap={lobby.gameId === 'karts' ? Math.max(0, lobby.maxPlayers - lobby.members.length) : 0}
+          manualTeams={lobby.gameId === 'karts'}
           onSetTeam={onSetLobbyTeam}
         />
       )}

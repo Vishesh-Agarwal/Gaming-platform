@@ -1,20 +1,37 @@
 :root {
-  --bg: #08060f;
-  --panel: rgba(22, 18, 38, 0.55);
-  --panel-solid: #120e1f;
-  --border: rgba(255, 255, 255, 0.10);
+  /* Cozy dark depth — warm charcoal surfaces lit by amber + teal, built from soft
+     elevation (layered shadows) instead of neon glow. */
+  --bg: #18151c;            /* warm charcoal base */
+  --bg-soft: #1d1923;       /* gentle vignette tone */
+  --surface: #241f2b;       /* raised card/panel */
+  --surface-2: #2c2636;     /* hover / nested surface */
+  --panel: rgba(36, 31, 43, 0.74);
+  --panel-solid: #241f2b;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
   --glass: rgba(255, 255, 255, 0.04);
-  --text: #eef0f8;
-  --muted: #9aa0bd;
-  --cyan: #22e0ff;
-  --purple: #8b5cff;
-  --pink: #ff4d8d;
-  --amber: #ffd24a;
-  --green: #27e0a3;
-  --red: #ff5d6c;
-  --accent: #8b5cff;
-  --grad: linear-gradient(120deg, #22e0ff, #8b5cff, #ff4d8d);
-  --grad-2: linear-gradient(120deg, #22e0ff, #8b5cff);
+  --text: #f1ece5;          /* warm off-white */
+  --muted: #a39aa8;         /* muted warm gray */
+
+  --amber: #f2b049;         /* primary warm accent */
+  --teal: #3fc7ad;          /* secondary accent */
+  --coral: #e8806a;
+  --green: #5fbf86;
+  --red: #e85f70;
+  --accent: var(--amber);
+
+  /* layered, colorless elevation shadows (the "depth" of cozy depth) */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.28);
+  --shadow-2: 0 6px 16px rgba(0, 0, 0, 0.36), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-3: 0 18px 40px rgba(0, 0, 0, 0.5), 0 6px 14px rgba(0, 0, 0, 0.4);
+
+  /* legacy colour-named aliases so existing rules adopt the warm palette */
+  --cyan: var(--teal);
+  --purple: var(--amber);
+  --pink: var(--coral);
+
+  --grad: linear-gradient(120deg, #f2b049, #e8806a);
+  --grad-2: linear-gradient(125deg, #f4b855, #e89446);
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --display: 'Chakra Petch', var(--font);
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -29,26 +46,22 @@ body {
   color: var(--text);
   min-height: 100vh;
   background:
-    radial-gradient(900px 600px at 10% -8%, rgba(139, 92, 255, 0.20), transparent 60%),
-    radial-gradient(800px 600px at 102% -2%, rgba(34, 224, 255, 0.14), transparent 55%),
-    radial-gradient(900px 700px at 50% 116%, rgba(255, 77, 141, 0.14), transparent 55%),
-    var(--bg);
+    radial-gradient(1100px 720px at 18% -10%, rgba(242, 176, 73, 0.10), transparent 60%),
+    radial-gradient(1000px 760px at 100% 8%, rgba(63, 199, 173, 0.07), transparent 58%),
+    linear-gradient(180deg, #1c1823, var(--bg) 60%);
   background-attachment: fixed;
 }
 
-/* ambient backdrop: drifting neon blobs + faint perspective grid */
+/* ambient backdrop: a soft warm wash + faint fabric-like texture for depth */
 body::before {
   content: '';
   position: fixed;
-  inset: -20%;
-  z-index: -2;
+  inset: 0;
+  z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(closest-side, rgba(139, 92, 255, 0.30), transparent) 12% 18% / 46vw 46vw no-repeat,
-    radial-gradient(closest-side, rgba(34, 224, 255, 0.22), transparent) 84% 12% / 40vw 40vw no-repeat,
-    radial-gradient(closest-side, rgba(255, 77, 141, 0.20), transparent) 70% 88% / 44vw 44vw no-repeat;
-  filter: blur(40px);
-  animation: drift 26s var(--ease) infinite alternate;
+    radial-gradient(60% 50% at 50% 0%, rgba(255, 255, 255, 0.025), transparent 70%),
+    radial-gradient(80% 60% at 50% 120%, rgba(0, 0, 0, 0.35), transparent 70%);
 }
 body::after {
   content: '';
@@ -56,19 +69,12 @@ body::after {
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  opacity: 0.5;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 56px 56px;
-  -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 35%, transparent 78%);
-  mask-image: radial-gradient(120% 80% at 50% 0%, #000 35%, transparent 78%);
-}
-@keyframes drift {
-  from { transform: translate3d(-2%, -1%, 0) scale(1); }
-  to { transform: translate3d(3%, 2%, 0) scale(1.08); }
-}
-@media (prefers-reduced-motion: reduce) {
-  body::before { animation: none; }
+    radial-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 4px 4px;
+  -webkit-mask-image: radial-gradient(130% 90% at 50% 0%, #000 45%, transparent 85%);
+  mask-image: radial-gradient(130% 90% at 50% 0%, #000 45%, transparent 85%);
 }
 
 /* ---- Buttons / inputs ---- */
@@ -80,12 +86,12 @@ button {
   font-family: var(--font);
   font-weight: 600;
   font-size: 14px;
-  color: #fff;
+  color: #2a1c06;
   background: var(--grad-2);
-  box-shadow: 0 4px 16px rgba(139, 92, 255, 0.35);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s, background 0.12s;
+  box-shadow: var(--shadow-1);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s, filter 0.12s;
 }
-button:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(139, 92, 255, 0.5); }
+button:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); filter: brightness(1.05); }
 button:active { transform: translateY(0); }
 button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; transform: none; }
 button.ghost {
@@ -111,7 +117,7 @@ input {
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 input::placeholder { color: #6b7193; }
-input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 255, 0.25); }
+input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent); }
 
 .muted { color: var(--muted); font-size: 13px; }
 .error-banner {
@@ -166,9 +172,10 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   align-items: center;
   gap: 12px;
   padding: 14px 22px;
-  background: rgba(10, 11, 24, 0.55);
+  background: rgba(28, 24, 34, 0.7);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
   z-index: 40;
 }
 .brand {
@@ -181,7 +188,6 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 14px rgba(139, 92, 255, 0.45));
 }
 .spacer { flex: 1; }
 .username { font-size: 14px; color: var(--muted); }
@@ -189,8 +195,8 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 
 .notice {
   margin: 12px 22px 0;
-  background: rgba(139, 92, 255, 0.14);
-  border: 1px solid var(--purple);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
   border-radius: 10px;
   padding: 9px 13px;
   font-size: 14px;
@@ -204,7 +210,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 }
 .resizer { background: var(--border); cursor: col-resize; transition: background 0.12s; }
 .resizer:hover,
-.resizer:active { background: var(--purple); box-shadow: 0 0 12px rgba(139, 92, 255, 0.6); }
+.resizer:active { background: color-mix(in srgb, var(--amber) 60%, transparent); }
 
 /* ---- Games grid ---- */
 .games-area { padding: 28px; overflow-y: auto; }
@@ -220,12 +226,11 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   padding: 0;
   text-align: left;
   color: var(--text);
-  background: var(--panel);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 18px;
   overflow: hidden;
-  backdrop-filter: blur(10px);
-  box-shadow: none;
+  box-shadow: var(--shadow-1);
   transform: perspective(820px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
   transform-style: preserve-3d;
   transition: transform 0.3s var(--ease), box-shadow 0.25s var(--ease), border-color 0.25s var(--ease);
@@ -239,13 +244,13 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   z-index: 3;
   pointer-events: none;
   opacity: 0;
-  background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--card-accent) 28%, transparent), transparent 60%);
+  background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--card-accent) 18%, transparent), transparent 60%);
   transition: opacity 0.25s var(--ease);
 }
 .game-card:hover {
   transform: perspective(820px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-6px);
-  border-color: var(--card-accent);
-  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.55), 0 10px 40px -8px var(--card-accent);
+  border-color: color-mix(in srgb, var(--card-accent) 55%, var(--border));
+  box-shadow: var(--shadow-3);
 }
 .game-card:hover::before { opacity: 1; }
 .game-thumb { position: relative; aspect-ratio: 1 / 1; line-height: 0; }
@@ -253,7 +258,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(7, 7, 16, 0.85), transparent 55%);
+  background: linear-gradient(to top, rgba(24, 21, 28, 0.9), transparent 55%);
 }
 .game-thumb-fallback { display: grid; place-items: center; height: 100%; font-size: 60px; }
 .play-cta {
@@ -265,12 +270,12 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   padding: 9px 18px;
   border-radius: 999px;
   background: var(--grad);
-  color: #fff;
-  font-weight: 700;
+  color: #2a1c06;
+  font-weight: 800;
   font-size: 13px;
   opacity: 0;
   pointer-events: none;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-2);
   transition: opacity 0.16s, transform 0.16s;
 }
 .game-card:hover .play-cta { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -290,8 +295,9 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   font-family: var(--font);
   font-size: 11px;
   font-weight: 700;
-  color: var(--cyan);
-  border: 1px solid rgba(34, 224, 255, 0.4);
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--teal) 40%, transparent);
   border-radius: 999px;
   padding: 2px 8px;
 }
@@ -339,18 +345,18 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .dot.online { background: var(--green); animation: pulse 2s infinite; }
 .dot.offline { background: #4a4f63; }
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(39, 224, 163, 0.5); }
-  70% { box-shadow: 0 0 0 6px rgba(39, 224, 163, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(39, 224, 163, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(95, 191, 134, 0.45); }
+  70% { box-shadow: 0 0 0 6px rgba(95, 191, 134, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(95, 191, 134, 0); }
 }
 .badge {
-  background: var(--pink);
+  background: var(--coral);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
   border-radius: 999px;
   padding: 1px 7px;
-  box-shadow: 0 0 10px rgba(255, 77, 141, 0.6);
+  box-shadow: var(--shadow-1);
 }
 
 /* ---- Chat panel ---- */
@@ -382,7 +388,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   line-height: 1.35;
   word-break: break-word;
 }
-.bubble.mine { align-self: flex-end; background: var(--grad-2); color: #fff; border-bottom-right-radius: 4px; }
+.bubble.mine { align-self: flex-end; background: var(--grad-2); color: #2a1c06; font-weight: 500; border-bottom-right-radius: 4px; }
 .bubble.theirs { align-self: flex-start; background: rgba(255, 255, 255, 0.07); border-bottom-left-radius: 4px; }
 .chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
 .chat-input input { flex: 1; min-width: 0; }
@@ -400,15 +406,16 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   gap: 8px;
 }
 .invite-card {
-  background: var(--panel-solid);
-  border: 1px solid var(--purple);
+  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-left: 3px solid var(--amber);
   border-radius: 14px;
   padding: 14px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(139, 92, 255, 0.4);
+  box-shadow: var(--shadow-3);
   animation: dropin 0.25s ease;
 }
 @keyframes dropin {
@@ -421,7 +428,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(3, 4, 12, 0.7);
+  background: rgba(15, 12, 18, 0.72);
   backdrop-filter: blur(6px);
   display: grid;
   place-items: center;
@@ -468,7 +475,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   display: grid;
   place-items: center;
   min-height: 240px;
-  color: #9fb4ff;
+  color: var(--muted);
   font-family: var(--display, sans-serif);
   letter-spacing: 0.04em;
 }
@@ -532,8 +539,8 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
   font-weight: 600;
   box-shadow: none;
 }
-.mode-chip:hover { border-color: var(--purple); }
-.mode-chip.active { border-color: var(--purple); background: rgba(139, 92, 255, 0.18); box-shadow: 0 0 16px rgba(139, 92, 255, 0.3); }
+.mode-chip:hover { border-color: color-mix(in srgb, var(--amber) 55%, var(--border)); }
+.mode-chip.active { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 16%, transparent); box-shadow: var(--shadow-1); }
 .mode-hint { margin: 8px 0 0; font-size: 13px; }
 
 /* invite numeric option stepper */
@@ -548,7 +555,7 @@ input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 2
 .stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
 .stepper-val { font-family: var(--display); font-size: 20px; min-width: 24px; text-align: center; }
 
-.overlay { position: fixed; inset: 0; background: rgba(3, 4, 12, 0.7); backdrop-filter: blur(6px); display: grid; place-items: center; }
+.overlay { position: fixed; inset: 0; background: rgba(15, 12, 18, 0.72); backdrop-filter: blur(6px); display: grid; place-items: center; }
 .overlay-card {
   background: var(--panel-solid);
   border: 1px solid var(--border);

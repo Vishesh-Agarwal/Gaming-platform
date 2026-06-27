@@ -16,6 +16,7 @@ import artillery from './artillery.js';
 import hangman from './hangman.js';
 import karts from './karts.js';
 import ludo from './ludo.js';
+import carrom from './carrom.js';
 
 const games = new Map();
 
@@ -43,3 +44,4 @@ register(artillery);
 register(hangman);
 register(karts);
 register(ludo);
+register(carrom);

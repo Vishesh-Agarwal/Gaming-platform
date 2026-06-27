@@ -200,6 +200,20 @@ function resolvePoints(state, seat, frames, finalDiscs, pocketed) {
 }
 
 export function getResult(state) {
+  const scores = state.scores;
+  if (state.mode === 'points') return pointsResult(state);
+  for (const seat of [0, 1]) {
+    const col = state.colors[seat];
+    if (!col) continue;
+    if (state.pocketedByColor[col] >= state.coinsPerColor && state.queenCoveredBy === seat) {
+      return { over: true, winner: seat, draw: false, scores };
+    }
+  }
+  return { over: false, winner: null, draw: false, scores };
+}
+
+// Real implementation lands in Task 7; stub keeps the module loadable.
+function pointsResult(state) {
   return { over: false, winner: null, draw: false, scores: state.scores };
 }
 

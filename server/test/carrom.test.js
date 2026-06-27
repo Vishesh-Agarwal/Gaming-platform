@@ -128,3 +128,28 @@ test('pocketing the queen without covering returns her on a failed next shot', (
   assert.equal(r.state.coins.filter((c) => c.color === 'queen').length, 1);
   assert.equal(r.state.turn, 1);
 });
+
+// ---- Task 6: getResult + classic win condition ----
+
+test('classic is won when all your coins are pocketed and the queen is covered', () => {
+  const s = freshClassic();
+  s.colors = { 0: 'white', 1: 'black' };
+  s.coinsPerColor = 1;            // shrink the win bar for a focused test
+  s.queenOnBoard = false;
+  s.queenAwaitingCover = 0;       // queen tentatively pocketed by seat 0
+  s.coins = [{ id: 5, color: 'white', x: RAIL_X, y: NEAR_Y }]; // last white coin, by a pocket
+  const { state } = applyMove(s, 0, STRAIGHT_UP); // pocket it -> covers queen + clears color
+  const res = carrom.getResult(state);
+  assert.equal(res.over, true);
+  assert.equal(res.winner, 0);
+  assert.deepEqual(res.scores, [1, 0]);
+});
+
+test('classic is not over while the queen is uncovered', () => {
+  const s = createInitialState({ mode: 'classic' }, 2);
+  s.colors = { 0: 'white', 1: 'black' };
+  s.pocketedByColor = { white: 9, black: 0 };
+  s.queenCoveredBy = null;
+  const res = carrom.getResult(s);
+  assert.equal(res.over, false);
+});

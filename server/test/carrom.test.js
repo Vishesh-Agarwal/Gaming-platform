@@ -153,3 +153,44 @@ test('classic is not over while the queen is uncovered', () => {
   const res = carrom.getResult(s);
   assert.equal(res.over, false);
 });
+
+// ---- Task 7: Points Race mode ----
+
+function freshPoints() {
+  const s = createInitialState({ mode: 'points' }, 2);
+  s.coins = [];
+  return s;
+}
+
+test('points: pocketing a coin scores 1 and keeps the turn', () => {
+  const s = freshPoints();
+  s.coins = [{ id: 5, color: 'white', x: RAIL_X, y: NEAR_Y }];
+  const { state } = applyMove(s, 0, STRAIGHT_UP);
+  assert.equal(state.scores[0], 1);
+  assert.equal(state.turn, 0);
+});
+
+test('points: queen is worth 3', () => {
+  const s = freshPoints();
+  s.coins = [{ id: 0, color: 'queen', x: RAIL_X, y: NEAR_Y }];
+  const { state } = applyMove(s, 0, STRAIGHT_UP);
+  assert.equal(state.scores[0], 3);
+});
+
+test('points: sinking the striker costs a point and passes the turn', () => {
+  const s = freshPoints();
+  s.scores = [2, 0];
+  const { state } = applyMove(s, 0, STRAIGHT_UP); // empty board -> striker sinks
+  assert.equal(state.scores[0], 1);
+  assert.equal(state.turn, 1);
+});
+
+test('points: reaching the target ends the game', () => {
+  const s = freshPoints();
+  s.target = 3;
+  s.coins = [{ id: 0, color: 'queen', x: RAIL_X, y: NEAR_Y }];
+  const { state } = applyMove(s, 0, STRAIGHT_UP);
+  const res = carrom.getResult(state);
+  assert.equal(res.over, true);
+  assert.equal(res.winner, 0);
+});

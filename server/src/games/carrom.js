@@ -195,8 +195,33 @@ function resolveClassic(state, seat, striker, frames, finalDiscs, pocketed) {
 }
 
 function resolvePoints(state, seat, frames, finalDiscs, pocketed) {
-  // real implementation in Task 7
-  return { ...state, turn: 1 - seat, seq: state.seq + 1, lastShot: { frames, pocketed, foul: null, by: seat } };
+  const scores = state.scores.slice();
+  const strikerPocketed = pocketed.some((p) => p.id === 'striker');
+  const coinPockets = pocketed.filter((p) => p.id !== 'striker');
+  const newCoins = finalDiscs
+    .filter((d) => d.id !== 'striker')
+    .map((d) => ({ id: d.id, color: d.color, x: Math.round(d.x), y: Math.round(d.y) }));
+
+  let gained = 0;
+  for (const p of coinPockets) gained += p.color === 'queen' ? 3 : 1;
+  scores[seat] += gained;
+
+  let foul = null;
+  if (strikerPocketed) { foul = 'striker'; scores[seat] = Math.max(0, scores[seat] - 1); }
+
+  const continues = !strikerPocketed && coinPockets.length > 0;
+  const next = {
+    ...state,
+    coins: newCoins,
+    striker: { x: finalDiscs.find((d) => d.id === 'striker')?.x ?? state.striker.x, y: baselineY(continues ? seat : 1 - seat) },
+    turn: continues ? seat : 1 - seat,
+    scores,
+    lastShot: { frames, pocketed, foul, by: seat },
+    seq: state.seq + 1,
+  };
+  const r = getResult(next);
+  if (r.over) { next.phase = 'gameover'; next.winner = r.winner; next.draw = r.draw; }
+  return next;
 }
 
 export function getResult(state) {
@@ -212,8 +237,14 @@ export function getResult(state) {
   return { over: false, winner: null, draw: false, scores };
 }
 
-// Real implementation lands in Task 7; stub keeps the module loadable.
 function pointsResult(state) {
+  const [a, b] = state.scores;
+  if (a >= state.target) return { over: true, winner: 0, draw: false, scores: state.scores };
+  if (b >= state.target) return { over: true, winner: 1, draw: false, scores: state.scores };
+  if (state.coins.length === 0) {
+    if (a === b) return { over: true, winner: null, draw: true, scores: state.scores };
+    return { over: true, winner: a > b ? 0 : 1, draw: false, scores: state.scores };
+  }
   return { over: false, winner: null, draw: false, scores: state.scores };
 }
 

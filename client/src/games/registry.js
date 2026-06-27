@@ -7,6 +7,7 @@ import GhostRider, { Thumbnail as GhostRiderThumb } from './GhostRider.jsx';
 import Artillery, { Thumbnail as ArtilleryThumb } from './Artillery.jsx';
 import Hangman, { Thumbnail as HangmanThumb } from './Hangman.jsx';
 import Ludo, { Thumbnail as LudoThumb } from './Ludo.jsx';
+import Carrom, { Thumbnail as CarromThumb } from './Carrom.jsx';
 import { Thumbnail as KartsThumb } from './KartsThumb.jsx';
 
 // Karts pulls in Three.js (~550 KB). Lazy-load it so that weight is a separate
@@ -66,6 +67,18 @@ const registry = {
     modes: [
       { id: 'classic', name: 'Classic', hint: 'Every player for themselves.' },
       { id: 'teams', name: '2v2 Teams', hint: 'Needs 4 players — partners sit opposite.' },
+    ],
+  },
+  carrom: {
+    name: 'Carrom',
+    Component: Carrom,
+    thumbnail: CarromThumb,
+    accent: '#caa46a',
+    modes: [
+      { id: 'classic', name: 'Classic', hint: 'Pocket all your coins, then cover the Queen.' },
+      { id: 'points', name: 'Points Race', hint: 'Any coin scores — first to 7 wins. Queen = 3.' },
+      { id: 'blitz', name: 'Blitz', hint: 'Classic rules with a 20s shot clock.' },
+      { id: 'quick', name: 'Quick', hint: 'Fewer coins for a short game.' },
     ],
   },
 };

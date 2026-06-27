@@ -85,3 +85,46 @@ test('rejects aiming away from the board', () => {
   const { error } = applyMove(s, 0, { x: 450, dx: 0, dy: 1, power: 50 }); // seat 0 must aim up
   assert.ok(error);
 });
+
+// ---- Task 5: fouls + queen cover ----
+
+test('pocketing the striker is a foul that passes the turn and returns a coin', () => {
+  const s = freshClassic();
+  s.colors = { 0: 'white', 1: 'black' };
+  s.pocketedByColor = { white: 2, black: 0 };
+  // empty board: a straight-up rail shot sinks the striker itself
+  const { state } = applyMove(s, 0, STRAIGHT_UP);
+  assert.equal(state.lastShot.foul, 'striker');
+  assert.equal(state.turn, 1);
+  assert.equal(state.pocketedByColor.white, 1, "one of the shooter's coins came back");
+  assert.equal(state.coins.filter((c) => c.color === 'white').length, 1, 'returned coin is on the board');
+});
+
+test('pocketing an opponent coin returns it to the board and passes the turn', () => {
+  const s = freshClassic();
+  s.colors = { 0: 'white', 1: 'black' };
+  s.coins = [{ id: 9, color: 'black', x: RAIL_X, y: NEAR_Y }];
+  const { state } = applyMove(s, 0, STRAIGHT_UP);
+  assert.equal(state.turn, 1);
+  assert.equal(state.pocketedByColor.black, 0, 'opponent coin is not credited');
+  assert.equal(state.coins.filter((c) => c.color === 'black').length, 1, 'opponent coin returned to board');
+});
+
+test('pocketing the queen without covering returns her on a failed next shot', () => {
+  const s = freshClassic();
+  s.colors = { 0: 'white', 1: 'black' };
+  // queen on the rail (will be pocketed); a spare white coin off the firing line
+  s.coins = [{ id: 0, color: 'queen', x: RAIL_X, y: NEAR_Y }, { id: 5, color: 'white', x: 700, y: 450 }];
+  s.queenOnBoard = true;
+  // shot 1: pocket only the queen -> awaiting cover, turn stays with seat 0
+  let r = applyMove(s, 0, STRAIGHT_UP);
+  assert.equal(r.state.queenAwaitingCover, 0);
+  assert.equal(r.state.turn, 0);
+  assert.equal(r.state.queenOnBoard, false);
+  // shot 2: pocket nothing -> queen returns, turn passes
+  r = applyMove(r.state, 0, { x: 450, dx: 0, dy: -1, power: 25 });
+  assert.equal(r.state.queenAwaitingCover, null);
+  assert.equal(r.state.queenOnBoard, true);
+  assert.equal(r.state.coins.filter((c) => c.color === 'queen').length, 1);
+  assert.equal(r.state.turn, 1);
+});

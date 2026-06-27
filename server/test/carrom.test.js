@@ -194,3 +194,21 @@ test('points: reaching the target ends the game', () => {
   assert.equal(res.over, true);
   assert.equal(res.winner, 0);
 });
+
+// ---- Task 8: Blitz shot clock ----
+
+test('blitz exposes a 20s shot clock; other modes have none', () => {
+  const blitz = createInitialState({ mode: 'blitz' }, 2);
+  const classic = createInitialState({ mode: 'classic' }, 2);
+  assert.equal(typeof carrom.turnTimeoutMs, 'function');
+  assert.equal(carrom.turnTimeoutMs(blitz), 20000);
+  assert.equal(carrom.turnTimeoutMs(classic), null);
+});
+
+test('blitz onTimeout forfeits the turn', () => {
+  const s = createInitialState({ mode: 'blitz' }, 2);
+  assert.equal(s.turn, 0);
+  const { state } = carrom.onTimeout(s);
+  assert.equal(state.turn, 1);
+  assert.equal(state.lastShot.foul, 'timeout');
+});

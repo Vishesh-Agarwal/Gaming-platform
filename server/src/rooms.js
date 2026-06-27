@@ -28,9 +28,11 @@ function publicRoom(room) {
 // play is ongoing; clear it otherwise. Called right before snapshotting so the
 // deadline rides along in the broadcast state.
 function armTurnDeadline(room) {
-  room.turnEndsAt = room.status === 'playing' && room.game.turnTimeoutMs
-    ? Date.now() + room.game.turnTimeoutMs
-    : null;
+  // turnTimeoutMs may be a fixed number (TTT, Ludo) or a function of state for
+  // mode-specific clocks (Carrom Blitz only). A null/0 result means no clock.
+  const t = room.game.turnTimeoutMs;
+  const ms = typeof t === 'function' ? t(room.state) : t;
+  room.turnEndsAt = room.status === 'playing' && ms ? Date.now() + ms : null;
 }
 
 // Create an invite from one user to a friend. Returns { invite } or { error }.

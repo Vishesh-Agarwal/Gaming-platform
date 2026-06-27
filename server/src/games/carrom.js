@@ -248,6 +248,22 @@ function pointsResult(state) {
   return { over: false, winner: null, draw: false, scores: state.scores };
 }
 
+// Blitz mode arms a per-turn shot clock; other modes return null (no clock).
+export function turnTimeoutMs(state) {
+  return state?.mode === 'blitz' ? BLITZ_MS : null;
+}
+
+export function onTimeout(state) {
+  const next = {
+    ...state,
+    turn: 1 - state.turn,
+    queenAwaitingCover: null, // a pending cover is lost when the clock runs out
+    lastShot: { frames: [], pocketed: [], foul: 'timeout', by: state.turn },
+    seq: state.seq + 1,
+  };
+  return { state: next };
+}
+
 export default {
   id: 'carrom',
   name: 'Carrom',
@@ -263,5 +279,6 @@ export default {
   createInitialState,
   applyMove,
   getResult,
-  // turnTimeoutMs / onTimeout added in later tasks
+  turnTimeoutMs,
+  onTimeout,
 };

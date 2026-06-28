@@ -1,6 +1,7 @@
 // Pool — 2-player cue sports. Server simulates each shot; this renders the table,
 // takes aim input, replays the shot frames, then settles to state.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { predictShot } from './aimPredict.js';
 
 const VIEW_W = 660;                 // on-screen width; logical table is 1000x500 (2:1)
 const PALETTE = ['#e7b416', '#2f6fd0', '#d8453a', '#7d3cc0', '#e07b2c', '#2f9e54', '#8a3324'];
@@ -40,9 +41,12 @@ export default function Pool({ room, youAreIndex, onMove }) {
 
   const [aim, setAim] = useState(null);          // { dx, dy } pointing from the cue
   const [power, setPower] = useState(55);
+  const [spin, setSpin] = useState({ along: 0, side: 0 }); // english: follow/draw + side
   const [cuePlace, setCuePlace] = useState(null); // local cue placement when ball-in-hand/break
   const [dragging, setDragging] = useState(null); // 'cue' | 'aim' | null
   const baseCue = useMemo(() => cuePlace || st.cue, [cuePlace, st.cue, st.seq]);
+  const bounds = useMemo(() => ({ loX: 46, hiX: st.W - 46, loY: 46, hiY: st.H - 46 }), [st.W, st.H]);
+  const objectBalls = useMemo(() => st.balls.filter((b) => b.id !== 0).map((b) => ({ ...b, r: st.ballR })), [st.balls, st.ballR]);
 
   // replay
   const [frameIdx, setFrameIdx] = useState(null);
@@ -51,7 +55,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
   useEffect(() => {
     if (st.seq === lastSeq.current) return;
     lastSeq.current = st.seq;
-    setAim(null); setCuePlace(null);
+    setAim(null); setCuePlace(null); setSpin({ along: 0, side: 0 });
     const frames = st.lastShot?.frames;
     if (!frames || frames.length === 0) { setFrameIdx(null); return; }
     let i = 0; setFrameIdx(0);
@@ -78,10 +82,14 @@ export default function Pool({ room, youAreIndex, onMove }) {
     } else {
       for (const b of st.balls) if (b.id !== 0) drawBall(ctx, b.x, b.y, b.id, st.ballR);
       drawBall(ctx, baseCue.x, baseCue.y, 0, st.ballR);
-      if (myTurn && aim) drawAim(ctx, baseCue, aim, power);
+      if (myTurn && aim && (aim.dx || aim.dy)) {
+        const pred = predictShot(baseCue, aim, objectBalls, st.ballR, bounds, 2);
+        drawPrediction(ctx, pred, st.ballR);
+        drawCueStick(ctx, baseCue, aim, power, st.ballR);
+      }
     }
     ctx.restore();
-  }, [st, frameIdx, aim, power, baseCue, myTurn, scale]);
+  }, [st, frameIdx, aim, power, baseCue, myTurn, scale, objectBalls, bounds]);
 
   const toLogical = (e) => {
     const r = canvasRef.current.getBoundingClientRect();
@@ -106,7 +114,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
 
   const shoot = () => {
     if (!myTurn || !aim || (aim.dx === 0 && aim.dy === 0)) return;
-    onMove({ dx: aim.dx, dy: aim.dy, power, ...(cuePlace ? { cue: cuePlace } : {}) });
+    onMove({ dx: aim.dx, dy: aim.dy, power, spin, ...(cuePlace ? { cue: cuePlace } : {}) });
     setAim(null);
   };
 
@@ -142,13 +150,14 @@ export default function Pool({ room, youAreIndex, onMove }) {
 
       {myTurn && frameIdx == null && (
         <div className="pool-controls">
+          <SpinPad spin={spin} onChange={setSpin} />
           <label className="pool-power">
             Power
             <input type="range" min="5" max="100" value={power} onChange={(e) => setPower(Number(e.target.value))} />
             <span>{power}%</span>
           </label>
           <button className="pool-shoot" disabled={!aim} onClick={shoot}>Shoot</button>
-          <span className="pool-hint muted">{canPlace ? 'Drag the cue ball to place it, then drag to aim.' : 'Drag from the cue ball to aim.'}</span>
+          <span className="pool-hint muted">{canPlace ? 'Drag the cue ball to place it, then drag to aim.' : 'Drag from the cue ball to aim. Set spin on the ball →'}</span>
         </div>
       )}
     </div>
@@ -168,31 +177,85 @@ function drawTable(ctx, st) {
 }
 
 function drawBall(ctx, x, y, id, r) {
+  // contact shadow
+  ctx.beginPath(); ctx.ellipse(x + 1.5, y + 2.5, r, r * 0.92, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
+
   const base = ballBase(id);
   ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
   if (isStripe(id)) {
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = '#f4f0e6'; ctx.fill();
-    ctx.save(); ctx.clip(); ctx.fillStyle = base; ctx.fillRect(x - r, y - r * 0.5, r * 2, r); ctx.restore();
+    ctx.fillStyle = '#f4f0e6'; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+    ctx.fillStyle = base; ctx.fillRect(x - r, y - r * 0.5, 2 * r, r);
   } else {
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = base; ctx.fill();
+    ctx.fillStyle = base; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
   }
-  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.stroke();
+  // spherical shading: bright highlight top-left, shadow bottom-right
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+  g.addColorStop(0, 'rgba(255,255,255,0.6)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.08)');
+  g.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = g; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+  ctx.restore();
+
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.stroke();
   if (id !== 0) {
-    ctx.beginPath(); ctx.arc(x, y, r * 0.55, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
-    ctx.fillStyle = '#111'; ctx.font = `bold ${Math.round(r * 0.9)}px sans-serif`;
+    ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.fillStyle = '#111'; ctx.font = `bold ${Math.round(r * 0.78)}px sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(id), x, y + 0.5);
+  }
+}
+
+function drawCueStick(ctx, cue, aim, power, r) {
+  const l = Math.hypot(aim.dx, aim.dy) || 1, ux = aim.dx / l, uy = aim.dy / l;
+  const gap = r + 6 + power * 0.9;             // pulled back further at higher power
+  const tip = { x: cue.x - ux * gap, y: cue.y - uy * gap };
+  const butt = { x: tip.x - ux * 280, y: tip.y - uy * 280 };
+  ctx.save(); ctx.lineCap = 'round';
+  ctx.strokeStyle = '#7a5320'; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(butt.x, butt.y); ctx.stroke();
+  ctx.strokeStyle = '#d8b27a'; ctx.lineWidth = 7;                 // pale forearm
+  ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(tip.x - ux * 90, tip.y - uy * 90); ctx.stroke();
+  ctx.strokeStyle = '#1f6fd0'; ctx.lineWidth = 7;                 // blue tip
+  ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(tip.x - ux * 9, tip.y - uy * 9); ctx.stroke();
+  ctx.restore();
+}
+
+function drawPrediction(ctx, pred, r) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.setLineDash([9, 7]);
+  ctx.beginPath(); ctx.moveTo(pred.path[0].x, pred.path[0].y);
+  for (let i = 1; i < pred.path.length; i++) ctx.lineTo(pred.path[i].x, pred.path[i].y);
+  ctx.stroke(); ctx.setLineDash([]);
+  if (pred.hit) {
+    const { ghost, ball, objDir } = pred.hit;
+    ctx.beginPath(); ctx.arc(ghost.x, ghost.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ball.x, ball.y); ctx.lineTo(ball.x + objDir.x * 150, ball.y + objDir.y * 150);
+    ctx.strokeStyle = 'rgba(255,228,120,0.95)'; ctx.lineWidth = 2.5; ctx.stroke();
   }
   ctx.restore();
 }
 
-function drawAim(ctx, cue, aim, power) {
-  const len = Math.hypot(aim.dx, aim.dy) || 1;
-  const reach = 70 + power * 2.6;
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
-  ctx.setLineDash([10, 8]);
-  ctx.beginPath();
-  ctx.moveTo(cue.x, cue.y);
-  ctx.lineTo(cue.x + (aim.dx / len) * reach, cue.y + (aim.dy / len) * reach);
-  ctx.stroke();
-  ctx.setLineDash([]);
+// Click/drag the cue-ball widget to set english (where the tip strikes the ball).
+function SpinPad({ spin, onChange }) {
+  const ref = useRef(null);
+  const set = (e) => {
+    const b = ref.current.getBoundingClientRect();
+    let nx = (e.clientX - (b.left + b.width / 2)) / (b.width / 2);
+    let ny = (e.clientY - (b.top + b.height / 2)) / (b.height / 2);
+    const m = Math.hypot(nx, ny); if (m > 1) { nx /= m; ny /= m; }
+    onChange({ along: -ny, side: nx }); // up = follow (topspin), down = draw
+  };
+  return (
+    <div
+      className="pool-spin"
+      ref={ref}
+      title="Spin (english): click where the cue tip strikes the ball"
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e); }}
+      onPointerMove={(e) => { if (e.buttons) set(e); }}
+    >
+      <span className="pool-spin-dot" style={{ left: `${50 + spin.side * 42}%`, top: `${50 - spin.along * 42}%` }} />
+    </div>
+  );
 }

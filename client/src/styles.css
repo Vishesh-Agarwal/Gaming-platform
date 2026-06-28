@@ -1312,6 +1312,25 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .pool-shoot:disabled { opacity: 0.45; cursor: not-allowed; }
 .pool-hint { font-size: 0.85rem; }
 .pool-loading { padding: 40px; text-align: center; opacity: 0.7; }
+/* draggable power stick (shared) */
+.powerbar { display: flex; flex-direction: column; align-items: center; gap: 4px; user-select: none; }
+.powerbar-track {
+  position: relative; width: 26px; height: 150px; border-radius: 13px;
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+  cursor: ns-resize; touch-action: none; overflow: hidden;
+}
+.powerbar-fill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, #2dd4bf, #e7b416 55%, #ff5d6c);
+  border-radius: 0 0 13px 13px;
+}
+.powerbar-knob {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: 30px; height: 12px; border-radius: 6px; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5); pointer-events: none;
+}
+.powerbar-label { font-size: 0.85rem; font-weight: 600; opacity: 0.9; }
+
 .pool-spin {
   position: relative; width: 46px; height: 46px; border-radius: 50%;
   background: radial-gradient(circle at 35% 32%, #fff, #c9c4b6 70%, #9a9486);

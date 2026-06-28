@@ -2,6 +2,7 @@
 // board, takes aim input, replays the shot frames, then settles to state.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
+import PowerBar from './PowerBar.jsx';
 
 const VIEW = 620;          // on-screen canvas size (square); logical board is 900
 const COLORS = { white: '#f4f0e6', black: '#2a2a2a', queen: '#e4453a', striker: '#5b8cff' };
@@ -40,7 +41,8 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   const [slotX, setSlotX] = useState(st.striker.x);
   const [aim, setAim] = useState(null);   // { dx, dy } pointing into the board
   const [power, setPower] = useState(55);
-  const [dragging, setDragging] = useState(null); // 'striker' | 'aim' | null
+  const [locked, setLocked] = useState(false);    // click to freeze the aim
+  const [dragging, setDragging] = useState(null); // 'striker' | null
 
   // replay state
   const [frameIdx, setFrameIdx] = useState(null); // null = show resting state
@@ -53,6 +55,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
     lastSeq.current = st.seq;
     setSlotX(st.striker.x);
     setAim(null);
+    setLocked(false);
     const frames = st.lastShot?.frames;
     if (!frames || frames.length === 0) { setFrameIdx(null); return; }
     let i = 0;
@@ -85,7 +88,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       // resting striker (and aim preview on your turn)
       drawDisc(ctx, slotX, baselineY, 'striker', st);
       if (myTurn && aim && (aim.dx || aim.dy)) {
-        const pred = predictShot({ x: slotX, y: baselineY }, { x: aim.dx, y: aim.dy }, aimCoins, st.strikerR, bounds, 2);
+        const pred = predictShot({ x: slotX, y: baselineY }, { x: aim.dx, y: aim.dy }, aimCoins, st.strikerR, bounds, 0);
         drawAim(ctx, pred, st);
       }
     }
@@ -106,8 +109,9 @@ export default function Carrom({ room, youAreIndex, onMove }) {
     const p = toLogical(e);
     if (Math.hypot(p.x - slotX, p.y - baselineY) < st.strikerR * 1.6) { setDragging('striker'); return; }
     updateAim(p);
+    setLocked((l) => !l); // click to lock the aim; click again to re-aim
   };
-  // Hover (and drag) move the aim guideline; pressing on the striker slides it.
+  // While unlocked, hover moves the aim guideline; pressing the striker slides it.
   const onMoveP = (e) => {
     if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
@@ -116,7 +120,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       setSlotX(Math.max(lo, Math.min(hi, p.x)));
       return;
     }
-    updateAim(p);
+    if (!locked) updateAim(p);
   };
   const onUp = () => setDragging(null);
   const updateAim = (p) => {
@@ -166,13 +170,12 @@ export default function Carrom({ room, youAreIndex, onMove }) {
 
       {myTurn && frameIdx == null && (
         <div className="carrom-controls">
-          <label className="carrom-power">
-            Power
-            <input type="range" min="5" max="100" value={power} onChange={(e) => setPower(Number(e.target.value))} />
-            <span>{power}%</span>
-          </label>
+          <PowerBar value={power} onChange={setPower} />
           <button className="carrom-fire" disabled={!aim} onClick={fire}>Fire</button>
-          <span className="carrom-hint muted">Drag the striker to slide it; drag out to aim.</span>
+          <span className="carrom-hint muted">
+            Drag the striker to slide it. Move to aim, <b>click to lock</b>, set power, then Fire.
+            {locked ? ' (aim locked — click the board to re-aim)' : ''}
+          </span>
         </div>
       )}
     </div>
@@ -180,22 +183,67 @@ export default function Carrom({ room, youAreIndex, onMove }) {
 }
 
 function drawBoard(ctx, st) {
-  ctx.fillStyle = '#3a2a18';
-  ctx.fillRect(0, 0, st.W, st.H);
-  ctx.fillStyle = '#caa46a';
-  ctx.fillRect(60, 60, st.W - 120, st.H - 120);
-  // pockets
-  ctx.fillStyle = '#1c140b';
-  for (const p of st.pockets) { ctx.beginPath(); ctx.arc(p.x, p.y, st.pocketR, 0, Math.PI * 2); ctx.fill(); }
-  // center rings
-  ctx.strokeStyle = '#9c7b46'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(st.W / 2, st.H / 2, 95, 0, Math.PI * 2); ctx.stroke();
-  // baselines
-  ctx.strokeStyle = 'rgba(120,90,40,0.7)'; ctx.lineWidth = 4;
-  for (const seat of [0, 1]) {
-    const y = seat === 0 ? st.H - 108 : 108;
-    ctx.beginPath(); ctx.moveTo(140, y); ctx.lineTo(st.W - 140, y); ctx.stroke();
+  const W = st.W, H = st.H, ins = 72, RED = '#9c2b1b';
+  // wooden frame
+  const frame = ctx.createLinearGradient(0, 0, W, H);
+  frame.addColorStop(0, '#5a3a1c'); frame.addColorStop(1, '#3a2410');
+  ctx.fillStyle = frame; ctx.fillRect(0, 0, W, H);
+  // playing surface (light wood)
+  const surf = ctx.createLinearGradient(0, 0, 0, H);
+  surf.addColorStop(0, '#e7c885'); surf.addColorStop(1, '#d9b676');
+  const pad = ins - 18;
+  ctx.fillStyle = surf; ctx.fillRect(pad, pad, W - 2 * pad, H - 2 * pad);
+  ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 4; ctx.strokeRect(pad, pad, W - 2 * pad, H - 2 * pad);
+
+  // corner pockets with brass rings
+  for (const p of st.pockets) {
+    ctx.beginPath(); ctx.arc(p.x, p.y, st.pocketR, 0, Math.PI * 2); ctx.fillStyle = '#140d06'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#b9893f'; ctx.stroke();
   }
+
+  // red double base lines + end circles on all four sides
+  const a = 150, b = W - 150, off = 96, gap = 12;
+  ctx.strokeStyle = RED; ctx.lineWidth = 3;
+  const line = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+  line(a, off, b, off); line(a, off + gap, b, off + gap);                 // top
+  line(a, H - off, b, H - off); line(a, H - off - gap, b, H - off - gap); // bottom
+  line(off, a, off, b); line(off + gap, a, off + gap, b);                 // left
+  line(W - off, a, W - off, b); line(W - off - gap, a, W - off - gap, b); // right
+  const g2 = gap / 2;
+  const ring = (x, y) => {
+    ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.strokeStyle = RED; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fillStyle = RED; ctx.fill();
+  };
+  for (const [x, y] of [[a, off + g2], [b, off + g2], [a, H - off - g2], [b, H - off - g2],
+    [off + g2, a], [off + g2, b], [W - off - g2, a], [W - off - g2, b]]) ring(x, y);
+
+  // diagonal corner arrows pointing toward the centre
+  const d = Math.SQRT1_2;
+  const arrow = (px, py, dx, dy) => {
+    const ex = px + dx * 110, ey = py + dy * 110;
+    ctx.strokeStyle = RED; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke();
+    for (const s of [0.5, -0.5]) {
+      ctx.beginPath(); ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - (dx * Math.cos(s) - dy * Math.sin(s)) * 14, ey - (dx * Math.sin(s) + dy * Math.cos(s)) * 14);
+      ctx.stroke();
+    }
+  };
+  arrow(ins + 34, ins + 34, d, d);
+  arrow(W - ins - 34, ins + 34, -d, d);
+  arrow(ins + 34, H - ins - 34, d, -d);
+  arrow(W - ins - 34, H - ins - 34, -d, -d);
+
+  // centre medallion
+  const cx = W / 2, cy = H / 2;
+  ctx.strokeStyle = '#8a5a2a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 95, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(140,90,42,0.7)'; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) {
+    const ang = i * Math.PI / 3;
+    ctx.beginPath(); ctx.arc(cx + Math.cos(ang) * 16, cy + Math.sin(ang) * 16, 16, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.strokeStyle = RED; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 32, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.fillStyle = RED; ctx.fill();
 }
 
 function drawDisc(ctx, x, y, color, st) {

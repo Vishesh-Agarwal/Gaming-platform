@@ -2,6 +2,7 @@
 // takes aim input, replays the shot frames, then settles to state.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
+import PowerBar from './PowerBar.jsx';
 
 const VIEW_W = 900;                 // on-screen width; logical table is 1000x500 (2:1)
 const PALETTE = ['#e7b416', '#2f6fd0', '#d8453a', '#7d3cc0', '#e07b2c', '#2f9e54', '#8a3324'];
@@ -43,8 +44,9 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const [aim, setAim] = useState(null);          // { dx, dy } pointing from the cue
   const [power, setPower] = useState(55);
   const [spin, setSpin] = useState({ along: 0, side: 0 }); // english: follow/draw + side
+  const [locked, setLocked] = useState(false);    // click to freeze the aim
   const [cuePlace, setCuePlace] = useState(null); // local cue placement when ball-in-hand/break
-  const [dragging, setDragging] = useState(null); // 'cue' | 'aim' | null
+  const [dragging, setDragging] = useState(null); // 'cue' | null
   const baseCue = useMemo(() => cuePlace || st.cue, [cuePlace, st.cue, st.seq]);
   const bounds = useMemo(() => ({ loX: 46, hiX: st.W - 46, loY: 46, hiY: st.H - 46 }), [st.W, st.H]);
   const objectBalls = useMemo(() => st.balls.filter((b) => b.id !== 0).map((b) => ({ ...b, r: st.ballR })), [st.balls, st.ballR]);
@@ -56,7 +58,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
   useEffect(() => {
     if (st.seq === lastSeq.current) return;
     lastSeq.current = st.seq;
-    setAim(null); setCuePlace(null); setSpin({ along: 0, side: 0 });
+    setAim(null); setCuePlace(null); setSpin({ along: 0, side: 0 }); setLocked(false);
     const frames = st.lastShot?.frames;
     if (!frames || frames.length === 0) { setFrameIdx(null); return; }
     let i = 0; setFrameIdx(0);
@@ -86,7 +88,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
       for (const b of st.balls) if (b.id !== 0) drawBall(ctx, b.x, b.y, b.id, st.ballR);
       drawBall(ctx, baseCue.x, baseCue.y, 0, st.ballR);
       if (myTurn && aim && (aim.dx || aim.dy)) {
-        const pred = predictShot(baseCue, { x: aim.dx, y: aim.dy }, objectBalls, st.ballR, bounds, 2);
+        const pred = predictShot(baseCue, { x: aim.dx, y: aim.dy }, objectBalls, st.ballR, bounds, 0);
         drawPrediction(ctx, pred, st.ballR);
         drawCueStick(ctx, baseCue, aim, power, st.ballR);
       }
@@ -107,8 +109,9 @@ export default function Pool({ room, youAreIndex, onMove }) {
     const p = toLogical(e);
     if (canPlace && Math.hypot(p.x - baseCue.x, p.y - baseCue.y) < st.ballR * 2.2) { setDragging('cue'); return; }
     setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
+    setLocked((l) => !l); // click to lock the aim; click again to re-aim
   };
-  // Hover (and drag) move the aim line; pressing on the cue ball (ball-in-hand) drags it.
+  // While unlocked, hover moves the aim line; pressing the cue ball (ball-in-hand) drags it.
   const onMoveP = (e) => {
     if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
@@ -118,7 +121,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
       setCuePlace({ x: Math.max(m, Math.min(hiX, p.x)), y: Math.max(m, Math.min(st.H - m, p.y)) });
       return;
     }
-    setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
+    if (!locked) setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
   };
   const onUp = () => setDragging(null);
 
@@ -161,13 +164,13 @@ export default function Pool({ room, youAreIndex, onMove }) {
       {myTurn && frameIdx == null && (
         <div className="pool-controls">
           <SpinPad spin={spin} onChange={setSpin} />
-          <label className="pool-power">
-            Power
-            <input type="range" min="5" max="100" value={power} onChange={(e) => setPower(Number(e.target.value))} />
-            <span>{power}%</span>
-          </label>
+          <PowerBar value={power} onChange={setPower} />
           <button className="pool-shoot" disabled={!aim} onClick={shoot}>Shoot</button>
-          <span className="pool-hint muted">{canPlace ? 'Drag the cue ball to place it, then drag to aim.' : 'Drag from the cue ball to aim. Set spin on the ball →'}</span>
+          <span className="pool-hint muted">
+            {canPlace ? 'Drag the cue ball to place it. ' : ''}
+            Move to aim, <b>click to lock</b>, set spin + power, then Shoot.
+            {locked ? ' (aim locked — click the table to re-aim)' : ''}
+          </span>
         </div>
       )}
     </div>

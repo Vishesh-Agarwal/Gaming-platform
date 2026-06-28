@@ -1281,7 +1281,7 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 
 /* ---- Carrom ---- */
 .carrom { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.carrom-canvas { border-radius: 10px; touch-action: none; box-shadow: 0 10px 30px rgba(0,0,0,0.4); cursor: crosshair; }
+.carrom-canvas { border-radius: 10px; touch-action: none; box-shadow: 0 10px 30px rgba(0,0,0,0.4); cursor: crosshair; max-width: 100%; height: auto; }
 .carrom-hud { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 0.95rem; }
 .carrom-turn { padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); }
 .carrom-turn.mine { background: var(--teal, #2dd4bf); color: #04211d; font-weight: 600; }
@@ -1297,7 +1297,8 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 
 /* ---- Pool ---- */
 .pool { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.pool-canvas { border-radius: 10px; touch-action: none; box-shadow: 0 10px 30px rgba(0,0,0,0.45); cursor: crosshair; }
+.pool-canvas { border-radius: 10px; touch-action: none; box-shadow: 0 10px 30px rgba(0,0,0,0.45); cursor: crosshair; max-width: 100%; height: auto; }
+.pool { width: 100%; }
 .pool-hud { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 0.95rem; }
 .pool-turn { padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); }
 .pool-turn.mine { background: var(--teal, #2dd4bf); color: #04211d; font-weight: 600; }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
 
-const VIEW = 560;          // on-screen canvas size (square); logical board is 900
+const VIEW = 620;          // on-screen canvas size (square); logical board is 900
 const COLORS = { white: '#f4f0e6', black: '#2a2a2a', queen: '#e4453a', striker: '#5b8cff' };
 
 export function Thumbnail() {
@@ -27,9 +27,14 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   const scale = VIEW / st.W;
   const canvasRef = useRef(null);
   const myTurn = st.turn === youAreIndex && room.status === 'playing';
+  const flip = youAreIndex === 1; // player 2 views the board rotated 180° (plays from the bottom)
 
-  // aim input state
-  const baselineY = useMemo(() => st.striker.y, [st.seq]); // server tells us where the striker rests
+  // aim input state — the striker rests on the current shooter's baseline (the
+  // server launches from baselineY(seat): bottom rail for seat 0, top for seat 1).
+  const baselineY = useMemo(
+    () => (st.turn === 0 ? st.H - 72 - st.strikerR - 14 : 72 + st.strikerR + 14),
+    [st.H, st.strikerR, st.turn]
+  );
   const bounds = useMemo(() => ({ loX: 72, hiX: st.W - 72, loY: 72, hiY: st.H - 72 }), [st.W, st.H]);
   const aimCoins = useMemo(() => st.coins.map((c) => ({ ...c, r: st.coinR })), [st.coins, st.coinR]);
   const [slotX, setSlotX] = useState(st.striker.x);
@@ -66,8 +71,10 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     ctx.save();
     ctx.scale(scale, scale);
+    if (flip) { ctx.translate(st.W, st.H); ctx.rotate(Math.PI); } // rotate 180° for player 2
     drawBoard(ctx, st);
 
     const playing = frameIdx != null && st.lastShot?.frames;
@@ -83,26 +90,33 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       }
     }
     ctx.restore();
-  }, [st, frameIdx, slotX, aim, power, myTurn, baselineY, scale, aimCoins, bounds]);
+  }, [st, frameIdx, slotX, aim, power, myTurn, baselineY, scale, aimCoins, bounds, flip]);
 
   // ---- pointer input ----
+  // Map a pointer event to logical board coords (robust to CSS scaling + the flip).
   const toLogical = (e) => {
     const r = canvasRef.current.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+    let x = (e.clientX - r.left) * (st.W / r.width);
+    let y = (e.clientY - r.top) * (st.H / r.height);
+    if (flip) { x = st.W - x; y = st.H - y; }
+    return { x, y };
   };
   const onDown = (e) => {
     if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
-    if (Math.hypot(p.x - slotX, p.y - baselineY) < st.strikerR * 1.6) setDragging('striker');
-    else { setDragging('aim'); updateAim(p); }
+    if (Math.hypot(p.x - slotX, p.y - baselineY) < st.strikerR * 1.6) { setDragging('striker'); return; }
+    updateAim(p);
   };
+  // Hover (and drag) move the aim guideline; pressing on the striker slides it.
   const onMoveP = (e) => {
-    if (!dragging) return;
+    if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
     if (dragging === 'striker') {
       const lo = st.coinR + st.strikerR, hi = st.W - st.coinR - st.strikerR;
       setSlotX(Math.max(lo, Math.min(hi, p.x)));
-    } else updateAim(p);
+      return;
+    }
+    updateAim(p);
   };
   const onUp = () => setDragging(null);
   const updateAim = (p) => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
 
-const VIEW_W = 660;                 // on-screen width; logical table is 1000x500 (2:1)
+const VIEW_W = 900;                 // on-screen width; logical table is 1000x500 (2:1)
 const PALETTE = ['#e7b416', '#2f6fd0', '#d8453a', '#7d3cc0', '#e07b2c', '#2f9e54', '#8a3324'];
 
 // A pool ball's id IS its number, so color + stripe derive straight from the id.
@@ -38,6 +38,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const canvasRef = useRef(null);
   const myTurn = st.turn === youAreIndex && room.status === 'playing';
   const canPlace = myTurn && (st.ballInHand || st.onBreak);
+  const flip = youAreIndex === 1; // player 2 views the table rotated 180° (plays from the bottom)
 
   const [aim, setAim] = useState(null);          // { dx, dy } pointing from the cue
   const [power, setPower] = useState(55);
@@ -73,8 +74,10 @@ export default function Pool({ room, youAreIndex, onMove }) {
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     ctx.save();
     ctx.scale(scale, scale);
+    if (flip) { ctx.translate(st.W, st.H); ctx.rotate(Math.PI); } // rotate 180° for player 2
     drawTable(ctx, st);
     const playing = frameIdx != null && st.lastShot?.frames;
     if (playing) {
@@ -89,26 +92,33 @@ export default function Pool({ room, youAreIndex, onMove }) {
       }
     }
     ctx.restore();
-  }, [st, frameIdx, aim, power, baseCue, myTurn, scale, objectBalls, bounds]);
+  }, [st, frameIdx, aim, power, baseCue, myTurn, scale, objectBalls, bounds, flip]);
 
+  // Map a pointer event to logical table coords (robust to CSS scaling + the flip).
   const toLogical = (e) => {
     const r = canvasRef.current.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+    let x = (e.clientX - r.left) * (st.W / r.width);
+    let y = (e.clientY - r.top) * (st.H / r.height);
+    if (flip) { x = st.W - x; y = st.H - y; }
+    return { x, y };
   };
   const onDown = (e) => {
     if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
-    if (canPlace && Math.hypot(p.x - baseCue.x, p.y - baseCue.y) < st.ballR * 2.2) setDragging('cue');
-    else { setDragging('aim'); setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y }); }
+    if (canPlace && Math.hypot(p.x - baseCue.x, p.y - baseCue.y) < st.ballR * 2.2) { setDragging('cue'); return; }
+    setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
   };
+  // Hover (and drag) move the aim line; pressing on the cue ball (ball-in-hand) drags it.
   const onMoveP = (e) => {
-    if (!dragging) return;
+    if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
     if (dragging === 'cue') {
       const m = st.ballR + 4;
       const hiX = st.onBreak ? st.W / 2 - st.ballR : st.W - m;
       setCuePlace({ x: Math.max(m, Math.min(hiX, p.x)), y: Math.max(m, Math.min(st.H - m, p.y)) });
-    } else setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
+      return;
+    }
+    setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
   };
   const onUp = () => setDragging(null);
 

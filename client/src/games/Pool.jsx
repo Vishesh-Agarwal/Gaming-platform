@@ -3,9 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
 import PowerBar from './PowerBar.jsx';
+import ShotClock from './ShotClock.jsx';
 
 const VIEW_W = 900;                 // on-screen width; logical table is 1000x500 (2:1)
 const PALETTE = ['#e7b416', '#2f6fd0', '#d8453a', '#7d3cc0', '#e07b2c', '#2f9e54', '#8a3324'];
+const PULL_MAX = 320;               // logical drag length that maps to full power
+const MIN_FIRE = 8;
+const BLITZ_MS = 20000;
 
 // A pool ball's id IS its number, so color + stripe derive straight from the id.
 function ballBase(id) {
@@ -46,15 +50,30 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const [spin, setSpin] = useState({ along: 0, side: 0 }); // english: follow/draw + side
   const [locked, setLocked] = useState(false);    // click to freeze the aim
   const [cuePlace, setCuePlace] = useState(null); // local cue placement when ball-in-hand/break
-  const [dragging, setDragging] = useState(null); // 'cue' | null
+  const [dragging, setDragging] = useState(null); // 'cue' | 'pull' | null
+  const gestureRef = useRef(null);
   const baseCue = useMemo(() => cuePlace || st.cue, [cuePlace, st.cue, st.seq]);
   const bounds = useMemo(() => ({ loX: 46, hiX: st.W - 46, loY: 46, hiY: st.H - 46 }), [st.W, st.H]);
   const objectBalls = useMemo(() => st.balls.filter((b) => b.id !== 0).map((b) => ({ ...b, r: st.ballR })), [st.balls, st.ballR]);
 
   // replay
   const [frameIdx, setFrameIdx] = useState(null);
+  const [banner, setBanner] = useState(null);
   const lastSeq = useRef(st.seq);
   const rafRef = useRef(0);
+
+  useEffect(() => {
+    if (room.status !== 'playing') return;
+    const foul = st.lastShot?.foul;
+    const msg = foul
+      ? (foul === 'timeout' ? '⏱ Time out!' : 'Foul — ball in hand')
+      : (myTurn ? 'Your shot' : null);
+    if (!msg) return;
+    setBanner({ msg, foul: !!foul, key: st.seq });
+    const id = setTimeout(() => setBanner(null), 1800);
+    return () => clearTimeout(id);
+  }, [st.seq, myTurn, room.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (st.seq === lastSeq.current) return;
     lastSeq.current = st.seq;
@@ -86,6 +105,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
       for (const d of st.lastShot.frames[frameIdx]) drawBall(ctx, d.x, d.y, d.id, st.ballR);
     } else {
       for (const b of st.balls) if (b.id !== 0) drawBall(ctx, b.x, b.y, b.id, st.ballR);
+      if (canPlace) { ctx.save(); ctx.strokeStyle = 'rgba(45,212,191,0.9)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(baseCue.x, baseCue.y, st.ballR + 5, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
       drawBall(ctx, baseCue.x, baseCue.y, 0, st.ballR);
       if (myTurn && aim && (aim.dx || aim.dy)) {
         const pred = predictShot(baseCue, { x: aim.dx, y: aim.dy }, objectBalls, st.ballR, bounds, 0);
@@ -94,7 +114,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
       }
     }
     ctx.restore();
-  }, [st, frameIdx, aim, power, baseCue, myTurn, scale, objectBalls, bounds, flip]);
+  }, [st, frameIdx, aim, power, baseCue, myTurn, canPlace, scale, objectBalls, bounds, flip]);
 
   // Map a pointer event to logical table coords (robust to CSS scaling + the flip).
   const toLogical = (e) => {
@@ -106,12 +126,14 @@ export default function Pool({ room, youAreIndex, onMove }) {
   };
   const onDown = (e) => {
     if (!myTurn || frameIdx != null) return;
+    canvasRef.current.setPointerCapture?.(e.pointerId);
     const p = toLogical(e);
-    if (canPlace && Math.hypot(p.x - baseCue.x, p.y - baseCue.y) < st.ballR * 2.2) { setDragging('cue'); return; }
+    const onCue = Math.hypot(p.x - baseCue.x, p.y - baseCue.y) < st.ballR * 2.2;
+    if (canPlace && onCue) { setDragging('cue'); return; }
+    if (onCue) { gestureRef.current = { mode: 'pull', shot: null }; setDragging('pull'); return; }
     setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
-    setLocked((l) => !l); // click to lock the aim; click again to re-aim
+    setLocked((l) => !l); // click empty table to lock; click again to re-aim
   };
-  // While unlocked, hover moves the aim line; pressing the cue ball (ball-in-hand) drags it.
   const onMoveP = (e) => {
     if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
@@ -121,45 +143,52 @@ export default function Pool({ room, youAreIndex, onMove }) {
       setCuePlace({ x: Math.max(m, Math.min(hiX, p.x)), y: Math.max(m, Math.min(st.H - m, p.y)) });
       return;
     }
+    if (gestureRef.current?.mode === 'pull') {
+      // pull-back: shot fires opposite the pull; distance sets power
+      const pdx = p.x - baseCue.x, pdy = p.y - baseCue.y;
+      const dist = Math.hypot(pdx, pdy);
+      const pw = Math.max(5, Math.min(100, Math.round((dist / PULL_MAX) * 100)));
+      const a = { dx: -pdx, dy: -pdy };
+      gestureRef.current.shot = { aim: a, power: pw };
+      setAim(a); setPower(pw); setLocked(true);
+      return;
+    }
     if (!locked) setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
   };
-  const onUp = () => setDragging(null);
-
-  const shoot = () => {
-    if (!myTurn || !aim || (aim.dx === 0 && aim.dy === 0)) return;
-    onMove({ dx: aim.dx, dy: aim.dy, power, spin, ...(cuePlace ? { cue: cuePlace } : {}) });
-    setAim(null);
+  const onUp = () => {
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    setDragging(null);
+    if (g?.mode === 'pull' && g.shot && g.shot.power >= MIN_FIRE) doShoot(g.shot.aim, g.shot.power);
   };
 
-  const myGroup = st.groups?.[youAreIndex];
+  const doShoot = (a, pw) => {
+    if (!myTurn || !a || (a.dx === 0 && a.dy === 0)) return;
+    onMove({ dx: a.dx, dy: a.dy, power: pw, spin, ...(cuePlace ? { cue: cuePlace } : {}) });
+    setAim(null);
+  };
+  const shoot = () => doShoot(aim, power);
+
   const oppIdx = 1 - youAreIndex;
-  const lowest = st.mode === 'nineball'
-    ? Math.min(...st.balls.filter((b) => b.id !== 0).map((b) => b.n).concat(99))
-    : null;
+  const blitz = st.mode === 'blitz';
 
   return (
     <div className="pool">
-      <div className="pool-hud">
-        <span className={`pool-turn ${myTurn ? 'mine' : ''}`}>{myTurn ? 'Your shot' : "Opponent's shot"}</span>
-        {st.mode === 'practice' && <span className="pool-score">You {st.scores[youAreIndex]} · Opp {st.scores[oppIdx]}</span>}
-        {st.mode === 'nineball' && <span className="pool-score">Lowest ball: {lowest <= 9 ? lowest : '—'}</span>}
-        {(st.mode === 'eightball' || st.mode === 'blitz') && (
-          <span className="pool-score">{myGroup ? `You: ${myGroup}s` : 'Open table'}</span>
-        )}
-        {canPlace && <span className="pool-bih">{st.onBreak ? 'Place cue in the kitchen' : 'Ball in hand'}</span>}
-        {st.lastShot?.foul && <span className="pool-foul">{st.lastShot.foul === 'timeout' ? '⏱ timed out' : 'Foul!'}</span>}
-      </div>
+      <Scoreboard st={st} room={room} you={youAreIndex} opp={oppIdx} myTurn={myTurn} blitz={blitz} />
 
-      <canvas
-        ref={canvasRef}
-        width={VIEW_W}
-        height={viewH}
-        className="pool-canvas"
-        onPointerDown={onDown}
-        onPointerMove={onMoveP}
-        onPointerUp={onUp}
-        onPointerLeave={onUp}
-      />
+      <div className="board-wrap">
+        <canvas
+          ref={canvasRef}
+          width={VIEW_W}
+          height={viewH}
+          className="pool-canvas"
+          onPointerDown={onDown}
+          onPointerMove={onMoveP}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+        />
+        {banner && <div key={banner.key} className={`game-banner ${banner.foul ? 'foul' : 'turn'}`}>{banner.msg}</div>}
+      </div>
 
       {myTurn && frameIdx == null && (
         <div className="pool-controls">
@@ -167,13 +196,70 @@ export default function Pool({ room, youAreIndex, onMove }) {
           <PowerBar value={power} onChange={setPower} />
           <button className="pool-shoot" disabled={!aim} onClick={shoot}>Shoot</button>
           <span className="pool-hint muted">
-            {canPlace ? 'Drag the cue ball to place it. ' : ''}
-            Move to aim, <b>click to lock</b>, set spin + power, then Shoot.
-            {locked ? ' (aim locked — click the table to re-aim)' : ''}
+            {canPlace
+              ? 'Drag the cue ball to place it, then aim on the table and Shoot.'
+              : 'Pull back the cue ball and release to shoot — or aim on the table.'}
           </span>
         </div>
       )}
     </div>
+  );
+}
+
+// Two-player panel with a captured-balls tray (8-ball), shared rack (9-ball), or score (practice).
+function Scoreboard({ st, room, you, opp, myTurn, blitz }) {
+  const name = (i) => room.players?.find((p) => p.index === i)?.username || (i === you ? 'You' : 'Opponent');
+  const onTable = useMemo(() => new Set(st.balls.map((b) => b.id)), [st.balls]);
+  const nineball = st.mode === 'nineball';
+  const practice = st.mode === 'practice';
+  const groupIds = (g) => (g === 'solid' ? [1, 2, 3, 4, 5, 6, 7] : g === 'stripe' ? [9, 10, 11, 12, 13, 14, 15] : []);
+
+  const Panel = ({ i, mine }) => {
+    const active = st.turn === i && room.status === 'playing';
+    const group = st.groups?.[i];
+    const ids = groupIds(group);
+    const cleared = ids.length > 0 && ids.every((id) => !onTable.has(id));
+    return (
+      <div className={`sb-panel ${active ? 'active' : ''}`}>
+        <div className="sb-top"><span className="sb-name">{mine ? 'You' : name(i)}</span></div>
+        <div className="sb-meta">
+          {practice ? <>Score <b>{st.scores[i]}</b></>
+            : nineball ? (active ? 'shooting' : 'waiting')
+              : group ? <span className="sb-cap">{group}s {cleared ? '· on the 8' : ''}</span> : 'open table'}
+        </div>
+        {!practice && !nineball && group && (
+          <div className="sb-tray">
+            {ids.map((id) => <MiniBall key={id} id={id} potted={!onTable.has(id)} />)}
+            <MiniBall id={8} potted={!onTable.has(8)} target={cleared} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="scoreboard">
+      <Panel i={you} mine />
+      <div className="sb-center">
+        {blitz && <ShotClock endsAt={room.turnEndsAt} totalMs={BLITZ_MS} active={myTurn} />}
+        {nineball
+          ? <div className="sb-tray">{[1, 2, 3, 4, 5, 6, 7, 8, 9].map((id) => <MiniBall key={id} id={id} potted={!onTable.has(id)} />)}</div>
+          : <span className="sb-vs">vs</span>}
+      </div>
+      <Panel i={opp} />
+    </div>
+  );
+}
+
+function MiniBall({ id, potted, target }) {
+  const base = ballBase(id);
+  const style = isStripe(id)
+    ? { background: `linear-gradient(#fff 28%, ${base} 28%, ${base} 72%, #fff 72%)` }
+    : { background: base };
+  return (
+    <span className={`sb-ball ${potted ? 'potted' : ''} ${target ? 'target' : ''}`} style={style} title={`${id} ball`}>
+      <span className="sb-ball-num">{id}</span>
+    </span>
   );
 }
 
@@ -260,15 +346,22 @@ function SpinPad({ spin, onChange }) {
     const m = Math.hypot(nx, ny); if (m > 1) { nx /= m; ny /= m; }
     onChange({ along: -ny, side: nx }); // up = follow (topspin), down = draw
   };
+  const label = spin.along === 0 && spin.side === 0
+    ? 'centre'
+    : `${spin.along > 0.15 ? 'follow' : spin.along < -0.15 ? 'draw' : ''}${Math.abs(spin.side) > 0.15 ? (spin.along ? ' + ' : '') + (spin.side > 0 ? 'right' : 'left') : ''}` || 'centre';
   return (
-    <div
-      className="pool-spin"
-      ref={ref}
-      title="Spin (english): click where the cue tip strikes the ball"
-      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e); }}
-      onPointerMove={(e) => { if (e.buttons) set(e); }}
-    >
-      <span className="pool-spin-dot" style={{ left: `${50 + spin.side * 42}%`, top: `${50 - spin.along * 42}%` }} />
+    <div className="pool-spin-wrap">
+      <div
+        className="pool-spin"
+        ref={ref}
+        title="Spin (english): click where the cue tip strikes the ball"
+        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e); }}
+        onPointerMove={(e) => { if (e.buttons) set(e); }}
+      >
+        <span className="pool-spin-cross" />
+        <span className="pool-spin-dot" style={{ left: `${50 + spin.side * 42}%`, top: `${50 - spin.along * 42}%` }} />
+      </div>
+      <span className="pool-spin-label">{label}</span>
     </div>
   );
 }

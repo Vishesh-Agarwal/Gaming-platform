@@ -3,9 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
 import PowerBar from './PowerBar.jsx';
+import ShotClock from './ShotClock.jsx';
 
 const VIEW = 620;          // on-screen canvas size (square); logical board is 900
 const COLORS = { white: '#f4f0e6', black: '#2a2a2a', queen: '#e4453a', striker: '#5b8cff' };
+const PULL_MAX = 240;      // logical drag length that maps to full power
+const MIN_FIRE = 8;        // a pull below this just sets aim, doesn't fire
+const BLITZ_MS = 20000;
 
 export function Thumbnail() {
   return (
@@ -42,7 +46,8 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   const [aim, setAim] = useState(null);   // { dx, dy } pointing into the board
   const [power, setPower] = useState(55);
   const [locked, setLocked] = useState(false);    // click to freeze the aim
-  const [dragging, setDragging] = useState(null); // 'striker' | null
+  const [dragging, setDragging] = useState(null); // 'striker' | 'slide' | 'aim' | null
+  const gestureRef = useRef(null);                // live pull-back gesture details
 
   // A coin overlapping the striker's slot blocks the shot (matches the server rule).
   const strikerBlocked = useMemo(
@@ -52,8 +57,22 @@ export default function Carrom({ room, youAreIndex, onMove }) {
 
   // replay state
   const [frameIdx, setFrameIdx] = useState(null); // null = show resting state
+  const [banner, setBanner] = useState(null);
   const lastSeq = useRef(st.seq);
   const rafRef = useRef(0);
+
+  // transient banner on turn change / foul
+  useEffect(() => {
+    if (room.status !== 'playing') return;
+    const foul = st.lastShot?.foul;
+    const msg = foul
+      ? (foul === 'timeout' ? '⏱ Time out!' : foul === 'striker' ? 'Foul — striker pocketed' : 'Foul!')
+      : (myTurn ? 'Your shot' : null);
+    if (!msg) return;
+    setBanner({ msg, foul: !!foul, key: st.seq });
+    const id = setTimeout(() => setBanner(null), 1800);
+    return () => clearTimeout(id);
+  }, [st.seq, myTurn, room.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When a new shot arrives, play its frames.
   useEffect(() => {
@@ -90,6 +109,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
     if (playing) {
       for (const d of st.lastShot.frames[frameIdx]) drawDisc(ctx, d.x, d.y, d.color, st);
     } else {
+      if (myTurn) drawBaseline(ctx, st, baselineY, slotX);
       for (const c of st.coins) drawDisc(ctx, c.x, c.y, c.color, st);
       // resting striker (and aim preview on your turn)
       drawDisc(ctx, slotX, baselineY, 'striker', st);
@@ -99,6 +119,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       } else if (myTurn && aim && (aim.dx || aim.dy)) {
         const pred = predictShot({ x: slotX, y: baselineY }, { x: aim.dx, y: aim.dy }, aimCoins, st.strikerR, bounds, 0);
         drawAim(ctx, pred, st);
+        drawPull(ctx, slotX, baselineY, aim, power, st); // slingshot indicator behind the striker
       }
     }
     ctx.restore();
@@ -115,67 +136,87 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   };
   const onDown = (e) => {
     if (!myTurn || frameIdx != null) return;
+    canvasRef.current.setPointerCapture?.(e.pointerId);
     const p = toLogical(e);
-    if (Math.hypot(p.x - slotX, p.y - baselineY) < st.strikerR * 1.6) { setDragging('striker'); return; }
+    if (Math.hypot(p.x - slotX, p.y - baselineY) < st.strikerR * 1.8) {
+      // grab the striker: drag sideways to slide, or pull back to aim+power
+      gestureRef.current = { sx: p.x, sy: p.y, mode: null, shot: null };
+      setDragging('striker');
+      return;
+    }
     updateAim(p);
-    setLocked((l) => !l); // click to lock the aim; click again to re-aim
+    setLocked((l) => !l); // click empty board to lock the aim; click again to re-aim
   };
-  // While unlocked, hover moves the aim guideline; pressing the striker slides it.
   const onMoveP = (e) => {
     if (!myTurn || frameIdx != null) return;
     const p = toLogical(e);
-    if (dragging === 'striker') {
-      const lo = st.coinR + st.strikerR, hi = st.W - st.coinR - st.strikerR;
-      setSlotX(Math.max(lo, Math.min(hi, p.x)));
+    const g = gestureRef.current;
+    if (g) {
+      if (!g.mode) {
+        const dx = p.x - g.sx, dy = p.y - g.sy;
+        if (Math.hypot(dx, dy) < 6) return;
+        // mostly horizontal near the rail => slide; otherwise => pull-back aim
+        g.mode = Math.abs(dy) < Math.abs(dx) * 0.45 ? 'slide' : 'aim';
+        setDragging(g.mode);
+      }
+      if (g.mode === 'slide') {
+        const lo = st.coinR + st.strikerR, hi = st.W - st.coinR - st.strikerR;
+        setSlotX(Math.max(lo, Math.min(hi, p.x)));
+        return;
+      }
+      // pull-back: shot fires opposite the pull; distance sets power
+      const pdx = p.x - slotX, pdy = p.y - baselineY;
+      const dist = Math.hypot(pdx, pdy);
+      const pw = Math.max(5, Math.min(100, Math.round((dist / PULL_MAX) * 100)));
+      const a = forceIntoBoard(-pdx, -pdy);
+      g.shot = { aim: a, power: pw };
+      setAim(a); setPower(pw); setLocked(true);
       return;
     }
     if (!locked) updateAim(p);
   };
-  const onUp = () => setDragging(null);
-  const updateAim = (p) => {
-    let dx = p.x - slotX, dy = p.y - baselineY;
-    // force the aim to point into the board for your seat
-    if (youAreIndex === 0 && dy >= 0) dy = -1;
-    if (youAreIndex === 1 && dy <= 0) dy = 1;
-    setAim({ dx, dy });
+  const onUp = () => {
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    setDragging(null);
+    if (g?.mode === 'aim' && g.shot && g.shot.power >= MIN_FIRE && !strikerBlocked) {
+      doFire(g.shot.aim, g.shot.power); // pull-and-release shoots
+    }
   };
+  const forceIntoBoard = (dx, dy) => {
+    if (youAreIndex === 0 && dy >= 0) dy = -Math.max(1, Math.abs(dy));
+    if (youAreIndex === 1 && dy <= 0) dy = Math.max(1, Math.abs(dy));
+    return { dx, dy };
+  };
+  const updateAim = (p) => setAim(forceIntoBoard(p.x - slotX, p.y - baselineY));
 
-  const fire = () => {
-    if (!myTurn || !aim || strikerBlocked) return;
-    onMove({ x: Math.round(slotX), dx: aim.dx, dy: aim.dy, power });
+  const doFire = (a, pw) => {
+    if (!myTurn || !a || strikerBlocked) return;
+    onMove({ x: Math.round(slotX), dx: a.dx, dy: a.dy, power: pw });
     setAim(null);
   };
+  const fire = () => doFire(aim, power);
 
-  const myColor = st.colors?.[youAreIndex];
   const oppIdx = 1 - youAreIndex;
+  const blitz = st.mode === 'blitz';
 
   return (
     <div className="carrom">
-      <div className="carrom-hud">
-        <span className={`carrom-turn ${myTurn ? 'mine' : ''}`}>
-          {myTurn ? 'Your shot' : "Opponent's shot"}
-        </span>
-        {st.mode === 'points' ? (
-          <span className="carrom-score">You {st.scores[youAreIndex]} · Opp {st.scores[oppIdx]} (to {st.target})</span>
-        ) : (
-          <span className="carrom-score">
-            {myColor ? `You: ${myColor}` : 'Colors open'} · You {st.scores[youAreIndex]}/{st.coinsPerColor}
-            {st.queenCoveredBy === youAreIndex ? ' · 👑' : ''}
-          </span>
-        )}
-        {st.lastShot?.foul && <span className="carrom-foul">{st.lastShot.foul === 'timeout' ? '⏱ timed out' : 'Foul!'}</span>}
-      </div>
+      <Scoreboard st={st} room={room} you={youAreIndex} opp={oppIdx} myTurn={myTurn} blitz={blitz} />
 
-      <canvas
-        ref={canvasRef}
-        width={VIEW}
-        height={VIEW}
-        className="carrom-canvas"
-        onPointerDown={onDown}
-        onPointerMove={onMoveP}
-        onPointerUp={onUp}
-        onPointerLeave={onUp}
-      />
+      <div className="board-wrap">
+        <canvas
+          ref={canvasRef}
+          width={VIEW}
+          height={VIEW}
+          className="carrom-canvas"
+          onPointerDown={onDown}
+          onPointerMove={onMoveP}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+        />
+        {banner && <div key={banner.key} className={`game-banner ${banner.foul ? 'foul' : 'turn'}`}>{banner.msg}</div>}
+      </div>
 
       {myTurn && frameIdx == null && (
         <div className="carrom-controls">
@@ -184,10 +225,55 @@ export default function Carrom({ room, youAreIndex, onMove }) {
           <span className="carrom-hint muted">
             {strikerBlocked
               ? '⛔ A coin is blocking the striker — slide it to a clear spot.'
-              : (<>Drag the striker to slide it. Move to aim, <b>click to lock</b>, set power, then Fire.{locked ? ' (aim locked — click the board to re-aim)' : ''}</>)}
+              : (<>Pull back the striker and release to flick. Drag sideways to reposition.</>)}
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+// Two-player panel: name, color, score progress, captured tray, queen badge.
+function Scoreboard({ st, room, you, opp, myTurn, blitz }) {
+  const name = (i) => room.players?.find((p) => p.index === i)?.username || (i === you ? 'You' : 'Opponent');
+  const points = st.mode === 'points';
+
+  const Panel = ({ i, mine }) => {
+    const color = st.colors?.[i];
+    const active = st.turn === i && room.status === 'playing';
+    const potted = points ? st.scores[i] : (color ? st.pocketedByColor[color] : 0);
+    const queen = st.queenCoveredBy === i;
+    return (
+      <div className={`sb-panel ${active ? 'active' : ''}`}>
+        <div className="sb-top">
+          {!points && <span className="sb-swatch" style={{ background: color ? COLORS[color] : '#666' }} />}
+          <span className="sb-name">{mine ? 'You' : name(i)}</span>
+          {queen && <span className="sb-queen" title="Queen covered">👑</span>}
+        </div>
+        <div className="sb-meta">
+          {points
+            ? <>Score <b>{st.scores[i]}</b> / {st.target}</>
+            : <>{color ? <span className="sb-cap">{color}</span> : 'open'} · <b>{potted}</b>/{st.coinsPerColor}</>}
+        </div>
+        {!points && color && (
+          <div className="sb-tray">
+            {Array.from({ length: st.coinsPerColor }).map((_, k) => (
+              <span key={k} className={`sb-coin ${k < potted ? 'on' : ''}`} style={{ background: k < potted ? COLORS[color] : 'transparent' }} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="scoreboard">
+      <Panel i={you} mine />
+      <div className="sb-center">
+        {blitz && <ShotClock endsAt={room.turnEndsAt} totalMs={BLITZ_MS} active={myTurn} />}
+        <span className="sb-vs">vs</span>
+      </div>
+      <Panel i={opp} />
     </div>
   );
 }
@@ -256,6 +342,18 @@ function drawBoard(ctx, st) {
   ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.fillStyle = RED; ctx.fill();
 }
 
+// The track the striker can slide along, with a highlight under it.
+function drawBaseline(ctx, st, baselineY, slotX) {
+  const lo = 72 + st.strikerR, hi = st.W - 72 - st.strikerR;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(91,140,255,0.5)'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
+  ctx.beginPath(); ctx.moveTo(lo, baselineY); ctx.lineTo(hi, baselineY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(91,140,255,0.18)';
+  ctx.beginPath(); ctx.arc(slotX, baselineY, st.strikerR + 8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 function drawDisc(ctx, x, y, color, st) {
   const r = color === 'striker' ? st.strikerR : st.coinR;
   // contact shadow
@@ -287,5 +385,19 @@ function drawAim(ctx, pred, st) {
     ctx.beginPath(); ctx.moveTo(ball.x, ball.y); ctx.lineTo(ball.x + objDir.x * 130, ball.y + objDir.y * 130);
     ctx.strokeStyle = 'rgba(255,210,90,0.95)'; ctx.lineWidth = 3; ctx.stroke();
   }
+  ctx.restore();
+}
+
+// Slingshot indicator: a band drawn behind the striker, longer/redder with power.
+function drawPull(ctx, x, y, aim, power, st) {
+  const l = Math.hypot(aim.dx, aim.dy) || 1;
+  const ux = aim.dx / l, uy = aim.dy / l;
+  const len = st.strikerR + power * 1.4;
+  const bx = x - ux * len, by = y - uy * len;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = `rgba(${Math.round(120 + power)}, ${Math.round(180 - power)}, 90, 0.9)`;
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(x - ux * st.strikerR, y - uy * st.strikerR); ctx.lineTo(bx, by); ctx.stroke();
   ctx.restore();
 }

@@ -8,6 +8,7 @@ import Artillery, { Thumbnail as ArtilleryThumb } from './Artillery.jsx';
 import Hangman, { Thumbnail as HangmanThumb } from './Hangman.jsx';
 import Ludo, { Thumbnail as LudoThumb } from './Ludo.jsx';
 import Carrom, { Thumbnail as CarromThumb } from './Carrom.jsx';
+import Pool, { Thumbnail as PoolThumb } from './Pool.jsx';
 import { Thumbnail as KartsThumb } from './KartsThumb.jsx';
 
 // Karts pulls in Three.js (~550 KB). Lazy-load it so that weight is a separate
@@ -79,6 +80,18 @@ const registry = {
       { id: 'points', name: 'Points Race', hint: 'Any coin scores — first to 7 wins. Queen = 3.' },
       { id: 'blitz', name: 'Blitz', hint: 'Classic rules with a 20s shot clock.' },
       { id: 'quick', name: 'Quick', hint: 'Fewer coins for a short game.' },
+    ],
+  },
+  pool: {
+    name: 'Pool',
+    Component: Pool,
+    thumbnail: PoolThumb,
+    accent: '#1f7a4d',
+    modes: [
+      { id: 'eightball', name: '8-Ball', hint: 'Sink your group, then the 8.' },
+      { id: 'blitz', name: 'Blitz', hint: '8-Ball with a 20s shot clock.' },
+      { id: 'nineball', name: '9-Ball', hint: 'Lowest ball first; pot the 9 to win.' },
+      { id: 'practice', name: 'Practice', hint: 'No rules — pot balls, most wins.' },
     ],
   },
 };

@@ -234,10 +234,26 @@ function resolveNineball(state, seat, ctx) {
     phase, winner, scores, lastShot: { frames, pocketed, foul, by: seat }, seq: state.seq + 1,
   };
 }
+// Practice: points race. Pot any ball to score; scratch just re-spots the cue.
 function resolvePractice(state, seat, ctx) {
+  const { pocketed, cueScratched, newBalls, newCue, frames } = ctx;
+  const pottedNonCue = pocketed.filter((p) => p.id !== 0);
+  const scores = state.scores.slice();
+  scores[seat] += pottedNonCue.length;
+
+  const continues = !cueScratched && pottedNonCue.length > 0;
+  const turn = continues ? seat : 1 - seat;
+
+  let phase = state.phase, winner = state.winner, draw = state.draw;
+  if (newBalls.filter((b) => b.id !== 0).length === 0) {
+    phase = 'gameover';
+    if (scores[0] === scores[1]) { winner = null; draw = true; }
+    else { winner = scores[0] > scores[1] ? 0 : 1; draw = false; }
+  }
+
   return {
-    ...state, balls: ctx.newBalls, cue: ctx.newCue, turn: 1 - seat, onBreak: false,
-    lastShot: { frames: ctx.frames, pocketed: ctx.pocketed, foul: false, by: seat }, seq: state.seq + 1,
+    ...state, balls: newBalls, cue: newCue, turn, scores, onBreak: false, ballInHand: false,
+    phase, winner, draw, lastShot: { frames, pocketed, foul: cueScratched, by: seat }, seq: state.seq + 1,
   };
 }
 

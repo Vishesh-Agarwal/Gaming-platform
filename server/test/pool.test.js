@@ -188,3 +188,38 @@ test('9-ball: scratching while potting the 9 re-spots it (no win) + ball-in-hand
   assert.equal(state.turn, 1);
   assert.equal(state.balls.filter((b) => b.n === 9).length, 1, 'the 9 is re-spotted');
 });
+
+// ---- Task 9: Practice ----
+
+function practiceState(objects, cue) {
+  const s = createInitialState({ mode: 'practice' }, 2);
+  s.onBreak = false;
+  s.balls = objects;
+  s.cue = cue;
+  return s;
+}
+
+test('practice: potting a ball scores and keeps the turn', () => {
+  const s = practiceState([{ id: 1, n: 1, group: 'solid', x: 500, y: 100 }, { id: 2, n: 2, group: 'solid', x: 300, y: 300 }], { x: 500, y: 400 });
+  const { state } = applyMove(s, 0, UP);
+  assert.equal(state.scores[0], 1);
+  assert.equal(state.turn, 0);
+});
+
+test('practice: scratching re-spots the cue and passes the turn (no ball-in-hand)', () => {
+  const s = practiceState([{ id: 2, n: 2, group: 'solid', x: 300, y: 300 }], { x: 500, y: 400 });
+  const { state } = applyMove(s, 0, { dx: 46 - 500, dy: 46 - 400, power: 100 });
+  assert.equal(state.turn, 1);
+  assert.equal(state.ballInHand, false);
+  assert.ok(state.cue.x < state.W / 2, 'cue re-spotted in the kitchen');
+});
+
+test('practice: clearing the last ball ends the game; higher score wins', () => {
+  const s = practiceState([{ id: 1, n: 1, group: 'solid', x: 500, y: 100 }], { x: 500, y: 400 });
+  s.scores = [2, 0];
+  const { state } = applyMove(s, 0, UP);
+  const r = pool.getResult(state);
+  assert.equal(r.over, true);
+  assert.equal(r.winner, 0);
+  assert.equal(r.scores[0], 3);
+});

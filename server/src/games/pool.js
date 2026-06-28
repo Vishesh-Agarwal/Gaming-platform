@@ -67,6 +67,160 @@ export function createInitialState(options /* , seatCount */) {
   };
 }
 
+const SPEED_K = 0.18;       // power(0..100) -> cue ball speed
+const BLITZ_MS = 20000;
+
+const LO_X = TABLE.inset + TABLE.ballR, HI_X = TABLE.W - TABLE.inset - TABLE.ballR;
+const LO_Y = TABLE.inset + TABLE.ballR, HI_Y = TABLE.H - TABLE.inset - TABLE.ballR;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// Place a ball at/near (x,y) within bounds, nudging outward to avoid overlap.
+function placeFree(x, y, balls, loX, hiX) {
+  const step = 2 * TABLE.ballR + 2;
+  const bx = clamp(x, loX, hiX), by = clamp(y, LO_Y, HI_Y);
+  for (let ring = 0; ring < 10; ring++) {
+    const n = ring === 0 ? 1 : ring * 6;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const px = clamp(Math.round(bx + Math.cos(a) * step * ring), loX, hiX);
+      const py = clamp(Math.round(by + Math.sin(a) * step * ring), LO_Y, HI_Y);
+      if (!balls.some((b) => Math.hypot(b.x - px, b.y - py) < step - 1)) return { x: px, y: py };
+    }
+  }
+  return { x: Math.round(bx), y: Math.round(by) };
+}
+
+const respotKitchen = (balls) => placeFree(CUE_X, CUE_Y, balls, LO_X, TABLE.W / 2 - TABLE.ballR);
+
+export function applyMove(state, seat, move) {
+  if (state.phase === 'gameover') return { error: 'Game is over.' };
+  if (state.turn !== seat) return { error: 'Not your turn.' };
+  const power = Number(move?.power), dx = Number(move?.dx), dy = Number(move?.dy);
+  if (![power, dx, dy].every(Number.isFinite) || (dx === 0 && dy === 0)) return { error: 'Invalid shot.' };
+
+  const objectBalls = state.balls.filter((b) => b.id !== 0);
+  const canPlace = state.ballInHand || state.onBreak;
+  let cuePos;
+  if (canPlace && Number.isFinite(move?.cue?.x) && Number.isFinite(move?.cue?.y)) {
+    const hiX = state.onBreak ? TABLE.W / 2 - TABLE.ballR : HI_X;
+    cuePos = placeFree(move.cue.x, move.cue.y, objectBalls, LO_X, hiX);
+  } else {
+    cuePos = { x: state.cue.x, y: state.cue.y };
+  }
+
+  const speed = clamp(power, 5, 100) * SPEED_K;
+  const len = Math.hypot(dx, dy) || 1;
+  const cueDisc = { id: 0, x: cuePos.x, y: cuePos.y, vx: (dx / len) * speed, vy: (dy / len) * speed, r: TABLE.ballR, mass: 1 };
+  const discs = [cueDisc, ...objectBalls.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, r: TABLE.ballR, mass: 1 }))];
+
+  const { frames, finalDiscs, pocketed, firstContact } = simulateShot(discs);
+
+  const metaById = new Map(objectBalls.map((b) => [b.id, b]));
+  const newObjects = finalDiscs
+    .filter((d) => d.id !== 0)
+    .map((d) => ({ ...metaById.get(d.id), x: Math.round(d.x), y: Math.round(d.y) }));
+  const cueDiscFinal = finalDiscs.find((d) => d.id === 0);
+  const cueScratched = !cueDiscFinal;
+  const newCue = cueScratched
+    ? respotKitchen(newObjects)
+    : { x: Math.round(cueDiscFinal.x), y: Math.round(cueDiscFinal.y) };
+  const newBalls = [{ id: 0, n: 0, group: 'cue', x: newCue.x, y: newCue.y }, ...newObjects];
+
+  const ctx = { pocketed, firstContact, cueScratched, newBalls, newObjects, newCue, frames };
+  if (state.mode === 'nineball') return { state: resolveNineball(state, seat, ctx) };
+  if (state.mode === 'practice') return { state: resolvePractice(state, seat, ctx) };
+  return { state: resolveEightball(state, seat, ctx) }; // eightball + blitz
+}
+
+function resolveEightball(state, seat, ctx) {
+  const { pocketed, firstContact, cueScratched, frames } = ctx;
+  let { newBalls, newCue } = ctx;
+  const groups = { ...state.groups };
+  const myGroup = state.groups[seat];
+  const groupClearedBefore = !!myGroup && state.balls.filter((b) => b.group === myGroup).length === 0;
+  const pottedNonCue = pocketed.filter((p) => p.id !== 0);
+
+  // foul detection
+  let foul = false;
+  if (cueScratched) foul = true;
+  else if (firstContact === null) foul = true; // hit nothing
+  else if (!state.onBreak) {
+    const fcGroup = group(firstContact);
+    if (myGroup) {
+      const legalFirst = groupClearedBefore ? 'eight' : myGroup;
+      if (fcGroup !== legalFirst) foul = true;
+    } else if (fcGroup === 'eight') {
+      foul = true; // can't legally strike the 8 first on an open table
+    }
+  }
+
+  // group assignment on a legal, non-break pot
+  if (!groups[seat] && !state.onBreak && !foul) {
+    const firstObj = pottedNonCue.find((p) => p.id !== 8);
+    if (firstObj) {
+      const g = group(firstObj.id);
+      groups[seat] = g;
+      groups[1 - seat] = g === 'solid' ? 'stripe' : 'solid';
+    }
+  }
+
+  // the 8 ball
+  const eightPotted = pottedNonCue.some((p) => p.id === 8);
+  let phase = state.phase, winner = state.winner, eightPottedBy = state.eightPottedBy;
+  if (eightPotted) {
+    if (state.onBreak) {
+      newBalls = [...newBalls, { id: 8, n: 8, group: 'eight', ...placeFree(FOOT_X, FOOT_Y, newBalls, LO_X, HI_X) }];
+    } else {
+      eightPottedBy = seat;
+      const legal8 = !!myGroup && groupClearedBefore && !cueScratched && firstContact === 8;
+      winner = legal8 ? seat : 1 - seat;
+      phase = 'gameover';
+    }
+  }
+
+  const pocketedOwn = groups[seat] ? pottedNonCue.filter((p) => group(p.id) === groups[seat]).length : 0;
+  const continues = !foul && phase !== 'gameover' && pocketedOwn > 0;
+  const ballInHand = foul && phase !== 'gameover';
+  const turn = phase === 'gameover' ? seat : continues ? seat : 1 - seat;
+
+  const scores = [0, 1].map((s) => (groups[s] ? 7 - newBalls.filter((b) => b.group === groups[s]).length : 0));
+
+  return {
+    ...state,
+    balls: newBalls,
+    cue: newCue,
+    turn,
+    groups,
+    ballInHand,
+    onBreak: false,
+    eightPottedBy,
+    scores,
+    phase,
+    winner,
+    draw: false,
+    lastShot: { frames, pocketed, foul, by: seat },
+    seq: state.seq + 1,
+  };
+}
+
+// Real implementations land in Tasks 8 (nineball) and 9 (practice).
+function resolveNineball(state, seat, ctx) {
+  return {
+    ...state, balls: ctx.newBalls, cue: ctx.newCue, turn: 1 - seat, onBreak: false,
+    lastShot: { frames: ctx.frames, pocketed: ctx.pocketed, foul: false, by: seat }, seq: state.seq + 1,
+  };
+}
+function resolvePractice(state, seat, ctx) {
+  return {
+    ...state, balls: ctx.newBalls, cue: ctx.newCue, turn: 1 - seat, onBreak: false,
+    lastShot: { frames: ctx.frames, pocketed: ctx.pocketed, foul: false, by: seat }, seq: state.seq + 1,
+  };
+}
+
+export function getResult(state) {
+  return { over: state.phase === 'gameover', winner: state.winner, draw: state.draw, scores: state.scores };
+}
+
 export default {
   id: 'pool',
   name: 'Pool',
@@ -80,5 +234,7 @@ export default {
     { id: 'practice', name: 'Practice' },
   ],
   createInitialState,
-  // applyMove / getResult / turnTimeoutMs / onTimeout added in later tasks
+  applyMove,
+  getResult,
+  // turnTimeoutMs / onTimeout added in a later task
 };

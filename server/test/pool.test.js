@@ -36,3 +36,53 @@ test('the cue ball starts in the kitchen (left half) and is on break', () => {
   assert.equal(s.onBreak, true);
   assert.equal(s.turn, 0);
 });
+
+const { applyMove } = pool;
+
+// A controlled 8-ball state (post-break): you supply the object balls + cue pos.
+// A straight-up shot from (500,400) at a ball on (500,100) sinks it in the top
+// side pocket while the (equal-mass) cue stops dead — never follows in.
+function eightState(objects, cue) {
+  const s = createInitialState({ mode: 'eightball' }, 2);
+  s.onBreak = false;
+  s.balls = objects;
+  s.cue = cue;
+  return s;
+}
+const UP = { dx: 0, dy: -1, power: 100 };
+
+test('potting a solid on an open table assigns groups', () => {
+  const s = eightState([{ id: 1, n: 1, group: 'solid', x: 500, y: 100 }], { x: 500, y: 400 });
+  const { state, error } = applyMove(s, 0, UP);
+  assert.equal(error, undefined);
+  assert.equal(state.groups[0], 'solid');
+  assert.equal(state.groups[1], 'stripe');
+  assert.equal(state.turn, 0, 'potting your ball keeps the turn');
+});
+
+test('potting your own group keeps the turn', () => {
+  const s = eightState([{ id: 3, n: 3, group: 'solid', x: 500, y: 100 }], { x: 500, y: 400 });
+  s.groups = { 0: 'solid', 1: 'stripe' };
+  const { state } = applyMove(s, 0, UP);
+  assert.equal(state.turn, 0);
+  assert.equal(state.balls.filter((b) => b.group === 'solid').length, 0, 'the solid was pocketed');
+});
+
+test('a legal shot that pockets nothing passes the turn (no foul)', () => {
+  const s = eightState([{ id: 3, n: 3, group: 'solid', x: 500, y: 250 }], { x: 200, y: 250 });
+  s.groups = { 0: 'solid', 1: 'stripe' };
+  const { state } = applyMove(s, 0, { dx: 1, dy: 0, power: 40 });
+  assert.equal(state.turn, 1);
+  assert.equal(state.lastShot.foul, false);
+  assert.equal(state.ballInHand, false);
+});
+
+test('rejects a move out of turn', () => {
+  const s = eightState([{ id: 1, n: 1, group: 'solid', x: 500, y: 100 }], { x: 500, y: 400 });
+  assert.ok(applyMove(s, 1, UP).error);
+});
+
+test('rejects a zero-aim shot', () => {
+  const s = eightState([{ id: 1, n: 1, group: 'solid', x: 500, y: 100 }], { x: 500, y: 400 });
+  assert.ok(applyMove(s, 0, { dx: 0, dy: 0, power: 50 }).error);
+});

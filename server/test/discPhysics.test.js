@@ -65,3 +65,24 @@ test('firstContact is null when the cue hits nothing', () => {
   const { firstContact } = simulateShot([ball(0, 300, 200, 0, 4)], TABLE);
   assert.equal(firstContact, null);
 });
+
+const cueSpin = (along, side = 0) => ({ id: 0, x: 150, y: 200, vx: 8, vy: 0, r: 13, mass: 1, spin: { along, side } });
+
+test('follow english pushes the cue forward through the contact', () => {
+  const plain = simulateShot([cueSpin(0), ball(2, 250, 200)], TABLE).finalDiscs.find((d) => d.id === 0);
+  const follow = simulateShot([cueSpin(1), ball(2, 250, 200)], TABLE).finalDiscs.find((d) => d.id === 0);
+  assert.ok(follow.x > plain.x + 5, 'cue with follow ends further forward');
+});
+
+test('draw english pulls the cue back after contact', () => {
+  const plain = simulateShot([cueSpin(0), ball(2, 250, 200)], TABLE).finalDiscs.find((d) => d.id === 0);
+  const draw = simulateShot([cueSpin(-1), ball(2, 250, 200)], TABLE).finalDiscs.find((d) => d.id === 0);
+  assert.ok(draw.x < plain.x - 5, 'cue with draw ends further back');
+});
+
+test('zero spin leaves the result identical to no spin field (no-op)', () => {
+  const withZero = simulateShot([cueSpin(0), ball(2, 250, 200)], TABLE);
+  const without = simulateShot([ball(0, 150, 200, 8, 0), ball(2, 250, 200)], TABLE);
+  assert.equal(JSON.stringify(withZero.finalDiscs.map((d) => [d.id, d.x, d.y])),
+    JSON.stringify(without.finalDiscs.map((d) => [d.id, d.x, d.y])));
+});

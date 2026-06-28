@@ -110,7 +110,11 @@ export function applyMove(state, seat, move) {
 
   const speed = clamp(power, 5, 100) * SPEED_K;
   const len = Math.hypot(dx, dy) || 1;
-  const cueDisc = { id: 0, x: cuePos.x, y: cuePos.y, vx: (dx / len) * speed, vy: (dy / len) * speed, r: TABLE.ballR, mass: 1 };
+  const spin = {
+    along: clamp(Number(move?.spin?.along) || 0, -1, 1), // follow(+) / draw(-)
+    side: clamp(Number(move?.spin?.side) || 0, -1, 1),   // english
+  };
+  const cueDisc = { id: 0, x: cuePos.x, y: cuePos.y, vx: (dx / len) * speed, vy: (dy / len) * speed, r: TABLE.ballR, mass: 1, spin };
   const discs = [cueDisc, ...objectBalls.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, r: TABLE.ballR, mass: 1 }))];
 
   const { frames, finalDiscs, pocketed, firstContact } = simulateShot(discs);

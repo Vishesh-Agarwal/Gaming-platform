@@ -28,6 +28,20 @@ function resolve(a, b, restitution) {
   return true;
 }
 
+// Apply english (spin) to a disc on its first object-ball contact, using the
+// disc's travel direction just before impact. `along` > 0 is follow (cue rolls
+// forward through the contact), < 0 is draw (cue comes back); `side` curves the
+// rebound. Pure: deterministic, and a zero spin is a no-op.
+const FOLLOW_K = 0.62, SIDE_K = 0.42;
+function applySpin(d, pre) {
+  const sp = Math.hypot(pre.vx, pre.vy) || 1;
+  const fx = pre.vx / sp, fy = pre.vy / sp; // forward (travel) unit
+  const px = -fy, py = fx;                   // perpendicular (left) unit
+  d.vx += fx * sp * d.spin.along * FOLLOW_K + px * sp * d.spin.side * SIDE_K;
+  d.vy += fy * sp * d.spin.along * FOLLOW_K + py * sp * d.spin.side * SIDE_K;
+  d.spinApplied = true;
+}
+
 function inPocket(d, pockets) {
   for (const p of pockets) {
     if (Math.hypot(d.x - p.x, d.y - p.y) < p.r) return true;
@@ -64,11 +78,16 @@ export function simulateShot(discs, table) {
     }
     for (let i = 0; i < live.length; i++) {
       for (let j = i + 1; j < live.length; j++) {
-        if (!resolve(live[i], live[j], restitution)) continue;
+        const a = live[i], b = live[j];
+        const aPre = a.spin && !a.spinApplied ? { vx: a.vx, vy: a.vy } : null;
+        const bPre = b.spin && !b.spinApplied ? { vx: b.vx, vy: b.vy } : null;
+        if (!resolve(a, b, restitution)) continue;
         if (firstContact === null) {
-          if (live[i].id === 0 && live[j].id !== 0) firstContact = live[j].id;
-          else if (live[j].id === 0 && live[i].id !== 0) firstContact = live[i].id;
+          if (a.id === 0 && b.id !== 0) firstContact = b.id;
+          else if (b.id === 0 && a.id !== 0) firstContact = a.id;
         }
+        if (aPre) applySpin(a, aPre); // spinner's first object contact
+        if (bPre) applySpin(b, bPre);
       }
     }
     for (let k = live.length - 1; k >= 0; k--) {

@@ -118,3 +118,35 @@ test('ball-in-hand placement repositions the cue and is consumed', () => {
   assert.equal(state.balls.filter((b) => b.group === 'solid').length, 0, 'placed cue sank the solid');
   assert.equal(state.turn, 0);
 });
+
+// ---- Task 7: getResult + 8-ball win/loss ----
+
+test('clearing your group then potting the 8 cleanly wins', () => {
+  const s = eightState([{ id: 8, n: 8, group: 'eight', x: 500, y: 100 }], { x: 500, y: 400 });
+  s.groups = { 0: 'solid', 1: 'stripe' }; // no solids left on the table => group cleared
+  const { state } = applyMove(s, 0, UP);
+  const r = pool.getResult(state);
+  assert.equal(r.over, true);
+  assert.equal(r.winner, 0);
+});
+
+test('potting the 8 before clearing your group loses', () => {
+  const s = eightState(
+    [{ id: 8, n: 8, group: 'eight', x: 500, y: 100 }, { id: 3, n: 3, group: 'solid', x: 300, y: 300 }],
+    { x: 500, y: 400 }
+  );
+  s.groups = { 0: 'solid', 1: 'stripe' };
+  const { state } = applyMove(s, 0, UP); // pots the 8 while a solid remains
+  const r = pool.getResult(state);
+  assert.equal(r.over, true);
+  assert.equal(r.winner, 1);
+});
+
+test('scratching on the 8 loses (group cleared, but cue potted too)', () => {
+  const s = eightState([{ id: 8, n: 8, group: 'eight', x: 64, y: 64 }], { x: 86, y: 86 });
+  s.groups = { 0: 'solid', 1: 'stripe' };
+  const { state } = applyMove(s, 0, { dx: 46 - 86, dy: 46 - 86, power: 80 }); // 8 + cue both drop
+  const r = pool.getResult(state);
+  assert.equal(r.over, true);
+  assert.equal(r.winner, 1);
+});

@@ -1,6 +1,7 @@
 // Carrom — 2-player board game. Server simulates each flick; this renders the
 // board, takes aim input, replays the shot frames, then settles to state.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { predictShot } from './aimPredict.js';
 
 const VIEW = 560;          // on-screen canvas size (square); logical board is 900
 const COLORS = { white: '#f4f0e6', black: '#2a2a2a', queen: '#e4453a', striker: '#5b8cff' };
@@ -29,6 +30,8 @@ export default function Carrom({ room, youAreIndex, onMove }) {
 
   // aim input state
   const baselineY = useMemo(() => st.striker.y, [st.seq]); // server tells us where the striker rests
+  const bounds = useMemo(() => ({ loX: 72, hiX: st.W - 72, loY: 72, hiY: st.H - 72 }), [st.W, st.H]);
+  const aimCoins = useMemo(() => st.coins.map((c) => ({ ...c, r: st.coinR })), [st.coins, st.coinR]);
   const [slotX, setSlotX] = useState(st.striker.x);
   const [aim, setAim] = useState(null);   // { dx, dy } pointing into the board
   const [power, setPower] = useState(55);
@@ -74,10 +77,13 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       for (const c of st.coins) drawDisc(ctx, c.x, c.y, c.color, st);
       // resting striker (and aim preview on your turn)
       drawDisc(ctx, slotX, baselineY, 'striker', st);
-      if (myTurn && aim) drawAim(ctx, slotX, baselineY, aim, power, st);
+      if (myTurn && aim && (aim.dx || aim.dy)) {
+        const pred = predictShot({ x: slotX, y: baselineY }, aim, aimCoins, st.strikerR, bounds, 2);
+        drawAim(ctx, pred, st);
+      }
     }
     ctx.restore();
-  }, [st, frameIdx, slotX, aim, power, myTurn, baselineY, scale]);
+  }, [st, frameIdx, slotX, aim, power, myTurn, baselineY, scale, aimCoins, bounds]);
 
   // ---- pointer input ----
   const toLogical = (e) => {
@@ -180,17 +186,34 @@ function drawBoard(ctx, st) {
 
 function drawDisc(ctx, x, y, color, st) {
   const r = color === 'striker' ? st.strikerR : st.coinR;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = COLORS[color] || '#888'; ctx.fill();
-  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.stroke();
+  // contact shadow
+  ctx.beginPath(); ctx.ellipse(x + 1.5, y + 2.5, r, r * 0.92, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
+  // body
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = COLORS[color] || '#888'; ctx.fill();
+  // spherical shading
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+  g.addColorStop(0, 'rgba(255,255,255,0.5)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.06)');
+  g.addColorStop(1, 'rgba(0,0,0,0.32)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
 }
 
-function drawAim(ctx, x, y, aim, power, st) {
-  const len = Math.hypot(aim.dx, aim.dy) || 1;
-  const reach = 60 + power * 2.2;
-  const ex = x + (aim.dx / len) * reach, ey = y + (aim.dy / len) * reach;
-  ctx.strokeStyle = 'rgba(91,140,255,0.9)'; ctx.lineWidth = 3;
-  ctx.setLineDash([8, 6]);
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
-  ctx.setLineDash([]);
+// Full trajectory guideline: cue path (with rail bounces), a ghost striker at the
+// first coin it would strike, and the direction that coin would travel.
+function drawAim(ctx, pred, st) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(91,140,255,0.9)'; ctx.lineWidth = 3; ctx.setLineDash([10, 7]);
+  ctx.beginPath(); ctx.moveTo(pred.path[0].x, pred.path[0].y);
+  for (let i = 1; i < pred.path.length; i++) ctx.lineTo(pred.path[i].x, pred.path[i].y);
+  ctx.stroke(); ctx.setLineDash([]);
+  if (pred.hit) {
+    const { ghost, ball, objDir } = pred.hit;
+    ctx.beginPath(); ctx.arc(ghost.x, ghost.y, st.strikerR, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ball.x, ball.y); ctx.lineTo(ball.x + objDir.x * 130, ball.y + objDir.y * 130);
+    ctx.strokeStyle = 'rgba(255,210,90,0.95)'; ctx.lineWidth = 3; ctx.stroke();
+  }
+  ctx.restore();
 }

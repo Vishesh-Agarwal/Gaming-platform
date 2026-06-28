@@ -17,6 +17,7 @@ import hangman from './hangman.js';
 import karts from './karts.js';
 import ludo from './ludo.js';
 import carrom from './carrom.js';
+import pool from './pool.js';
 
 const games = new Map();
 
@@ -45,3 +46,4 @@ register(hangman);
 register(karts);
 register(ludo);
 register(carrom);
+register(pool);

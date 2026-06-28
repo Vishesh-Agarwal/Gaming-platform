@@ -223,3 +223,18 @@ test('practice: clearing the last ball ends the game; higher score wins', () => 
   assert.equal(r.winner, 0);
   assert.equal(r.scores[0], 3);
 });
+
+// ---- Task 10: Blitz shot clock ----
+
+test('blitz exposes a 20s shot clock; other modes have none', () => {
+  assert.equal(typeof pool.turnTimeoutMs, 'function');
+  assert.equal(pool.turnTimeoutMs(createInitialState({ mode: 'blitz' }, 2)), 20000);
+  assert.equal(pool.turnTimeoutMs(createInitialState({ mode: 'eightball' }, 2)), null);
+});
+
+test('blitz onTimeout forfeits the turn', () => {
+  const s = createInitialState({ mode: 'blitz' }, 2);
+  const { state } = pool.onTimeout(s);
+  assert.equal(state.turn, 1);
+  assert.equal(state.lastShot.foul, 'timeout');
+});

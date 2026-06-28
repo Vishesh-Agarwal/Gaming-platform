@@ -261,6 +261,24 @@ export function getResult(state) {
   return { over: state.phase === 'gameover', winner: state.winner, draw: state.draw, scores: state.scores };
 }
 
+// Blitz arms a per-turn shot clock; other modes return null (no clock).
+export function turnTimeoutMs(state) {
+  return state?.mode === 'blitz' ? BLITZ_MS : null;
+}
+
+export function onTimeout(state) {
+  return {
+    state: {
+      ...state,
+      turn: 1 - state.turn,
+      ballInHand: false,
+      onBreak: false,
+      lastShot: { frames: [], pocketed: [], foul: 'timeout', by: state.turn },
+      seq: state.seq + 1,
+    },
+  };
+}
+
 export default {
   id: 'pool',
   name: 'Pool',
@@ -276,5 +294,6 @@ export default {
   createInitialState,
   applyMove,
   getResult,
-  // turnTimeoutMs / onTimeout added in a later task
+  turnTimeoutMs,
+  onTimeout,
 };

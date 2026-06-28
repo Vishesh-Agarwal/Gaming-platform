@@ -86,3 +86,35 @@ test('rejects a zero-aim shot', () => {
   const s = eightState([{ id: 1, n: 1, group: 'solid', x: 500, y: 100 }], { x: 500, y: 400 });
   assert.ok(applyMove(s, 0, { dx: 0, dy: 0, power: 50 }).error);
 });
+
+// ---- Task 6: fouls + ball-in-hand ----
+
+test('scratching the cue is a foul: opponent gets ball-in-hand, turn passes', () => {
+  const s = eightState([], { x: 500, y: 400 });
+  s.groups = { 0: 'solid', 1: 'stripe' };
+  const { state } = applyMove(s, 0, { dx: 46 - 500, dy: 46 - 400, power: 100 }); // into top-left pocket
+  assert.equal(state.lastShot.foul, true);
+  assert.equal(state.turn, 1);
+  assert.equal(state.ballInHand, true);
+  assert.ok(state.balls.some((b) => b.id === 0), 'cue re-spotted on the table');
+});
+
+test('hitting the opponent group first is a foul', () => {
+  const s = eightState([{ id: 9, n: 9, group: 'stripe', x: 500, y: 100 }], { x: 500, y: 400 });
+  s.groups = { 0: 'solid', 1: 'stripe' };
+  const { state } = applyMove(s, 0, UP); // cue strikes the stripe first
+  assert.equal(state.lastShot.foul, true);
+  assert.equal(state.turn, 1);
+  assert.equal(state.ballInHand, true);
+});
+
+test('ball-in-hand placement repositions the cue and is consumed', () => {
+  const s = eightState([{ id: 3, n: 3, group: 'solid', x: 500, y: 100 }], { x: 200, y: 300 });
+  s.groups = { 0: 'solid', 1: 'stripe' };
+  s.ballInHand = true;
+  // place the cue at (500,400) then shoot up to sink the solid (impossible from 200,300)
+  const { state } = applyMove(s, 0, { dx: 0, dy: -1, power: 100, cue: { x: 500, y: 400 } });
+  assert.equal(state.ballInHand, false);
+  assert.equal(state.balls.filter((b) => b.group === 'solid').length, 0, 'placed cue sank the solid');
+  assert.equal(state.turn, 0);
+});

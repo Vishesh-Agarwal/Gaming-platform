@@ -14,78 +14,29 @@ export const POCKETS = [
   { x: BOARD.W - BOARD.inset, y: BOARD.H - BOARD.inset },
 ];
 
-const FRICTION = 0.985;     // velocity retained per substep
-const STOP_V = 0.06;        // below this speed a disc is snapped to rest
-const RESTITUTION = 0.92;   // disc-disc bounciness
-const WALL_REST = 0.7;      // rail bounciness
-const MAX_STEPS = 3000;     // hard cap so a shot always terminates
-const FRAME_EVERY = 2;      // record a frame every N substeps
+// The collision/friction/pocket solver now lives in the shared discPhysics module.
+// Carrom is one geometry config for it: a square board with 4 corner pockets.
+import { simulateShot as solve } from './discPhysics.js';
 
-function inPocket(d) {
-  for (const p of POCKETS) {
-    if (Math.hypot(d.x - p.x, d.y - p.y) < BOARD.pocketR) return true;
-  }
-  return false;
-}
+const TABLE = {
+  bounds: { loX: BOARD.inset, hiX: BOARD.W - BOARD.inset, loY: BOARD.inset, hiY: BOARD.H - BOARD.inset },
+  pockets: POCKETS.map((p) => ({ x: p.x, y: p.y, r: BOARD.pocketR })),
+  friction: 0.985,
+  stopV: 0.06,
+  restitution: 0.92,
+  wallRest: 0.7,
+  maxSteps: 3000,
+  frameEvery: 2,
+};
 
-function bounceWalls(d) {
-  const loX = BOARD.inset + d.r, hiX = BOARD.W - BOARD.inset - d.r;
-  const loY = BOARD.inset + d.r, hiY = BOARD.H - BOARD.inset - d.r;
-  if (d.x < loX) { d.x = loX; d.vx = -d.vx * WALL_REST; }
-  else if (d.x > hiX) { d.x = hiX; d.vx = -d.vx * WALL_REST; }
-  if (d.y < loY) { d.y = loY; d.vy = -d.vy * WALL_REST; }
-  else if (d.y > hiY) { d.y = hiY; d.vy = -d.vy * WALL_REST; }
-}
-
-function resolveCollision(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const dist = Math.hypot(dx, dy) || 0.0001;
-  const minDist = a.r + b.r;
-  if (dist >= minDist) return;
-  const nx = dx / dist, ny = dy / dist;
-  const totInv = 1 / a.mass + 1 / b.mass;
-  // positional separation so discs don't sink into each other
-  const overlap = minDist - dist;
-  a.x -= nx * overlap * (1 / a.mass) / totInv;
-  a.y -= ny * overlap * (1 / a.mass) / totInv;
-  b.x += nx * overlap * (1 / b.mass) / totInv;
-  b.y += ny * overlap * (1 / b.mass) / totInv;
-  // elastic impulse along the normal
-  const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-  if (vn > 0) return; // already separating
-  const j = -(1 + RESTITUTION) * vn / totInv;
-  const ix = j * nx, iy = j * ny;
-  a.vx -= ix / a.mass; a.vy -= iy / a.mass;
-  b.vx += ix / b.mass; b.vy += iy / b.mass;
-}
-
-function snapshot(live) {
-  return live.map((d) => ({ id: d.id, color: d.color, x: Math.round(d.x), y: Math.round(d.y) }));
-}
-
+// Carrom's public API is unchanged: frames and pocketed carry `color` (looked up
+// by id), finalDiscs keep every input field (color/r/mass ride through the solver).
 export function simulateShot(discs) {
-  const live = discs.map((d) => ({ ...d }));
-  const frames = [];
-  const pocketed = [];
-  for (let step = 0; step < MAX_STEPS; step++) {
-    let moving = false;
-    for (const d of live) {
-      d.x += d.vx; d.y += d.vy;
-      d.vx *= FRICTION; d.vy *= FRICTION;
-      if (Math.hypot(d.vx, d.vy) < STOP_V) { d.vx = 0; d.vy = 0; }
-      else moving = true;
-    }
-    for (let i = 0; i < live.length; i++) {
-      for (let j = i + 1; j < live.length; j++) resolveCollision(live[i], live[j]);
-    }
-    for (let k = live.length - 1; k >= 0; k--) {
-      if (inPocket(live[k])) { pocketed.push({ id: live[k].id, color: live[k].color }); live.splice(k, 1); }
-    }
-    for (const d of live) bounceWalls(d);
-    if (step % FRAME_EVERY === 0) frames.push(snapshot(live));
-    if (!moving) break;
-  }
-  for (const d of live) { d.vx = 0; d.vy = 0; }
-  frames.push(snapshot(live));
-  return { frames, finalDiscs: live, pocketed };
+  const colorById = new Map(discs.map((d) => [d.id, d.color]));
+  const { frames, finalDiscs, pocketed } = solve(discs, TABLE);
+  return {
+    frames: frames.map((f) => f.map((d) => ({ id: d.id, color: colorById.get(d.id), x: d.x, y: d.y }))),
+    finalDiscs,
+    pocketed: pocketed.map((p) => ({ id: p.id, color: colorById.get(p.id) })),
+  };
 }

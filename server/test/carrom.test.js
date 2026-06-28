@@ -86,6 +86,15 @@ test('rejects aiming away from the board', () => {
   assert.ok(error);
 });
 
+test('a coin blocking the striker baseline position rejects the shot', () => {
+  const s = freshClassic();
+  s.colors = { 0: 'white', 1: 'black' };
+  // seat 0 baseline y = H(900) - inset(72) - strikerR(22) - gap(14) = 792
+  s.coins = [{ id: 5, color: 'white', x: RAIL_X, y: 792 }];
+  const { error } = applyMove(s, 0, { x: RAIL_X, dx: 0, dy: -1, power: 50 });
+  assert.match(error, /blocking the striker/);
+});
+
 // ---- Task 5: fouls + queen cover ----
 
 test('pocketing the striker is a foul that passes the turn and returns a coin', () => {

@@ -118,6 +118,10 @@ export function applyMove(state, seat, move) {
   if (!aimsIntoBoard(seat, dy)) return { error: 'Aim into the board.' };
 
   const striker = buildStriker(seat, x, dx, dy, power);
+  // A coin sitting on the baseline where the striker would be placed blocks the shot.
+  if (state.coins.some((c) => Math.hypot(c.x - striker.x, c.y - striker.y) < BOARD.coinR + BOARD.strikerR)) {
+    return { error: 'A coin is blocking the striker — slide it to a clear spot.' };
+  }
   const discs = [...state.coins.map(toDisc), striker];
   const { frames, finalDiscs, pocketed } = simulateShot(discs);
 

@@ -44,6 +44,12 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   const [locked, setLocked] = useState(false);    // click to freeze the aim
   const [dragging, setDragging] = useState(null); // 'striker' | null
 
+  // A coin overlapping the striker's slot blocks the shot (matches the server rule).
+  const strikerBlocked = useMemo(
+    () => st.coins.some((c) => Math.hypot(c.x - slotX, c.y - baselineY) < st.coinR + st.strikerR),
+    [st.coins, slotX, baselineY, st.coinR, st.strikerR]
+  );
+
   // replay state
   const [frameIdx, setFrameIdx] = useState(null); // null = show resting state
   const lastSeq = useRef(st.seq);
@@ -87,13 +93,16 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       for (const c of st.coins) drawDisc(ctx, c.x, c.y, c.color, st);
       // resting striker (and aim preview on your turn)
       drawDisc(ctx, slotX, baselineY, 'striker', st);
-      if (myTurn && aim && (aim.dx || aim.dy)) {
+      if (myTurn && strikerBlocked) {
+        ctx.beginPath(); ctx.arc(slotX, baselineY, st.strikerR + 5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,70,70,0.95)'; ctx.lineWidth = 4; ctx.stroke();
+      } else if (myTurn && aim && (aim.dx || aim.dy)) {
         const pred = predictShot({ x: slotX, y: baselineY }, { x: aim.dx, y: aim.dy }, aimCoins, st.strikerR, bounds, 0);
         drawAim(ctx, pred, st);
       }
     }
     ctx.restore();
-  }, [st, frameIdx, slotX, aim, power, myTurn, baselineY, scale, aimCoins, bounds, flip]);
+  }, [st, frameIdx, slotX, aim, power, myTurn, baselineY, scale, aimCoins, bounds, flip, strikerBlocked]);
 
   // ---- pointer input ----
   // Map a pointer event to logical board coords (robust to CSS scaling + the flip).
@@ -132,7 +141,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   };
 
   const fire = () => {
-    if (!myTurn || !aim) return;
+    if (!myTurn || !aim || strikerBlocked) return;
     onMove({ x: Math.round(slotX), dx: aim.dx, dy: aim.dy, power });
     setAim(null);
   };
@@ -171,10 +180,11 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       {myTurn && frameIdx == null && (
         <div className="carrom-controls">
           <PowerBar value={power} onChange={setPower} />
-          <button className="carrom-fire" disabled={!aim} onClick={fire}>Fire</button>
+          <button className="carrom-fire" disabled={!aim || strikerBlocked} onClick={fire}>Fire</button>
           <span className="carrom-hint muted">
-            Drag the striker to slide it. Move to aim, <b>click to lock</b>, set power, then Fire.
-            {locked ? ' (aim locked — click the board to re-aim)' : ''}
+            {strikerBlocked
+              ? '⛔ A coin is blocking the striker — slide it to a clear spot.'
+              : (<>Drag the striker to slide it. Move to aim, <b>click to lock</b>, set power, then Fire.{locked ? ' (aim locked — click the board to re-aim)' : ''}</>)}
           </span>
         </div>
       )}

@@ -150,3 +150,41 @@ test('scratching on the 8 loses (group cleared, but cue potted too)', () => {
   assert.equal(r.over, true);
   assert.equal(r.winner, 1);
 });
+
+// ---- Task 8: 9-Ball ----
+
+function nineState(objects, cue) {
+  const s = createInitialState({ mode: 'nineball' }, 2);
+  s.onBreak = false;
+  s.balls = objects;
+  s.cue = cue;
+  return s;
+}
+
+test('9-ball: hitting a higher ball before the lowest is a foul', () => {
+  const s = nineState(
+    [{ id: 1, n: 1, group: 'solid', x: 300, y: 100 }, { id: 5, n: 5, group: 'solid', x: 500, y: 100 }],
+    { x: 500, y: 400 }
+  );
+  const { state } = applyMove(s, 0, UP); // strikes the 5 first; lowest is the 1
+  assert.equal(state.lastShot.foul, true);
+  assert.equal(state.turn, 1);
+  assert.equal(state.ballInHand, true);
+});
+
+test('9-ball: legally potting the 9 wins', () => {
+  const s = nineState([{ id: 9, n: 9, group: 'stripe', x: 500, y: 100 }], { x: 500, y: 400 });
+  const { state } = applyMove(s, 0, UP); // 9 is the lowest (only) ball
+  const r = pool.getResult(state);
+  assert.equal(r.over, true);
+  assert.equal(r.winner, 0);
+});
+
+test('9-ball: scratching while potting the 9 re-spots it (no win) + ball-in-hand', () => {
+  const s = nineState([{ id: 9, n: 9, group: 'stripe', x: 64, y: 64 }], { x: 86, y: 86 });
+  const { state } = applyMove(s, 0, { dx: 46 - 86, dy: 46 - 86, power: 80 }); // 9 + cue both drop
+  assert.equal(state.phase, 'playing');
+  assert.equal(state.ballInHand, true);
+  assert.equal(state.turn, 1);
+  assert.equal(state.balls.filter((b) => b.n === 9).length, 1, 'the 9 is re-spotted');
+});

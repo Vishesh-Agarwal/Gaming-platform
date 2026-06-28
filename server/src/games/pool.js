@@ -203,11 +203,35 @@ function resolveEightball(state, seat, ctx) {
   };
 }
 
-// Real implementations land in Tasks 8 (nineball) and 9 (practice).
+// 9-Ball: must contact the lowest-numbered ball first; legally pot the 9 to win.
 function resolveNineball(state, seat, ctx) {
+  const { pocketed, firstContact, cueScratched, frames } = ctx;
+  let { newBalls, newCue } = ctx;
+  const pottedNonCue = pocketed.filter((p) => p.id !== 0);
+  const remaining = state.balls.filter((b) => b.id !== 0).map((b) => b.n);
+  const lowest = remaining.length ? Math.min(...remaining) : null;
+
+  let foul = false;
+  if (cueScratched) foul = true;
+  else if (firstContact === null) foul = true;
+  else if (lowest !== null && firstContact !== lowest) foul = true;
+
+  const ninePotted = pottedNonCue.some((p) => p.id === 9);
+  let phase = state.phase, winner = state.winner;
+  if (ninePotted) {
+    if (!foul) { winner = seat; phase = 'gameover'; }
+    else { newBalls = [...newBalls, { id: 9, n: 9, group: group(9), ...placeFree(FOOT_X, FOOT_Y, newBalls, LO_X, HI_X) }]; }
+  }
+
+  const continues = !foul && phase !== 'gameover' && pottedNonCue.length > 0;
+  const ballInHand = foul && phase !== 'gameover';
+  const turn = phase === 'gameover' ? seat : continues ? seat : 1 - seat;
+  const scores = state.scores.slice();
+  if (!foul) scores[seat] += pottedNonCue.length;
+
   return {
-    ...state, balls: ctx.newBalls, cue: ctx.newCue, turn: 1 - seat, onBreak: false,
-    lastShot: { frames: ctx.frames, pocketed: ctx.pocketed, foul: false, by: seat }, seq: state.seq + 1,
+    ...state, balls: newBalls, cue: newCue, turn, ballInHand, onBreak: false,
+    phase, winner, scores, lastShot: { frames, pocketed, foul, by: seat }, seq: state.seq + 1,
   };
 }
 function resolvePractice(state, seat, ctx) {

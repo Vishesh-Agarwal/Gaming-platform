@@ -86,7 +86,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
       for (const b of st.balls) if (b.id !== 0) drawBall(ctx, b.x, b.y, b.id, st.ballR);
       drawBall(ctx, baseCue.x, baseCue.y, 0, st.ballR);
       if (myTurn && aim && (aim.dx || aim.dy)) {
-        const pred = predictShot(baseCue, aim, objectBalls, st.ballR, bounds, 2);
+        const pred = predictShot(baseCue, { x: aim.dx, y: aim.dy }, objectBalls, st.ballR, bounds, 2);
         drawPrediction(ctx, pred, st.ballR);
         drawCueStick(ctx, baseCue, aim, power, st.ballR);
       }

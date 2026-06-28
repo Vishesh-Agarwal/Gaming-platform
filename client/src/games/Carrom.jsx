@@ -85,7 +85,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
       // resting striker (and aim preview on your turn)
       drawDisc(ctx, slotX, baselineY, 'striker', st);
       if (myTurn && aim && (aim.dx || aim.dy)) {
-        const pred = predictShot({ x: slotX, y: baselineY }, aim, aimCoins, st.strikerR, bounds, 2);
+        const pred = predictShot({ x: slotX, y: baselineY }, { x: aim.dx, y: aim.dy }, aimCoins, st.strikerR, bounds, 2);
         drawAim(ctx, pred, st);
       }
     }

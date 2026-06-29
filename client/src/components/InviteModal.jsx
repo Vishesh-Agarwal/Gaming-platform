@@ -61,14 +61,27 @@ export default function InviteModal({
       )}
 
       {(game.options || []).map((o) => (
-        <div key={o.key} className="opt-stepper">
-          <span className="mode-label">{o.label}</span>
-          <div className="stepper">
-            <button type="button" onClick={() => setOpt(o.key, o.min, o.max, -1)} disabled={opts[o.key] <= o.min}>−</button>
-            <span className="stepper-val">{opts[o.key]}</span>
-            <button type="button" onClick={() => setOpt(o.key, o.min, o.max, 1)} disabled={opts[o.key] >= o.max}>+</button>
+        o.type === 'textList' ? (
+          <label key={o.key} className="text-option">
+            <span className="mode-label">{o.label}</span>
+            <textarea
+              value={opts[o.key] || ''}
+              rows={4}
+              placeholder={o.placeholder || ''}
+              onChange={(e) => setOpts((prev) => ({ ...prev, [o.key]: e.target.value }))}
+            />
+            {o.hint && <span className="mode-hint muted">{o.hint}</span>}
+          </label>
+        ) : (
+          <div key={o.key} className="opt-stepper">
+            <span className="mode-label">{o.label}</span>
+            <div className="stepper">
+              <button type="button" onClick={() => setOpt(o.key, o.min, o.max, -1)} disabled={opts[o.key] <= o.min}>-</button>
+              <span className="stepper-val">{opts[o.key]}</span>
+              <button type="button" onClick={() => setOpt(o.key, o.min, o.max, 1)} disabled={opts[o.key] >= o.max}>+</button>
+            </div>
           </div>
-        </div>
+        )
       ))}
 
       {friends.length === 0 && (

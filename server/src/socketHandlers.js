@@ -18,6 +18,7 @@ import {
   makeMove,
   forfeit,
   getRoomPlayerIds,
+  getRoomForUser,
   recordFinish,
   isRealtimeRoom,
   setInput,
@@ -28,6 +29,10 @@ import {
   acceptRematch,
   clearRematch,
   cancelRematchForUser,
+  isBotTurn,
+  makeBotMove,
+  requestUndo,
+  acceptUndo,
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
 import { armTurnClock, stopTurnClock } from './turnclock.js';
@@ -42,10 +47,38 @@ import {
   startLobby,
   getLobbyForUser,
   publicLobby,
+  listPublicLobbies,
 } from './lobbies.js';
 
 // Allow-list of in-game reaction emojis (keeps the relay from carrying arbitrary text).
 const GAME_EMOTES = ['👍', '😂', '😮', '😢', '🔥', '🎉', '😎', '💀', '❤️', '🤝'];
+const botTimers = new Set();
+
+function emitRoomState(io, result, roomId) {
+  for (const pid of result.players) {
+    emitToUser(io, pid, 'game:state', { room: result.rooms?.get(pid) || result.room });
+  }
+  if (result.room.status === 'over') {
+    stopTurnClock(roomId);
+    for (const pid of result.players) {
+      emitToUser(io, pid, 'game:over', { room: result.rooms?.get(pid) || result.room });
+    }
+  } else if (hasTurnClock(roomId)) {
+    armTurnClock(io, roomId);
+  }
+}
+
+function scheduleBotTurn(io, roomId) {
+  if (!roomId || botTimers.has(roomId) || !isBotTurn(roomId)) return;
+  botTimers.add(roomId);
+  setTimeout(() => {
+    botTimers.delete(roomId);
+    const result = makeBotMove(roomId);
+    if (!result) return;
+    emitRoomState(io, result, roomId);
+    if (result.room.status !== 'over') scheduleBotTurn(io, roomId);
+  }, 650);
+}
 
 export function initSockets(io) {
   io.on('connection', (socket) => {
@@ -103,13 +136,14 @@ export function initSockets(io) {
       if (error) return ack?.({ error });
       // Tell both players the game has started.
       for (const p of room.players) {
-        emitToUser(io, p.id, 'game:start', { room, youAreIndex: p.index });
+        emitToUser(io, p.id, 'game:start', { room: getRoomForUser(room.id, p.id) || room, youAreIndex: p.index });
       }
       // Let the inviter know their invite was accepted (clears pending UI).
       if (invite) emitToUser(io, invite.from.id, 'game:invite:resolved', { inviteId });
       // Kick off the server tick loop for realtime games.
       if (isRealtimeRoom(room.id)) startMatch(io, room.id);
       else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
+      scheduleBotTurn(io, room.id);
       ack?.({ ok: true, roomId: room.id });
     });
 
@@ -144,6 +178,10 @@ export function initSockets(io) {
       if (error) return ack?.({ error });
       if (joined) broadcastLobby(lobby); // tell the others someone joined
       ack?.({ ok: true, lobby: publicLobby(lobby), joined });
+    });
+
+    socket.on('lobby:list', (_payload, ack) => {
+      ack?.({ lobbies: listPublicLobbies() });
     });
 
     socket.on('lobby:join', (payload, ack) => {
@@ -201,10 +239,11 @@ export function initSockets(io) {
       const { room, error } = createRoom(res.gameId, res.options, res.userIds);
       if (error) return ack?.({ error });
       for (const p of room.players) {
-        emitToUser(io, p.id, 'game:start', { room, youAreIndex: p.index });
+        emitToUser(io, p.id, 'game:start', { room: getRoomForUser(room.id, p.id) || room, youAreIndex: p.index });
       }
       if (isRealtimeRoom(room.id)) startMatch(io, room.id);
       else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
+      scheduleBotTurn(io, room.id);
       ack?.({ ok: true, roomId: room.id });
     });
 
@@ -213,17 +252,24 @@ export function initSockets(io) {
       const roomId = String(payload?.roomId || '');
       const result = makeMove(roomId, me.id, payload?.move);
       if (result.error) return ack?.({ error: result.error });
-      for (const pid of result.players) {
-        emitToUser(io, pid, 'game:state', { room: result.room });
-      }
-      if (result.room.status === 'over') {
-        stopTurnClock(roomId);
-        for (const pid of result.players) {
-          emitToUser(io, pid, 'game:over', { room: result.room });
-        }
-      } else if (hasTurnClock(roomId)) {
-        armTurnClock(io, roomId); // reset the timer for the next turn
-      }
+      emitRoomState(io, result, roomId);
+      if (result.room.status !== 'over') scheduleBotTurn(io, roomId);
+      ack?.({ ok: true });
+    });
+
+    socket.on('game:undo:request', (payload, ack) => {
+      const roomId = String(payload?.roomId || '');
+      const result = requestUndo(roomId, me.id);
+      if (result.error) return ack?.({ error: result.error });
+      emitRoomState(io, result, roomId);
+      ack?.({ ok: true });
+    });
+
+    socket.on('game:undo:accept', (payload, ack) => {
+      const roomId = String(payload?.roomId || '');
+      const result = acceptUndo(roomId, me.id);
+      if (result.error) return ack?.({ error: result.error });
+      emitRoomState(io, result, roomId);
       ack?.({ ok: true });
     });
 
@@ -249,7 +295,7 @@ export function initSockets(io) {
       if (res.error) return ack?.({ error: res.error });
       if (res.already) return ack?.({ ok: true, late: true });
       for (const pid of res.players) {
-        emitToUser(io, pid, 'game:over', { room: res.room });
+        emitToUser(io, pid, 'game:over', { room: res.rooms?.get(pid) || res.room });
       }
       ack?.({ ok: true });
     });
@@ -264,16 +310,18 @@ export function initSockets(io) {
       if (error) return ack?.({ error });
 
       const eligible = offer.userIds.filter((id) => isOnline(id));
-      const ready = eligible.length >= 2 && eligible.every((id) => offer.accepted.has(id));
+      const minReady = Number(offer.options?.bots || 0) > 0 ? 1 : 2;
+      const ready = eligible.length >= minReady && eligible.every((id) => offer.accepted.has(id));
       if (ready) {
         clearRematch(offerId);
         const { room, error: createErr } = createRoom(offer.gameId, offer.options, eligible);
         if (createErr) return ack?.({ error: createErr });
         for (const p of room.players) {
-          emitToUser(io, p.id, 'game:start', { room, youAreIndex: p.index });
+          emitToUser(io, p.id, 'game:start', { room: getRoomForUser(room.id, p.id) || room, youAreIndex: p.index });
         }
         if (isRealtimeRoom(room.id)) startMatch(io, room.id);
         else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
+        scheduleBotTurn(io, room.id);
         return ack?.({ ok: true, roomId: room.id });
       }
 
@@ -327,7 +375,7 @@ function handleLeave(io, userId) {
     const res = dropFromRealtime(userId);
     if (res.ended) {
       stopMatch(res.roomId);
-      for (const pid of res.players) emitToUser(io, pid, 'game:over', { room: res.room });
+      for (const pid of res.players) emitToUser(io, pid, 'game:over', { room: res.rooms?.get(pid) || res.room });
     }
     return;
   }
@@ -340,6 +388,6 @@ function endGameByForfeit(io, userId) {
   if (!res) return;
   if (roomId) { stopMatch(roomId); stopTurnClock(roomId); } // halt any timers
   for (const pid of res.players) {
-    emitToUser(io, pid, 'game:over', { room: res.room });
+    emitToUser(io, pid, 'game:over', { room: res.rooms?.get(pid) || res.room });
   }
 }

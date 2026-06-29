@@ -36,10 +36,15 @@ export default function Lobby({
   onCreateLobby,
   onQuickPlay,
   onJoinLobby,
+  onShowRooms,
+  publicLobbies,
+  roomsOpen,
+  onCloseRooms,
   onLeaveLobby,
   onLobbyReady,
   onSetLobbyMap,
   onSetLobbyMode,
+  onSetLobbyOption,
   onSetLobbyBots,
   onSetLobbyTeam,
   onInviteToLobby,
@@ -48,6 +53,10 @@ export default function Lobby({
   onBack,
   onSendChat,
   onLogout,
+  onShowStats,
+  stats,
+  statsOpen,
+  onCloseStats,
 }) {
   const [pickedGame, setPickedGame] = useState(null); // game chosen to invite into
   const [showAdd, setShowAdd] = useState(false);
@@ -139,12 +148,18 @@ export default function Lobby({
         <button className="ghost" onClick={() => setShowJoinCode(true)}>
           Join code
         </button>
+        <button className="ghost" onClick={onShowRooms}>
+          Open rooms
+        </button>
         <button className="ghost" onClick={() => setShowAdd(true)}>
           + Add friend
         </button>
         <button className="ghost requests-btn" onClick={() => setShowRequests(true)}>
           Requests
           {requests.length > 0 && <span className="badge">{requests.length}</span>}
+        </button>
+        <button className="ghost" onClick={onShowStats}>
+          Stats
         </button>
         <span className="username">{currentUser.username}</span>
         <button className="link" onClick={onLogout}>
@@ -157,7 +172,7 @@ export default function Lobby({
       <div className="app-body" style={{ '--chat-w': `${chatWidth}px` }}>
         <main className="games-area">
           <h2>Games</h2>
-          <p className="muted">Pick a game to invite a friend, or hit ⚡ Quick Play to match with anyone online.</p>
+          <p className="muted">Pick a game to invite a friend, or hit Quick Play to open a lobby, match with players, or add bots.</p>
           <div className="games-grid">
             {availableGames.map((g) => (
               <GameCard key={g.id} game={g} onClick={pickGame} onQuickPlay={(game) => onQuickPlay(game.id)} />
@@ -212,9 +227,14 @@ export default function Lobby({
           maps={lobby.gameId === 'karts' ? listMaps() : null}
           onSetMap={onSetLobbyMap}
           modes={availableGames.find((g) => g.id === lobby.gameId)?.modes || null}
+          options={availableGames.find((g) => g.id === lobby.gameId)?.options || null}
           onSetMode={onSetLobbyMode}
+          onSetOption={onSetLobbyOption}
           onSetBots={onSetLobbyBots}
-          botCap={lobby.gameId === 'karts' ? Math.max(0, lobby.maxPlayers - lobby.members.length) : 0}
+          botCap={Math.max(0, Math.min(
+            availableGames.find((g) => g.id === lobby.gameId)?.botCap || 0,
+            lobby.maxPlayers - lobby.members.length
+          ))}
           manualTeams={lobby.gameId === 'karts'}
           onSetTeam={onSetLobbyTeam}
         />
@@ -231,6 +251,23 @@ export default function Lobby({
             />
             <button type="submit" disabled={joinCode.trim().length < 4}>Join</button>
           </form>
+        </Modal>
+      )}
+
+      {roomsOpen && (
+        <Modal title="Open rooms" onClose={onCloseRooms}>
+          <div className="room-browser">
+            {(!publicLobbies || publicLobbies.length === 0) && <p className="muted">No open rooms right now.</p>}
+            {publicLobbies?.map((room) => (
+              <div key={room.id} className="room-row">
+                <div>
+                  <b>{room.gameName}</b>
+                  <span>{room.members.length}/{room.maxPlayers} players · {room.code}</span>
+                </div>
+                <button onClick={() => { onJoinLobby({ lobbyId: room.id }); onCloseRooms(); }}>Join</button>
+              </div>
+            ))}
+          </div>
         </Modal>
       )}
 
@@ -257,6 +294,40 @@ export default function Lobby({
               <button onClick={() => onAccept(r.requestId)}>Accept</button>
             </div>
           ))}
+        </Modal>
+      )}
+
+      {statsOpen && (
+        <Modal title="Your stats" onClose={onCloseStats}>
+          <div className="stats-panel">
+            {(!stats?.stats || stats.stats.length === 0) && <p className="muted">Play a match to start building your record.</p>}
+            {stats?.stats?.length > 0 && (
+              <div className="stats-grid">
+                {stats.stats.map((row) => {
+                  const game = availableGames.find((g) => g.id === row.gameId);
+                  return (
+                    <div key={row.gameId} className="stat-card">
+                      <b>{game?.name || row.gameId}</b>
+                      <span>{row.wins}W / {row.losses}L / {row.draws}D</span>
+                      <small>{row.played} played{row.bestScore != null ? ` · best ${row.bestScore}` : ''}</small>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {stats?.recent?.length > 0 && (
+              <div className="recent-matches">
+                <span className="mode-label">Recent matches</span>
+                {stats.recent.map((m) => (
+                  <div key={m.id} className={`recent-row ${m.result}`}>
+                    <span>{m.gameName}</span>
+                    <b>{m.result}</b>
+                    {m.score != null && <small>{m.score}</small>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Modal>
       )}
     </div>

@@ -30,4 +30,5 @@ export const api = {
 
   getConversation: (token, friendId) => request('/api/chat/' + friendId, { token }),
   getGames: () => request('/api/games'),
+  getStats: (token) => request('/api/stats/me', { token }),
 };

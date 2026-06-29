@@ -3,25 +3,63 @@
 // socketHandlers does the emitting.
 import { nanoid } from 'nanoid';
 import { getGame } from './games/registry.js';
-import { areFriends, getUserById, publicUser } from './db.js';
+import { areFriends, getUserById, publicUser, saveMatchResult } from './db.js';
+import { chooseBotMove, supportsRoomBots } from './bots.js';
+import { resolveGameOptions } from './gameOptions.js';
 
 const invites = new Map(); // inviteId -> { id, gameId, from, to, createdAt }
 const rooms = new Map();   // roomId  -> room
 const userRooms = new Map(); // userId -> roomId (a user is in at most one room)
 
-function publicRoom(room) {
+function publicRoom(room, viewerSeat = null) {
   // Strip private game state (e.g. Hangman's secret word) before it leaves the
   // server, so opponents never receive hidden info.
-  const { secret, ...state } = room.state;
+  const state = typeof room.game.publicState === 'function'
+    ? room.game.publicState(room.state, viewerSeat, room.players)
+    : (() => {
+        const { secret, ...rest } = room.state;
+        return rest;
+      })();
   return {
     id: room.id,
     gameId: room.gameId,
-    players: room.players.map((p) => ({ index: p.index, ...publicUser(p.user) })),
+    players: room.players.map((p) => ({ index: p.index, ...publicUser(p.user), bot: !!p.user.bot })),
     state,
     status: room.status, // 'playing' | 'over'
     result: room.result || null,
+    undo: room.undo ? { by: room.undo.by, requestedBy: room.undo.requestedBy || null } : null,
     turnEndsAt: room.turnEndsAt || null, // wall-clock deadline for the current turn, if timed
   };
+}
+
+function publicRoomForUser(room, userId) {
+  const player = room.players.find((p) => p.user.id === userId);
+  return publicRoom(room, player?.index ?? null);
+}
+
+function playerRooms(room) {
+  return new Map(room.players.filter((p) => !p.user.bot).map((p) => [p.user.id, publicRoom(room, p.index)]));
+}
+
+function humanIds(room) {
+  return room.players.filter((p) => !p.user.bot).map((p) => p.user.id);
+}
+
+function botUser(roomId, n) {
+  const names = ['Nova', 'Pixel', 'Blitz', 'Orbit', 'Quest'];
+  return { id: -Math.abs(Number.parseInt(roomId.replace(/\D/g, '').slice(0, 5), 10) || Date.now()) - n - 1, username: `Bot ${names[n % names.length]}`, bot: true };
+}
+
+function recordIfDone(room) {
+  if (room.status === 'over' && room.result) {
+    saveMatchResult({
+      roomId: room.id,
+      gameId: room.gameId,
+      gameName: room.game.name,
+      players: room.players,
+      result: room.result,
+    });
+  }
 }
 
 // Stamp the current-turn deadline on a room when its game uses turn timeouts and
@@ -40,32 +78,13 @@ function armTurnDeadline(room) {
 export function createInvite(fromUserId, toUserId, gameId, options) {
   const game = getGame(gameId);
   if (!game) return { error: 'Unknown game.' };
+  if ((game.minPlayers || 2) > 2) return { error: `${game.name} needs a lobby.` };
   if (fromUserId === toUserId) return { error: "You can't invite yourself." };
   if (!areFriends(fromUserId, toUserId)) return { error: 'You are not friends.' };
   if (userRooms.has(fromUserId)) return { error: 'You are already in a game.' };
   if (userRooms.has(toUserId)) return { error: 'That player is already in a game.' };
 
-  // resolve optional game settings: a mode (existing) and/or a numeric optionsSpec
-  let resolved = null;
-  const labels = [];
-
-  if (game.modes?.length) {
-    const mode = game.modes.find((m) => m.id === options?.mode) || game.modes[0];
-    resolved = { ...resolved, mode: mode.id };
-    labels.push(mode.name);
-  }
-  if (game.optionsSpec) {
-    resolved = resolved || {};
-    for (const [key, spec] of Object.entries(game.optionsSpec)) {
-      if (spec.type === 'int') {
-        let v = parseInt(options?.[key], 10);
-        if (!Number.isFinite(v)) v = spec.default;
-        v = Math.max(spec.min, Math.min(spec.max, v));
-        resolved[key] = v;
-        labels.push(`${v} ${(spec.label || key).toLowerCase()}`);
-      }
-    }
-  }
+  const { options: resolved, labels } = resolveGameOptions(game, options, { includeLabels: true });
 
   const invite = {
     id: nanoid(10),
@@ -135,29 +154,47 @@ export function createRoom(gameId, options, userIds) {
   for (const uid of userIds) {
     if (userRooms.has(uid)) return { error: 'A player is already in a game.' };
   }
+  const resolvedOptions = resolveGameOptions(game, options);
+  const botSeats = supportsRoomBots(gameId)
+    ? Math.max(0, Math.min(Math.floor(Number(resolvedOptions?.bots) || 0), (game.maxPlayers || userIds.length) - userIds.length))
+    : 0;
+  const roomId = nanoid(10);
+  const players = [
+    ...userIds.map((uid, i) => ({ index: i, user: getUserById(uid) })),
+    ...Array.from({ length: botSeats }, (_, i) => ({ index: userIds.length + i, user: botUser(roomId, i) })),
+  ];
+  const min = game.minPlayers || 2;
+  const max = game.maxPlayers || players.length;
+  if (players.length < min) return { error: `Need at least ${min} players.` };
+  if (players.length > max) return { error: `Too many players for ${game.name}.` };
   const room = {
-    id: nanoid(10),
+    id: roomId,
     gameId,
     game,
-    players: userIds.map((uid, i) => ({ index: i, user: getUserById(uid) })),
-    state: game.createInitialState(options || undefined, userIds.length),
-    options: options || null, // kept so a rematch can reuse the same settings
+    players,
+    state: game.createInitialState(resolvedOptions || undefined, players.length),
+    options: resolvedOptions || null, // kept so a rematch can reuse the same settings
     status: 'playing',
     result: null,
   };
   if (typeof game.createSim === 'function') {
-    room.sim = game.createSim(room.players, Date.now(), options || undefined);
+    room.sim = game.createSim(room.players, Date.now(), resolvedOptions || undefined);
     room.inputs = {};
   }
   armTurnDeadline(room);
   rooms.set(room.id, room);
-  for (const p of room.players) userRooms.set(p.user.id, room.id);
+  for (const p of room.players) if (!p.user.bot) userRooms.set(p.user.id, room.id);
   return { room: publicRoom(room) };
 }
 
 export function getRoom(roomId) {
   const room = rooms.get(roomId);
   return room ? publicRoom(room) : null;
+}
+
+export function getRoomForUser(roomId, userId) {
+  const room = rooms.get(roomId);
+  return room ? publicRoomForUser(room, userId) : null;
 }
 
 export function getRoomIdForUser(userId) {
@@ -200,9 +237,10 @@ export function stepRoom(roomId, dt) {
     room.status = 'over';
     room.result = room.game.result(room.sim);
     const snap = publicRoom(room);
+    const roomsByPlayer = playerRooms(room);
     registerRematch(room);
     endRoom(room);
-    return { players, data, over: true, room: snap };
+    return { players, data, over: true, room: snap, rooms: roomsByPlayer };
   }
   return { players, data };
 }
@@ -224,10 +262,11 @@ export function dropFromRealtime(userId) {
       ? room.game.result(room.sim)
       : { over: true, winner: null, draw: true };
     const snap = publicRoom(room);
+    const roomsByPlayer = playerRooms(room);
     const players = room.players.map((p) => p.user.id);
     for (const p of room.players) userRooms.delete(p.user.id);
     rooms.delete(room.id);
-    return { handled: true, ended: true, roomId, room: snap, players };
+    return { handled: true, ended: true, roomId, room: snap, rooms: roomsByPlayer, players };
   }
   return { handled: true, ended: false, roomId };
 }
@@ -245,9 +284,11 @@ export function makeMove(roomId, userId, move) {
   const player = room.players.find((p) => p.user.id === userId);
   if (!player) return { error: 'You are not in this game.' };
 
+  const before = structuredClone(room.state);
   const { state, error } = room.game.applyMove(room.state, player.index, move);
   if (error) return { error };
   room.state = state;
+  room.undo = { state: before, by: userId, requestedBy: null };
 
   const result = room.game.getResult(state);
   if (result.over) {
@@ -255,8 +296,62 @@ export function makeMove(roomId, userId, move) {
     room.result = result;
   }
   armTurnDeadline(room); // fresh deadline for the next turn (cleared if the game ended)
-  const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id) };
-  if (result.over) { registerRematch(room); endRoom(room); }
+  const out = { room: publicRoom(room), rooms: playerRooms(room), players: humanIds(room), roomId: room.id };
+  if (result.over) { recordIfDone(room); registerRematch(room); endRoom(room); }
+  return out;
+}
+
+export function requestUndo(roomId, userId) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing') return { error: 'Game not found.' };
+  if (!room.undo) return { error: 'No move to undo.' };
+  if (!room.players.some((p) => p.user.id === userId)) return { error: 'You are not in this game.' };
+  room.undo.requestedBy = userId;
+  return { room: publicRoom(room), rooms: playerRooms(room), players: humanIds(room) };
+}
+
+export function acceptUndo(roomId, userId) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing') return { error: 'Game not found.' };
+  if (!room.undo?.requestedBy) return { error: 'No undo request.' };
+  if (room.undo.requestedBy === userId) return { error: 'Waiting for the other player.' };
+  if (!room.players.some((p) => p.user.id === userId)) return { error: 'You are not in this game.' };
+  room.state = structuredClone(room.undo.state);
+  room.undo = null;
+  armTurnDeadline(room);
+  return { room: publicRoom(room), rooms: playerRooms(room), players: humanIds(room) };
+}
+
+export function clearUndo(roomId) {
+  const room = rooms.get(roomId);
+  if (room) room.undo = null;
+}
+
+export function isBotTurn(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing') return false;
+  const turn = room.state?.turn;
+  return room.players.some((p) => p.index === turn && p.user.bot);
+}
+
+export function makeBotMove(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing') return null;
+  const bot = room.players.find((p) => p.index === room.state?.turn && p.user.bot);
+  if (!bot) return null;
+  const move = chooseBotMove(room.game, room.state, bot.index);
+  if (!move) return null;
+  const { state, error } = room.game.applyMove(room.state, bot.index, move);
+  if (error) return null;
+  room.state = state;
+  const result = room.game.getResult(state);
+  if (result.over) {
+    room.status = 'over';
+    room.result = result;
+  }
+  armTurnDeadline(room);
+  const out = { room: publicRoom(room), rooms: playerRooms(room), players: humanIds(room), roomId: room.id };
+  if (result.over) { recordIfDone(room); registerRematch(room); endRoom(room); }
   return out;
 }
 
@@ -285,8 +380,8 @@ export function applyTimeout(roomId) {
     room.result = result;
   }
   armTurnDeadline(room);
-  const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id), over: result.over };
-  if (result.over) { registerRematch(room); endRoom(room); }
+  const out = { room: publicRoom(room), rooms: playerRooms(room), players: humanIds(room), over: result.over, roomId: room.id };
+  if (result.over) { recordIfDone(room); registerRematch(room); endRoom(room); }
   return out;
 }
 
@@ -303,7 +398,7 @@ export function getOpponentId(roomId, userId) {
 // All user ids in a room (for broadcasting in-game emotes to everyone present).
 export function getRoomPlayerIds(roomId) {
   const room = rooms.get(roomId);
-  return room ? room.players.map((p) => p.user.id) : [];
+  return room ? humanIds(room) : [];
 }
 
 // First player to report finishing wins. Returns { room, players } or { error } or
@@ -317,7 +412,8 @@ export function recordFinish(roomId, userId) {
 
   room.status = 'over';
   room.result = { over: true, winner: player.index, draw: false };
-  const out = { room: publicRoom(room), players: room.players.map((p) => p.user.id) };
+  const out = { room: publicRoom(room), rooms: playerRooms(room), players: humanIds(room) };
+  recordIfDone(room);
   registerRematch(room);
   endRoom(room);
   return out;
@@ -342,9 +438,11 @@ export function forfeit(userId) {
     forfeit: true,
   };
   const snapshot = publicRoom(room);
-  const players = room.players.map((p) => p.user.id);
+  const roomsByPlayer = playerRooms(room);
+  const players = humanIds(room);
+  recordIfDone(room);
   endRoom(room);
-  return { room: snapshot, players, quitterId: userId, opponentId: opponent?.user.id };
+  return { room: snapshot, rooms: roomsByPlayer, players, quitterId: userId, opponentId: opponent?.user.id };
 }
 
 // ---- Rematch ----
@@ -361,8 +459,8 @@ function registerRematch(room) {
   rematchOffers.set(room.id, {
     gameId: room.gameId,
     options: room.options || null,
-    userIds: room.players.map((p) => p.user.id),
-    names: Object.fromEntries(room.players.map((p) => [p.user.id, p.user.username])),
+    userIds: humanIds(room),
+    names: Object.fromEntries(room.players.filter((p) => !p.user.bot).map((p) => [p.user.id, p.user.username])),
     accepted: new Set(),
     createdAt: Date.now(),
   });

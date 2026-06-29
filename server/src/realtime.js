@@ -20,7 +20,7 @@ export function startMatch(io, roomId) {
     if (!out) { stopMatch(roomId); return; }
     for (const pid of out.players) emitToUser(io, pid, 'game:rt:snap', out.data);
     if (out.over) {
-      for (const pid of out.players) emitToUser(io, pid, 'game:over', { room: out.room });
+      for (const pid of out.players) emitToUser(io, pid, 'game:over', { room: out.rooms?.get(pid) || out.room });
       stopMatch(roomId);
     }
   }, TICK_MS);

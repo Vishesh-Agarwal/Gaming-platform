@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Modal from './Modal.jsx';
 
-export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave, maps, onSetMap, modes, onSetMode, onSetBots, botCap = 0, manualTeams = false, onSetTeam }) {
+export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onInvite, onReady, onStart, onLeave, maps, onSetMap, modes, options, onSetMode, onSetOption, onSetBots, botCap = 0, manualTeams = false, onSetTeam }) {
   const [copied, setCopied] = useState(false);
   const isHost = lobby.hostId === currentUser.id;
   const mode = lobby.options?.mode || 'ffa';
@@ -12,8 +12,9 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
   const invitable = friends.filter((f) => onlineIds.has(f.id) && !memberIds.has(f.id));
   // Bots count toward the 2-player minimum, so a lone host can start vs AI.
   const bots = Math.min(lobby.options?.bots || 0, botCap);
+  const minPlayers = Math.max(2, lobby.minPlayers || 2);
   const allReady = lobby.members.length >= 1
-    && lobby.members.length + bots >= 2
+    && lobby.members.length + bots >= minPlayers
     && lobby.members.every((m) => m.ready);
 
   const copyCode = () => {
@@ -77,6 +78,42 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
         </div>
       )}
 
+      {options?.length > 0 && (
+        <div className="lb-options">
+          {options.map((opt) => {
+            if (opt.type === 'textList') {
+              const raw = lobby.options?.[opt.key];
+              const value = Array.isArray(raw) ? raw.join('\n') : String(raw || opt.default || '');
+              return (
+                <label key={opt.key} className="lb-text-option">
+                  <span className="mode-label">{opt.label}</span>
+                  <textarea
+                    value={value}
+                    rows={4}
+                    disabled={!isHost}
+                    placeholder={opt.placeholder || ''}
+                    onChange={(e) => onSetOption?.(opt.key, e.target.value)}
+                  />
+                  {opt.hint && <span className="muted lb-map-hint">{opt.hint}</span>}
+                </label>
+              );
+            }
+            const value = Math.max(opt.min, Math.min(opt.max, Number(lobby.options?.[opt.key] ?? opt.default)));
+            return (
+              <div key={opt.key} className="lb-stepper">
+                <span className="mode-label">{opt.label}</span>
+                <div className="stepper">
+                  <button type="button" disabled={!isHost || value <= opt.min} onClick={() => onSetOption?.(opt.key, value - 1)}>-</button>
+                  <span className="stepper-val">{value}</span>
+                  <button type="button" disabled={!isHost || value >= opt.max} onClick={() => onSetOption?.(opt.key, value + 1)}>+</button>
+                </div>
+              </div>
+            );
+          })}
+          {!isHost && <span className="muted lb-map-hint">host picks the settings</span>}
+        </div>
+      )}
+
       {botCap > 0 && (
         <div className="lb-map">
           <span className="mode-label">Bots</span>
@@ -134,14 +171,14 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
           {me?.ready ? 'Unready' : "I'm ready"}
         </button>
         {isHost && (
-          <button onClick={onStart} disabled={!allReady} title={allReady ? '' : 'Need ≥2 players, all ready'}>
+          <button onClick={onStart} disabled={!allReady} title={allReady ? '' : `Need ${minPlayers} seats filled and all ready`}>
             Start match
           </button>
         )}
         <button className="ghost" onClick={close}>Leave</button>
       </div>
       {isHost && !allReady && (
-        <p className="lb-note muted">Start unlocks when there are at least 2 racers (add bots to fill in) and everyone is ready.</p>
+        <p className="lb-note muted">Start unlocks when there are at least {minPlayers} seats filled and everyone is ready.</p>
       )}
     </Modal>
   );

@@ -16,9 +16,9 @@ export function armTurnClock(io, roomId) {
     clocks.delete(roomId);
     const out = applyTimeout(roomId);
     if (!out) return;
-    for (const pid of out.players) emitToUser(io, pid, 'game:state', { room: out.room });
+    for (const pid of out.players) emitToUser(io, pid, 'game:state', { room: out.rooms?.get(pid) || out.room });
     if (out.over) {
-      for (const pid of out.players) emitToUser(io, pid, 'game:over', { room: out.room });
+      for (const pid of out.players) emitToUser(io, pid, 'game:over', { room: out.rooms?.get(pid) || out.room });
     } else {
       armTurnClock(io, roomId); // next player's turn
     }

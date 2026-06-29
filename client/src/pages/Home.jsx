@@ -15,6 +15,8 @@ export default function Home() {
   const [requests, setRequests] = useState([]);
   const [invites, setInvites] = useState([]);
   const [notice, setNotice] = useState('');
+  const [stats, setStats] = useState(null);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   const [selectedFriendId, setSelectedFriendId] = useState(null);
   const [conversations, setConversations] = useState({});
@@ -28,6 +30,8 @@ export default function Home() {
 
   const [lobby, setLobby] = useState(null);
   const [lobbyInvites, setLobbyInvites] = useState([]);
+  const [publicLobbies, setPublicLobbies] = useState([]);
+  const [roomsOpen, setRoomsOpen] = useState(false);
 
   const selectedRef = useRef(null);
   useEffect(() => {
@@ -191,6 +195,11 @@ export default function Home() {
     setLobby(res.lobby);
     setLobbyInvites((prev) => prev.filter((i) => i.lobbyId !== res.lobby.id));
   };
+  const onShowRooms = async () => {
+    const res = await emitAck('lobby:list', {});
+    setPublicLobbies(res.lobbies || []);
+    setRoomsOpen(true);
+  };
   const onQuickPlay = async (gameId) => {
     const res = await emitAck('lobby:quick', { gameId });
     if (res.error) return flash(res.error);
@@ -212,6 +221,9 @@ export default function Home() {
   };
   const onSetLobbyBots = async (bots) => {
     await emitAck('lobby:options', { options: { bots } });
+  };
+  const onSetLobbyOption = async (key, value) => {
+    await emitAck('lobby:options', { options: { [key]: value } });
   };
   const onSetLobbyTeam = async (team) => {
     await emitAck('lobby:team', { team });
@@ -237,6 +249,14 @@ export default function Home() {
   const onEmote = (emote) => {
     getSocket()?.emit('game:emote', { roomId: activeRoom.id, emote });
   };
+  const onUndoRequest = async () => {
+    const res = await emitAck('game:undo:request', { roomId: activeRoom.id });
+    if (res.error) flash(res.error);
+  };
+  const onUndoAccept = async () => {
+    const res = await emitAck('game:undo:accept', { roomId: activeRoom.id });
+    if (res.error) flash(res.error);
+  };
   const onLeave = () => {
     getSocket()?.emit('game:leave');
     setActiveRoom(null);
@@ -250,6 +270,15 @@ export default function Home() {
     logout();
   };
 
+  const onShowStats = async () => {
+    try {
+      setStats(await api.getStats(token));
+      setStatsOpen(true);
+    } catch (e) {
+      flash(e.message);
+    }
+  };
+
   if (activeRoom) {
     return (
       <Game
@@ -260,6 +289,8 @@ export default function Home() {
         onRematch={onRematch}
         rematch={rematch}
         onEmote={onEmote}
+        onUndoRequest={onUndoRequest}
+        onUndoAccept={onUndoAccept}
         emotes={emotes}
         error={gameError}
       />
@@ -287,10 +318,15 @@ export default function Home() {
       onCreateLobby={onCreateLobby}
       onQuickPlay={onQuickPlay}
       onJoinLobby={onJoinLobby}
+      onShowRooms={onShowRooms}
+      publicLobbies={publicLobbies}
+      roomsOpen={roomsOpen}
+      onCloseRooms={() => setRoomsOpen(false)}
       onLeaveLobby={onLeaveLobby}
       onLobbyReady={onLobbyReady}
       onSetLobbyMap={onSetLobbyMap}
       onSetLobbyMode={onSetLobbyMode}
+      onSetLobbyOption={onSetLobbyOption}
       onSetLobbyBots={onSetLobbyBots}
       onSetLobbyTeam={onSetLobbyTeam}
       onInviteToLobby={onInviteToLobby}
@@ -299,6 +335,10 @@ export default function Home() {
       onBack={onBackToFriends}
       onSendChat={onSendChat}
       onLogout={onLogout}
+      onShowStats={onShowStats}
+      stats={stats}
+      statsOpen={statsOpen}
+      onCloseStats={() => setStatsOpen(false)}
     />
   );
 }

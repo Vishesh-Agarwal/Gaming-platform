@@ -41,6 +41,42 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_messages_pair
     ON messages(sender_id, recipient_id, id);
+
+  CREATE TABLE IF NOT EXISTS matches (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id     TEXT NOT NULL,
+    game_id     TEXT NOT NULL,
+    game_name   TEXT NOT NULL,
+    player_count INTEGER NOT NULL,
+    winner_id   INTEGER,
+    draw        INTEGER NOT NULL DEFAULT 0,
+    forfeit     INTEGER NOT NULL DEFAULT 0,
+    scores_json TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS match_players (
+    match_id  INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    username  TEXT NOT NULL,
+    seat      INTEGER NOT NULL,
+    result    TEXT NOT NULL,
+    score     INTEGER,
+    PRIMARY KEY(match_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS player_stats (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    game_id    TEXT NOT NULL,
+    played     INTEGER NOT NULL DEFAULT 0,
+    wins       INTEGER NOT NULL DEFAULT 0,
+    losses     INTEGER NOT NULL DEFAULT 0,
+    draws      INTEGER NOT NULL DEFAULT 0,
+    forfeits   INTEGER NOT NULL DEFAULT 0,
+    best_score INTEGER,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(user_id, game_id)
+  );
 `);
 
 // ---- Users ---------------------------------------------------------------
@@ -164,6 +200,95 @@ export function markConversationRead(userId, friendId) {
   db.prepare(
     'UPDATE messages SET read = 1 WHERE recipient_id = ? AND sender_id = ?'
   ).run(userId, friendId);
+}
+
+// ---- Match history / stats ----------------------------------------------
+
+export function saveMatchResult({ roomId, gameId, gameName, players, result }) {
+  const humanPlayers = players.filter((p) => !p.user.bot);
+  if (!humanPlayers.length) return null;
+  const winner = humanPlayers.find((p) => p.index === result.winner);
+  const scores = Array.isArray(result.scores) ? result.scores : null;
+  const info = db.prepare(
+    `INSERT INTO matches (room_id, game_id, game_name, player_count, winner_id, draw, forfeit, scores_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    roomId,
+    gameId,
+    gameName,
+    players.length,
+    winner?.user.id || null,
+    result.draw ? 1 : 0,
+    result.forfeit ? 1 : 0,
+    scores ? JSON.stringify(scores) : null
+  );
+  const matchId = info.lastInsertRowid;
+  const insertPlayer = db.prepare(
+    `INSERT INTO match_players (match_id, user_id, username, seat, result, score)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  const upsertStats = db.prepare(
+    `INSERT INTO player_stats (user_id, game_id, played, wins, losses, draws, forfeits, best_score, updated_at)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id, game_id) DO UPDATE SET
+       played = played + 1,
+       wins = wins + excluded.wins,
+       losses = losses + excluded.losses,
+       draws = draws + excluded.draws,
+       forfeits = forfeits + excluded.forfeits,
+       best_score = CASE
+         WHEN excluded.best_score IS NULL THEN player_stats.best_score
+         WHEN player_stats.best_score IS NULL THEN excluded.best_score
+         WHEN excluded.best_score > player_stats.best_score THEN excluded.best_score
+         ELSE player_stats.best_score
+       END,
+       updated_at = datetime('now')`
+  );
+  const tx = db.transaction(() => {
+    for (const p of humanPlayers) {
+      const won = !result.draw && result.winner === p.index;
+      const rowResult = result.draw ? 'draw' : won ? 'win' : 'loss';
+      const score = scores?.[p.index] ?? null;
+      insertPlayer.run(matchId, p.user.id, p.user.username, p.index, rowResult, score);
+      upsertStats.run(
+        p.user.id,
+        gameId,
+        won ? 1 : 0,
+        !result.draw && !won ? 1 : 0,
+        result.draw ? 1 : 0,
+        result.forfeit && !won ? 1 : 0,
+        score
+      );
+    }
+  });
+  tx();
+  return matchId;
+}
+
+export function getUserStats(userId) {
+  const stats = db.prepare(
+    `SELECT game_id AS gameId, played, wins, losses, draws, forfeits, best_score AS bestScore, updated_at
+     FROM player_stats
+     WHERE user_id = ?
+     ORDER BY played DESC, wins DESC`
+  ).all(userId);
+  const recent = db.prepare(
+    `SELECT m.id, m.game_id AS gameId, m.game_name AS gameName, m.player_count AS playerCount,
+            m.winner_id AS winnerId, m.draw, m.forfeit, m.scores_json AS scoresJson, m.created_at,
+            mp.result, mp.score
+     FROM match_players mp
+     JOIN matches m ON m.id = mp.match_id
+     WHERE mp.user_id = ?
+     ORDER BY m.id DESC
+     LIMIT 20`
+  ).all(userId).map((m) => ({
+    ...m,
+    draw: !!m.draw,
+    forfeit: !!m.forfeit,
+    scores: m.scoresJson ? JSON.parse(m.scoresJson) : null,
+    scoresJson: undefined,
+  }));
+  return { stats, recent };
 }
 
 export default db;

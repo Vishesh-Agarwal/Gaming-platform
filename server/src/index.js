@@ -6,10 +6,12 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 
 import authRouter, { socketAuth } from './auth.js';
+import { authMiddleware } from './auth.js';
 import createFriendsRouter from './friends.js';
 import chatRouter from './chat.js';
 import { listGames } from './games/registry.js';
 import { initSockets } from './socketHandlers.js';
+import { getUserStats } from './db.js';
 
 const PORT = process.env.PORT || 3001;
 // Default (dev): reflect any origin so a second device on the LAN can connect.
@@ -26,6 +28,7 @@ io.use(socketAuth);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/games', (_req, res) => res.json({ games: listGames() }));
+app.get('/api/stats/me', authMiddleware, (req, res) => res.json(getUserStats(req.user.id)));
 app.use('/api/auth', authRouter);
 app.use('/api/friends', createFriendsRouter(io));
 app.use('/api/chat', chatRouter);

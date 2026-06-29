@@ -1,10 +1,13 @@
 // A game tile styled like a neon arcade cabinet. Pointer parallax tilts the card
 // toward the cursor and moves a highlight; click opens the invite flow.
 import { useRef } from 'react';
+import { modeSummary, playerCountLabel } from '../games/gameMeta.js';
 
-export default function GameCard({ game, onClick, onQuickPlay }) {
+export default function GameCard({ game, onClick, onQuickPlay, searching = false }) {
   const Thumb = game.thumbnail;
   const ref = useRef(null);
+  const modes = Array.isArray(game.modes) ? game.modes : [];
+  const summary = modeSummary(game);
 
   const onMove = (e) => {
     const el = ref.current;
@@ -38,21 +41,36 @@ export default function GameCard({ game, onClick, onQuickPlay }) {
         <span className="play-cta">▶ Play</span>
         {onQuickPlay && (
           <span
-            className="quick-cta"
+            className={`quick-cta${searching ? ' searching' : ''}`}
             role="button"
             tabIndex={0}
-            title="Match with anyone online"
-            onClick={(e) => { e.stopPropagation(); onQuickPlay(game); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onQuickPlay(game); } }}
+            aria-disabled={searching}
+            title={searching ? 'Searching for players' : 'Match with anyone online'}
+            onClick={(e) => { e.stopPropagation(); if (!searching) onQuickPlay(game); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!searching) onQuickPlay(game);
+              }
+            }}
           >
-            ⚡ Quick Play
+            {searching ? 'Searching…' : 'Quick Play'}
           </span>
         )}
       </div>
       <div className="game-name">
         <span>{game.name}</span>
-        <span className="players-tag">1v1</span>
+        <span className="players-tag">{playerCountLabel(game)}</span>
       </div>
+      {(summary || modes.length > 0) && (
+        <div className="game-facts" aria-label="Game modes">
+          {summary && <span className="mode-count">{summary}</span>}
+          {modes.slice(0, 2).map((mode) => (
+            <span key={mode.id || mode.name} className="game-mode-chip">{mode.name}</span>
+          ))}
+        </div>
+      )}
     </button>
   );
 }

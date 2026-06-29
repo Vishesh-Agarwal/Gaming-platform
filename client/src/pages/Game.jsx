@@ -2,6 +2,7 @@
 // game-over overlay. Server is authoritative; this only renders + emits.
 import { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { getGame } from '../games/registry.js';
+import { rulesForGame } from '../games/gameMeta.js';
 import { getGameMuted, playGameSound, setGameMuted } from '../gameAudio.js';
 
 // Contains chunk-load failures (e.g. a stale lazy chunk 404 after redeploy)
@@ -63,6 +64,7 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
   const opponent = room.players.find((p) => p.index !== youAreIndex);
   const myId = room.players.find((p) => p.index === youAreIndex)?.id;
   const [emoteOpen, setEmoteOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [muted, setMuted] = useState(getGameMuted);
   const [now, setNow] = useState(Date.now());
   const [stagePulse, setStagePulse] = useState(false);
@@ -171,6 +173,7 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
   };
 
   const Component = def.Component;
+  const rules = rulesForGame(def);
   const activeSeat = room.state?.turn;
   const outcomeClass = room.result?.draw
     ? 'draw'
@@ -205,6 +208,46 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
               {secondsLeft}s
             </span>
           )}
+          <div className="rules-wrap">
+            <button
+              className="rules-toggle ghost"
+              onClick={() => setRulesOpen((open) => !open)}
+              aria-expanded={rulesOpen}
+            >
+              Rules
+            </button>
+            {rulesOpen && (
+              <div className="rules-popover">
+                <div className="rules-popover-head">
+                  <b>{rules.title}</b>
+                  <span>{rules.playerCount}</span>
+                </div>
+                {rules.summary && <p>{rules.summary}</p>}
+                {rules.modes.length > 0 && (
+                  <div className="rules-section">
+                    <span>Modes</span>
+                    {rules.modes.map((mode) => (
+                      <div key={mode.name} className="rules-row">
+                        <b>{mode.name}</b>
+                        {mode.hint && <small>{mode.hint}</small>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {rules.options.length > 0 && (
+                  <div className="rules-section">
+                    <span>Options</span>
+                    {rules.options.map((option) => (
+                      <div key={option.label} className="rules-row">
+                        <b>{option.label}</b>
+                        {option.value !== '' && <small>Default: {option.value}</small>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <button className="sound-toggle ghost" onClick={toggleSound} aria-label={muted ? 'Turn sound on' : 'Turn sound off'}>
             {muted ? 'Muted' : 'Sound'}
           </button>

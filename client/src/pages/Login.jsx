@@ -8,6 +8,7 @@ export default function Login() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -28,10 +29,14 @@ export default function Login() {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
-        <h1>🎮 {APP_NAME}</h1>
+        <div className="auth-brand">
+          <span className="auth-mark">🎮</span>
+          <h1>{APP_NAME}</h1>
+        </div>
         <p className="subtitle">
           {mode === 'login' ? 'Welcome back' : 'Create your account'}
         </p>
+        <p className="auth-tagline">Fast rooms, friendly tables, and live multiplayer in one place.</p>
 
         <label>Username</label>
         <input
@@ -42,13 +47,23 @@ export default function Login() {
         />
 
         <label>Password</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-          placeholder="at least 6 characters"
-        />
+        <div className="password-field">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            placeholder="at least 6 characters"
+          />
+          <button
+            type="button"
+            className="password-toggle"
+            onClick={() => setShowPassword((show) => !show)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
 
         {error && <div className="error-banner">{error}</div>}
 

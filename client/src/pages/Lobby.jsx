@@ -25,9 +25,10 @@ export default function Lobby({
   conversations,
   unread,
   currentUser,
-  notice,
   lobby,
   lobbyInvites,
+  quickSearch,
+  onCancelQuickSearch,
   onAddFriend,
   onAccept,
   onInvite,
@@ -62,6 +63,7 @@ export default function Lobby({
   const [showAdd, setShowAdd] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showJoinCode, setShowJoinCode] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [addName, setAddName] = useState('');
   const [joinCode, setJoinCode] = useState('');
 
@@ -145,29 +147,47 @@ export default function Lobby({
       <header className="topbar">
         <span className="brand">🎮 {APP_NAME}</span>
         <span className="spacer" />
-        <button className="ghost" onClick={() => setShowJoinCode(true)}>
-          Join code
+        <button
+          className="ghost topbar-menu-btn"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="topbar-actions"
+        >
+          Menu
         </button>
-        <button className="ghost" onClick={onShowRooms}>
-          Open rooms
-        </button>
-        <button className="ghost" onClick={() => setShowAdd(true)}>
-          + Add friend
-        </button>
-        <button className="ghost requests-btn" onClick={() => setShowRequests(true)}>
-          Requests
-          {requests.length > 0 && <span className="badge">{requests.length}</span>}
-        </button>
-        <button className="ghost" onClick={onShowStats}>
-          Stats
-        </button>
-        <span className="username">{currentUser.username}</span>
-        <button className="link" onClick={onLogout}>
-          Log out
-        </button>
+        <div id="topbar-actions" className={`topbar-actions${mobileMenuOpen ? ' open' : ''}`}>
+          <button className="ghost" onClick={() => { setShowJoinCode(true); setMobileMenuOpen(false); }}>
+            Join code
+          </button>
+          <button className="ghost" onClick={() => { onShowRooms(); setMobileMenuOpen(false); }}>
+            Open rooms
+          </button>
+          <button className="ghost" onClick={() => { setShowAdd(true); setMobileMenuOpen(false); }}>
+            + Add friend
+          </button>
+          <button className="ghost requests-btn" onClick={() => { setShowRequests(true); setMobileMenuOpen(false); }}>
+            Requests
+            {requests.length > 0 && <span className="badge">{requests.length}</span>}
+          </button>
+          <button className="ghost" onClick={() => { onShowStats(); setMobileMenuOpen(false); }}>
+            Stats
+          </button>
+          <span className="username">{currentUser.username}</span>
+          <button className="link" onClick={onLogout}>
+            Log out
+          </button>
+        </div>
       </header>
 
-      {notice && <div className="notice">{notice}</div>}
+      {quickSearch && (
+        <div className="quick-search-status">
+          <span>
+            <b>Quick Play</b>
+            Searching for {quickSearch.gameName || quickSearch.gameId} players
+          </span>
+          <button className="ghost" onClick={onCancelQuickSearch}>Cancel</button>
+        </div>
+      )}
 
       <div className="app-body" style={{ '--chat-w': `${chatWidth}px` }}>
         <main className="games-area">
@@ -175,7 +195,13 @@ export default function Lobby({
           <p className="muted">Pick a game to invite a friend, or hit Quick Play to open a lobby, match with players, or add bots.</p>
           <div className="games-grid">
             {availableGames.map((g) => (
-              <GameCard key={g.id} game={g} onClick={pickGame} onQuickPlay={(game) => onQuickPlay(game.id)} />
+              <GameCard
+                key={g.id}
+                game={g}
+                onClick={pickGame}
+                onQuickPlay={(game) => onQuickPlay(game)}
+                searching={quickSearch?.gameId === g.id}
+              />
             ))}
           </div>
         </main>

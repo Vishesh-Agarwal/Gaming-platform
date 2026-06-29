@@ -34,6 +34,7 @@ const registry = {
     Component: TicTacToe,
     thumbnail: TicTacToeThumb,
     accent: '#5b8cff',
+    rules: 'Place or move marks to claim a line before your opponent.',
     botCap: 1,
     modes: [
       { id: 'classic', name: 'Classic', hint: 'Standard 3-in-a-row.' },
@@ -46,18 +47,21 @@ const registry = {
     Component: GhostRider,
     thumbnail: GhostRiderThumb,
     accent: '#ff7a3c',
+    rules: 'Race the arena in realtime, dodge trails, and survive longer than the pack.',
   },
   artillery: {
     name: 'Tank Duel',
     Component: Artillery,
     thumbnail: ArtilleryThumb,
     accent: '#8bd450',
+    rules: 'Pick angle and power, fire across the terrain, and win the round by landing hits.',
   },
   hangman: {
     name: 'Hangman',
     Component: Hangman,
     thumbnail: HangmanThumb,
     accent: '#b388ff',
+    rules: 'Set words, guess letters, and score over the selected number of rounds.',
     options: [{ key: 'rounds', label: 'Rounds', min: 1, max: 10, default: 3 }],
   },
   karts: {
@@ -65,6 +69,7 @@ const registry = {
     Component: Karts,
     thumbnail: KartsThumb,
     accent: '#ff5d6c',
+    rules: 'Drive, grab weapons, and score eliminations before the match ends.',
     maxPlayers: 4,
     modes: [
       { id: 'ffa', name: 'Free-for-all', hint: 'Most kills wins.' },
@@ -76,6 +81,7 @@ const registry = {
     Component: Ludo,
     thumbnail: LudoThumb,
     accent: '#e4453a',
+    rules: 'Roll, race tokens home, and block or capture opponents along the track.',
     maxPlayers: 4,
     modes: [
       { id: 'classic', name: 'Classic', hint: 'Every player for themselves.' },
@@ -87,6 +93,7 @@ const registry = {
     Component: Carrom,
     thumbnail: CarromThumb,
     accent: '#caa46a',
+    rules: 'Aim the striker, pocket coins, and manage Queen cover or points by mode.',
     modes: [
       { id: 'classic', name: 'Classic', hint: 'Pocket all your coins, then cover the Queen.' },
       { id: 'points', name: 'Points Race', hint: 'Any coin scores — first to 7 wins. Queen = 3.' },
@@ -99,6 +106,7 @@ const registry = {
     Component: Pool,
     thumbnail: PoolThumb,
     accent: '#1f7a4d',
+    rules: 'Aim the cue, call the right target by mode, and avoid scratches or wrong first contact.',
     modes: [
       { id: 'eightball', name: '8-Ball', hint: 'Sink your group, then the 8.' },
       { id: 'blitz', name: 'Blitz', hint: '8-Ball with a 20s shot clock.' },
@@ -111,6 +119,7 @@ const registry = {
     Component: ConnectFour,
     thumbnail: ConnectFourThumb,
     accent: '#2d6fe8',
+    rules: 'Drop discs into columns and connect the target line before your opponent.',
     botCap: 1,
     modes: [
       { id: 'classic', name: 'Classic', hint: 'Standard connect four.' },
@@ -123,6 +132,7 @@ const registry = {
     Component: Skribble,
     thumbnail: SkribbleThumb,
     accent: '#3fc7ad',
+    rules: 'One player draws the prompt while everyone else races to guess it.',
     maxPlayers: 6,
     modes: [
       { id: 'mixed', name: 'Mixed Pack', hint: 'Broad prompt mix.' },
@@ -148,24 +158,28 @@ const registry = {
     Component: WordDuel,
     thumbnail: WordDuelThumb,
     accent: '#5fbf86',
+    rules: 'Guess the hidden word faster and use letter feedback to narrow the answer.',
   },
   battleship: {
     name: 'Battleship',
     Component: Battleship,
     thumbnail: BattleshipThumb,
     accent: '#4b9bd8',
+    rules: 'Place your fleet, fire at the enemy grid, and sink every ship.',
   },
   checkers: {
     name: 'Checkers',
     Component: Checkers,
     thumbnail: CheckersThumb,
     accent: '#e8806a',
+    rules: 'Move diagonally, take forced captures, and crown kings on the far edge.',
   },
   reversi: {
     name: 'Reversi',
     Component: Reversi,
     thumbnail: ReversiThumb,
     accent: '#2c8a57',
+    rules: 'Place discs to bracket enemy pieces and own the most board space at the end.',
     botCap: 1,
   },
   dotsboxes: {
@@ -173,6 +187,7 @@ const registry = {
     Component: DotsBoxes,
     thumbnail: DotsBoxesThumb,
     accent: '#f2b049',
+    rules: 'Draw edges, complete boxes for points, and keep the turn when you score.',
     botCap: 1,
     modes: [
       { id: 'classic', name: 'Classic', hint: 'Play the full board.' },
@@ -186,6 +201,7 @@ const registry = {
     Component: Boggle,
     thumbnail: BoggleThumb,
     accent: '#3fc7ad',
+    rules: 'Trace connected letters into words before the timer runs out.',
     maxPlayers: 6,
     modes: [
       { id: 'random', name: 'Random Board', hint: 'Fresh board each match.' },
@@ -197,6 +213,7 @@ const registry = {
     Component: Codenames,
     thumbnail: CodenamesThumb,
     accent: '#5b8cff',
+    rules: 'Give clues, vote on cards, and avoid the assassin while finding your team words.',
     maxPlayers: 4,
     botCap: 3,
     modes: [
@@ -210,6 +227,7 @@ const registry = {
     Component: Uno,
     thumbnail: UnoThumb,
     accent: '#e85f70',
+    rules: 'Match color or value, use action cards, and empty your hand first.',
     maxPlayers: 6,
     botCap: 5,
   },
@@ -218,6 +236,7 @@ const registry = {
     Component: MicroChess,
     thumbnail: MicroChessThumb,
     accent: '#3fc7ad',
+    rules: 'Play a compact chess duel: capture, promote, and checkmate on a 5x5 board.',
     botCap: 1,
   },
 };
@@ -233,6 +252,8 @@ export const availableGames = Object.entries(registry).map(([id, g]) => ({
   accent: g.accent,
   modes: g.modes || null,
   options: g.options || null,
+  rules: g.rules || '',
+  minPlayers: g.minPlayers || 2,
   botCap: g.botCap || 0,
   maxPlayers: g.maxPlayers || 2,
 }));

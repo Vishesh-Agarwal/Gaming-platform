@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { connectSocket, disconnectSocket, getSocket, emitAck } from '../socket.js';
 import Lobby from './Lobby.jsx';
 import Game from './Game.jsx';
+import ToastStack from '../components/ToastStack.jsx';
 
 export default function Home() {
   const { user, token, logout } = useAuth();
@@ -14,9 +15,11 @@ export default function Home() {
   const [onlineIds, setOnlineIds] = useState(new Set());
   const [requests, setRequests] = useState([]);
   const [invites, setInvites] = useState([]);
-  const [notice, setNotice] = useState('');
+  const [toasts, setToasts] = useState([]);
+  const toastSeq = useRef(0);
   const [stats, setStats] = useState(null);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
 
   const [selectedFriendId, setSelectedFriendId] = useState(null);
   const [conversations, setConversations] = useState({});
@@ -32,6 +35,7 @@ export default function Home() {
   const [lobbyInvites, setLobbyInvites] = useState([]);
   const [publicLobbies, setPublicLobbies] = useState([]);
   const [roomsOpen, setRoomsOpen] = useState(false);
+  const [quickSearch, setQuickSearch] = useState(null);
 
   const selectedRef = useRef(null);
   useEffect(() => {
@@ -39,9 +43,13 @@ export default function Home() {
   }, [selectedFriendId]);
 
   const flash = (msg) => {
-    setNotice(msg);
-    setTimeout(() => setNotice(''), 4000);
+    const id = ++toastSeq.current;
+    setToasts((prev) => [...prev.slice(-3), { id, message: msg, kind: 'info' }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
   };
+  const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
   const loadFriends = async () => {
     const [f, r] = await Promise.all([api.getFriends(token), api.getRequests(token)]);
@@ -64,7 +72,17 @@ export default function Home() {
   useEffect(() => {
     if (!token) return;
     const socket = connectSocket(token);
+    setConnectionStatus(socket.connected ? 'online' : 'connecting');
     loadFriends().catch((e) => flash(e.message));
+
+    const setOnline = () => setConnectionStatus('online');
+    const setReconnecting = () => setConnectionStatus('reconnecting');
+    const setOffline = () => setConnectionStatus('offline');
+    socket.on('connect', setOnline);
+    socket.on('disconnect', setReconnecting);
+    socket.on('connect_error', setOffline);
+    socket.io.on('reconnect_attempt', setReconnecting);
+    socket.io.on('reconnect', setOnline);
 
     socket.on('presence:init', ({ online }) => setOnlineIds(new Set(online)));
     socket.on('presence:update', ({ userId, status }) =>
@@ -97,6 +115,7 @@ export default function Home() {
       setInvites([]);
       setLobby(null);
       setLobbyInvites([]);
+      setQuickSearch(null);
       setGameError('');
       setRematch(null);
       setYouAreIndex(youAreIndex);
@@ -122,10 +141,18 @@ export default function Home() {
     );
     socket.on('lobby:closed', () => {
       setLobby(null);
+      setQuickSearch(null);
       flash('Lobby closed.');
     });
 
-    return () => disconnectSocket();
+    return () => {
+      socket.off('connect', setOnline);
+      socket.off('disconnect', setReconnecting);
+      socket.off('connect_error', setOffline);
+      socket.io.off('reconnect_attempt', setReconnecting);
+      socket.io.off('reconnect', setOnline);
+      disconnectSocket();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -200,15 +227,34 @@ export default function Home() {
     setPublicLobbies(res.lobbies || []);
     setRoomsOpen(true);
   };
-  const onQuickPlay = async (gameId) => {
+  const onQuickPlay = async (gameOrId) => {
+    const gameId = typeof gameOrId === 'string' ? gameOrId : gameOrId.id;
+    const gameName = typeof gameOrId === 'string' ? gameOrId : gameOrId.name;
+    setQuickSearch({ gameId, gameName });
     const res = await emitAck('lobby:quick', { gameId });
-    if (res.error) return flash(res.error);
+    if (res.error) {
+      setQuickSearch(null);
+      return flash(res.error);
+    }
     setLobby(res.lobby);
-    flash(res.joined ? 'Matched into an open lobby!' : 'Opened a lobby — waiting for players…');
+    if (res.joined) {
+      setQuickSearch(null);
+      flash('Matched into an open lobby!');
+    } else {
+      setQuickSearch({ gameId, gameName: res.lobby?.gameName || gameId });
+      flash('Searching for players...');
+    }
   };
   const onLeaveLobby = async () => {
     await emitAck('lobby:leave', {});
     setLobby(null);
+    setQuickSearch(null);
+  };
+  const onCancelQuickSearch = async () => {
+    await emitAck('lobby:leave', {});
+    setLobby(null);
+    setQuickSearch(null);
+    flash('Quick Play cancelled.');
   };
   const onLobbyReady = async (ready) => {
     await emitAck('lobby:ready', { ready });
@@ -241,6 +287,11 @@ export default function Home() {
     const res = await emitAck('game:move', { roomId: activeRoom.id, move });
     setGameError(res.error || '');
   };
+  useEffect(() => {
+    if (!gameError) return undefined;
+    const t = setTimeout(() => setGameError(''), 3000);
+    return () => clearTimeout(t);
+  }, [gameError]);
   const onRematch = async () => {
     const res = await emitAck('game:rematch', { roomId: activeRoom.id });
     if (res.error) return flash(res.error);
@@ -281,64 +332,79 @@ export default function Home() {
 
   if (activeRoom) {
     return (
-      <Game
-        room={activeRoom}
-        youAreIndex={youAreIndex}
-        onMove={onMove}
-        onLeave={onLeave}
-        onRematch={onRematch}
-        rematch={rematch}
-        onEmote={onEmote}
-        onUndoRequest={onUndoRequest}
-        onUndoAccept={onUndoAccept}
-        emotes={emotes}
-        error={gameError}
-      />
+      <>
+        <ConnectionPill status={connectionStatus} />
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+        <Game
+          room={activeRoom}
+          youAreIndex={youAreIndex}
+          onMove={onMove}
+          onLeave={onLeave}
+          onRematch={onRematch}
+          rematch={rematch}
+          onEmote={onEmote}
+          onUndoRequest={onUndoRequest}
+          onUndoAccept={onUndoAccept}
+          emotes={emotes}
+          error={gameError}
+        />
+      </>
     );
   }
 
   return (
-    <Lobby
-      friends={friends}
-      onlineIds={onlineIds}
-      requests={requests}
-      invites={invites}
-      selectedFriendId={selectedFriendId}
-      conversations={conversations}
-      unread={unread}
-      currentUser={user}
-      notice={notice}
-      lobby={lobby}
-      lobbyInvites={lobbyInvites}
-      onAddFriend={onAddFriend}
-      onAccept={onAccept}
-      onInvite={onInvite}
-      onAcceptInvite={onAcceptInvite}
-      onDeclineInvite={onDeclineInvite}
-      onCreateLobby={onCreateLobby}
-      onQuickPlay={onQuickPlay}
-      onJoinLobby={onJoinLobby}
-      onShowRooms={onShowRooms}
-      publicLobbies={publicLobbies}
-      roomsOpen={roomsOpen}
-      onCloseRooms={() => setRoomsOpen(false)}
-      onLeaveLobby={onLeaveLobby}
-      onLobbyReady={onLobbyReady}
-      onSetLobbyMap={onSetLobbyMap}
-      onSetLobbyMode={onSetLobbyMode}
-      onSetLobbyOption={onSetLobbyOption}
-      onSetLobbyBots={onSetLobbyBots}
-      onSetLobbyTeam={onSetLobbyTeam}
-      onInviteToLobby={onInviteToLobby}
-      onStartLobby={onStartLobby}
-      onSelectFriend={onSelectFriend}
-      onBack={onBackToFriends}
-      onSendChat={onSendChat}
-      onLogout={onLogout}
-      onShowStats={onShowStats}
-      stats={stats}
-      statsOpen={statsOpen}
-      onCloseStats={() => setStatsOpen(false)}
-    />
+    <>
+      <ConnectionPill status={connectionStatus} />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <Lobby
+        friends={friends}
+        onlineIds={onlineIds}
+        requests={requests}
+        invites={invites}
+        selectedFriendId={selectedFriendId}
+        conversations={conversations}
+        unread={unread}
+        currentUser={user}
+        lobby={lobby}
+        lobbyInvites={lobbyInvites}
+        quickSearch={quickSearch}
+        onCancelQuickSearch={onCancelQuickSearch}
+        onAddFriend={onAddFriend}
+        onAccept={onAccept}
+        onInvite={onInvite}
+        onAcceptInvite={onAcceptInvite}
+        onDeclineInvite={onDeclineInvite}
+        onCreateLobby={onCreateLobby}
+        onQuickPlay={onQuickPlay}
+        onJoinLobby={onJoinLobby}
+        onShowRooms={onShowRooms}
+        publicLobbies={publicLobbies}
+        roomsOpen={roomsOpen}
+        onCloseRooms={() => setRoomsOpen(false)}
+        onLeaveLobby={onLeaveLobby}
+        onLobbyReady={onLobbyReady}
+        onSetLobbyMap={onSetLobbyMap}
+        onSetLobbyMode={onSetLobbyMode}
+        onSetLobbyOption={onSetLobbyOption}
+        onSetLobbyBots={onSetLobbyBots}
+        onSetLobbyTeam={onSetLobbyTeam}
+        onInviteToLobby={onInviteToLobby}
+        onStartLobby={onStartLobby}
+        onSelectFriend={onSelectFriend}
+        onBack={onBackToFriends}
+        onSendChat={onSendChat}
+        onLogout={onLogout}
+        onShowStats={onShowStats}
+        stats={stats}
+        statsOpen={statsOpen}
+        onCloseStats={() => setStatsOpen(false)}
+      />
+    </>
   );
+}
+
+function ConnectionPill({ status }) {
+  if (status === 'online') return null;
+  const label = status === 'offline' ? 'Connection lost' : 'Reconnecting...';
+  return <div className={`connection-pill ${status}`}>{label}</div>;
 }

@@ -156,6 +156,12 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // Prefetch stats so the Home hero + "Continue playing" rail have data.
+  useEffect(() => {
+    if (!token) return;
+    api.getStats(token).then(setStats).catch(() => {});
+  }, [token]);
+
   // ---- Friend actions ----
   const onAddFriend = async (username) => {
     try {

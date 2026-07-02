@@ -28,3 +28,7 @@ export function rulesForGame(game = {}) {
     options,
   };
 }
+
+export function requiresLandscape(gameId) {
+  return ['karts', 'ghostrider', 'artillery', 'pool'].includes(gameId);
+}

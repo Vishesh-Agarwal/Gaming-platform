@@ -156,7 +156,10 @@ function Grid({ size, ships = [], shots = [], scans = [], lastShot = null, onCel
           if (scan) cls.push('scan');
           if (scanMode) cls.push('scan-mode');
           if (lastShot && lastShot.x === x && lastShot.y === y) cls.push('last-shot');
-          if (shot) cls.push(shot.result === 'miss' ? 'miss' : shot.result === 'sunk' ? 'sunk' : 'hit');
+          if (shot) {
+            cls.push('targeted');
+            cls.push(shot.result === 'miss' ? 'miss' : shot.result === 'sunk' ? 'sunk' : 'hit');
+          }
           return (
             <button
               key={`${x}-${y}`}

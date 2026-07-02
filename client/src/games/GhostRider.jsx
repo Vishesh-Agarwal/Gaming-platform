@@ -17,13 +17,19 @@ const MAX_SPEED = 9.5;
 const REVERSE_MAX = 2.0;
 const DRAG = 0.988;
 const GRAVITY = 0.46;      // lower gravity => fast launches float longer (more air)
-const SPIN_ACCEL = 0.0075; // how quickly you wind up a flip
-const MAX_SPIN = 0.17;     // capped flip rate (~37 frames / 360deg) => natural-looking
+const SPIN_ACCEL = 0.009;  // how quickly you wind up a flip
+const MAX_SPIN = 0.20;     // capped flip rate (~31 frames / 360deg) => controlled mobile flips
 const AIR_DRAG = 0.999;
 const CRASH_ANGLE = 1.35;  // land >~77deg off the slope => wreck (must finish the flip)
+const BAD_LANDING_ANGLE = 0.68;
 const CRASH_TIME = 1300;   // ms downed before respawn
 const WHEEL_R = 11;
 const SEND_HZ = 15;
+const STABILITY_MAX = 100;
+const HARD_CRASH_STABILITY = 18;
+const STABILITY_RECOVER = 0.11;
+const SUSPENSION_REBOUND = 0.14;
+const SUSPENSION_DAMPING = 0.82;
 
 // Boost pickups: deterministic pads along the track give a short speed surge.
 const BOOST_MS = 1500;     // how long the surge lasts after grabbing a pad
@@ -124,6 +130,18 @@ export default function GhostRider({ room }) {
       y: 40 + frand(20 + i) * 120,
       s: 0.7 + frand(30 + i) * 0.8,
     }));
+    const stars = Array.from({ length: 70 }, (_, i) => ({
+      x: frand(300 + i) * 4000,
+      y: 18 + frand(400 + i) * 190,
+      r: 0.7 + frand(500 + i) * 1.6,
+      tw: frand(600 + i) * Math.PI * 2,
+    }));
+    const silhouettes = Array.from({ length: 28 }, (_, i) => ({
+      x: 260 + i * 220 + frand(700 + i) * 120,
+      h: 44 + frand(800 + i) * 76,
+      w: 12 + frand(900 + i) * 24,
+      lean: (frand(1000 + i) - 0.5) * 0.5,
+    }));
 
     const startX = 120;
     const car = {
@@ -132,11 +150,14 @@ export default function GhostRider({ room }) {
       onGround: true, finished: false,
       crashed: false, crashUntil: 0, crashes: 0,
       boostUntil: 0,
+      stability: STABILITY_MAX, bikeHealth: STABILITY_MAX,
+      suspension: 0, suspensionV: 0, damageFlashUntil: 0,
     };
     // Opponents arrive over the wire keyed by player id; each gets its own color
     // and is interpolated toward its last reported pose. Supports N racers.
     const ghosts = new Map(); // id -> { x,y,angle, tx,ty,tAngle, color }
     const input = { gas: false, brake: false };
+    const particles = [];
 
     // Deterministic boost pads floating just above the track (same for everyone).
     const pickups = [];
@@ -156,7 +177,68 @@ export default function GhostRider({ room }) {
           p.taken = true;
           car.boostUntil = performance.now() + BOOST_MS;
           car.spd = Math.min(BOOST_MAX, Math.max(car.spd, 0) + BOOST_KICK);
+          emitSparks(car.x, car.y, 14);
         }
+      }
+    };
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const recoverStability = (dt) => {
+      if (car.crashed || !car.onGround || Math.abs(car.spd) < 1.2) return;
+      car.stability = clamp(car.stability + STABILITY_RECOVER * dt, 0, STABILITY_MAX);
+      car.bikeHealth = car.stability;
+    };
+    const emitDust = (x, y, amount = 1.5, color = 'rgba(210,184,138,0.72)') => {
+      const count = Math.max(1, Math.round(amount));
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: x - Math.random() * 22,
+          y: y - 4 + Math.random() * 8,
+          vx: -1.6 - Math.random() * 2.4 - Math.max(0, car.spd) * 0.08,
+          vy: -0.4 - Math.random() * 1.2,
+          life: 34 + Math.random() * 22,
+          maxLife: 56,
+          r: 2 + Math.random() * 4,
+          color,
+        });
+      }
+      if (particles.length > 180) particles.splice(0, particles.length - 180);
+    };
+    const emitSparks = (x, y, amount = 9) => {
+      for (let i = 0; i < amount; i++) {
+        particles.push({
+          x,
+          y: y - 4,
+          vx: -3 + Math.random() * 6,
+          vy: -2.8 - Math.random() * 2.6,
+          life: 18 + Math.random() * 18,
+          maxLife: 36,
+          r: 1 + Math.random() * 2,
+          color: Math.random() > 0.45 ? '#ffdf6b' : '#ff6a3c',
+          spark: true,
+        });
+      }
+      if (particles.length > 180) particles.splice(0, particles.length - 180);
+    };
+    const damageLanding = (tilt, impact, now) => {
+      const angleOver = Math.max(0, tilt - BAD_LANDING_ANGLE);
+      const impactOver = Math.max(0, impact - 7);
+      const damage = angleOver * 42 + impactOver * 4;
+      if (damage <= 0) return false;
+      car.stability = clamp(car.stability - damage, 0, STABILITY_MAX);
+      car.bikeHealth = car.stability;
+      car.damageFlashUntil = now + 260;
+      car.suspensionV += Math.min(8, damage * 0.08);
+      emitSparks(car.x, terrainY(car.x), Math.min(18, 5 + damage * 0.2));
+      return car.stability <= HARD_CRASH_STABILITY || tilt > CRASH_ANGLE + 0.28;
+    };
+    const updateParticles = (dt) => {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += (p.spark ? 0.24 : 0.05) * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
       }
     };
 
@@ -245,12 +327,15 @@ export default function GhostRider({ room }) {
         // downed: tumble visually, then respawn upright (keeps x = time penalty)
         car.a += car.av * dt;
         car.av *= Math.pow(0.96, dt);
+        car.suspension *= Math.pow(0.9, dt);
         if (now >= car.crashUntil) {
           car.crashed = false;
           car.y = terrainY(car.x);
           car.spd = 0; car.vx = 0; car.vy = 0; car.av = 0;
           car.a = groundAngle(car.x);
           car.onGround = true;
+          car.stability = 58;
+          car.bikeHealth = car.stability;
         }
       } else if (live && car.onGround) {
         // Drive ALONG the slope. Speed builds on the ramp face; when the ground
@@ -278,6 +363,11 @@ export default function GhostRider({ room }) {
           car.y = groundNext;
           car.a = ga;
         }
+        car.suspensionV += (Math.abs(car.spd) * 0.012 - car.suspension) * SUSPENSION_REBOUND * dt;
+        car.suspensionV *= Math.pow(SUSPENSION_DAMPING, dt);
+        car.suspension = clamp(car.suspension + car.suspensionV * dt, -2, 8);
+        recoverStability(dt);
+        if (Math.abs(car.spd) > 2.5) emitDust(car.x, car.y, Math.abs(car.spd) * 0.12);
         if (car.x <= startX && car.spd < 0) car.spd = 0;
 
         if (car.x >= trackLength && !car.finished) {
@@ -301,21 +391,25 @@ export default function GhostRider({ room }) {
         const groundY = terrainY(car.x);
         if (car.y >= groundY) {
           const ga = groundAngle(car.x);
-          if (Math.abs(norm(car.a - ga)) > CRASH_ANGLE) {
-            // came down on its head -> crash & tumble
+          const tilt = Math.abs(norm(car.a - ga));
+          const impact = Math.abs(car.vy) + Math.max(0, Math.abs(car.av) * 20);
+          if (damageLanding(tilt, impact, now)) {
+            // repeated hard impacts still wreck, but one imperfect landing usually limps onward
             car.crashed = true;
             car.crashUntil = now + CRASH_TIME;
             car.crashes += 1;
             car.vx = 0; car.vy = 0; car.spd = 0;
             car.av = (Math.random() < 0.5 ? -1 : 1) * 0.14;
           } else {
-            // clean landing: snap to slope, keep speed along it
+            // landing: snap to slope, keep most speed, and let stability absorb roughness
             car.y = groundY;
-            car.a = ga;
-            car.av = 0;
+            car.a = ga + norm(car.a - ga) * 0.12;
+            car.av *= tilt > BAD_LANDING_ANGLE ? 0.18 : 0;
             car.onGround = true;
-            car.spd = car.vx * Math.cos(ga) + car.vy * Math.sin(ga);
+            car.suspensionV += Math.min(10, impact * 0.75);
+            car.spd = (car.vx * Math.cos(ga) + car.vy * Math.sin(ga)) * (tilt > BAD_LANDING_ANGLE ? 0.72 : 0.94);
             if (car.spd > speedCap()) car.spd = speedCap();
+            if (Math.abs(car.spd) > 2) emitDust(car.x, groundY, 8 + impact * 0.6, 'rgba(226,198,148,0.78)');
           }
         }
 
@@ -326,6 +420,7 @@ export default function GhostRider({ room }) {
       }
 
       if (live) grabPickups();
+      updateParticles(dt);
 
       sendState(now);
 
@@ -343,25 +438,35 @@ export default function GhostRider({ room }) {
     const draw = (now) => {
       const camX = car.x - W * 0.3;
       const camY = car.y - H * 0.58;
+      const shake = Math.max(0, car.damageFlashUntil - now) / 260;
 
       drawSky();
-      drawSun(camX);
+      drawStars(now, camX);
+      drawMoon(camX);
       drawClouds(now, camX);
-      drawRange(camX * 0.2, H * 0.5, 70, 0.0011, p2, '#3a2356', '#2a1840');
-      drawRange(camX * 0.4, H * 0.62, 48, 0.0024, p3, '#4a2a5c', '#321d40');
+      drawRange(camX * 0.2, H * 0.5, 70, 0.0011, p2, '#1a2843', '#101827');
+      drawRange(camX * 0.4, H * 0.62, 48, 0.0024, p3, '#26324c', '#151b25');
+      drawSilhouettes(camX, camY);
+      ctx.save();
+      if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 8, (Math.random() - 0.5) * shake * 5);
       drawGround(camX, camY);
 
       const fsx = trackLength - camX;
       if (fsx > -40 && fsx < W + 40) drawFinish(fsx, terrainY(trackLength) - camY);
 
       drawPickups(now, camX, camY);
+      drawParticles(camX, camY);
 
       for (const g of ghosts.values()) {
-        drawBike(g.x - camX, g.y - camY, g.angle, g.color, true, g.x / WHEEL_R);
+        drawExhaustTrail(g.x - camX, g.y - camY, g.angle, g.color, 0.35);
+        drawBike(g.x - camX, g.y - camY, g.angle, g.color, true, g.x / WHEEL_R, 0);
       }
-      drawBike(car.x - camX, car.y - camY, car.a, '#ff7a3c', false, car.x / WHEEL_R);
+      drawExhaustTrail(car.x - camX, car.y - camY, car.a, '#ff7a3c', boosting() ? 1 : 0.65);
+      drawHeadlight(car.x - camX, car.y - camY, car.a);
+      drawBike(car.x - camX, car.y - camY, car.a, '#ff7a3c', false, car.x / WHEEL_R, car.suspension);
+      ctx.restore();
 
-      drawHUD();
+      drawHUD(now);
     };
 
     const drawSky = () => {
@@ -373,18 +478,37 @@ export default function GhostRider({ room }) {
       ctx.fillRect(0, 0, W, H);
     };
 
-    const drawSun = (camX) => {
+    const drawStars = (now, camX) => {
+      for (const s of stars) {
+        let sx = ((s.x - camX * 0.04) % (W + 120)) - 60;
+        if (sx < -60) sx += W + 120;
+        const alpha = 0.34 + Math.sin(now * 0.002 + s.tw) * 0.18;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#d9e9ff';
+        ctx.beginPath();
+        ctx.arc(sx, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    const drawMoon = (camX) => {
       const x = W * 0.74 - camX * 0.03;
       const y = H * 0.26;
-      const g = ctx.createRadialGradient(x, y, 8, x, y, 120);
-      g.addColorStop(0, 'rgba(255,196,120,0.95)');
-      g.addColorStop(0.25, 'rgba(255,150,90,0.55)');
-      g.addColorStop(1, 'rgba(255,120,80,0)');
+      const g = ctx.createRadialGradient(x, y, 8, x, y, 145);
+      g.addColorStop(0, 'rgba(188,232,255,0.9)');
+      g.addColorStop(0.3, 'rgba(88,164,220,0.28)');
+      g.addColorStop(1, 'rgba(70,110,160,0)');
       ctx.fillStyle = g;
-      ctx.fillRect(x - 120, y - 120, 240, 240);
+      ctx.fillRect(x - 145, y - 145, 290, 290);
       ctx.beginPath();
-      ctx.arc(x, y, 34, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffca78';
+      ctx.arc(x, y, 28, 0, Math.PI * 2);
+      ctx.fillStyle = '#d9f0ff';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x - 9, y - 8, 5, 0, Math.PI * 2);
+      ctx.arc(x + 8, y + 7, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(86,126,158,0.25)';
       ctx.fill();
     };
 
@@ -420,6 +544,21 @@ export default function GhostRider({ room }) {
       ctx.fill();
     };
 
+    const drawSilhouettes = (camX, camY) => {
+      ctx.fillStyle = 'rgba(8,10,16,0.78)';
+      for (const s of silhouettes) {
+        const sx = s.x - camX * 0.58;
+        if (sx < -80 || sx > W + 80) continue;
+        const sy = terrainY(s.x) - camY + 4;
+        ctx.beginPath();
+        ctx.moveTo(sx - s.w, sy);
+        ctx.lineTo(sx + s.lean * 42, sy - s.h);
+        ctx.lineTo(sx + s.w, sy);
+        ctx.closePath();
+        ctx.fill();
+      }
+    };
+
     const drawGround = (camX, camY) => {
       ctx.beginPath();
       ctx.moveTo(0, H);
@@ -427,22 +566,37 @@ export default function GhostRider({ room }) {
       ctx.lineTo(W, H);
       ctx.closePath();
       const g = ctx.createLinearGradient(0, H * 0.3, 0, H);
-      g.addColorStop(0, '#5b4636');
-      g.addColorStop(1, '#241a12');
+      g.addColorStop(0, '#3d352d');
+      g.addColorStop(0.45, '#241f1b');
+      g.addColorStop(1, '#10100f');
       ctx.fillStyle = g;
       ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.055)';
+      ctx.lineWidth = 1;
+      for (let sx = -20; sx <= W + 20; sx += 42) {
+        const wx = camX + sx;
+        const sy = terrainY(wx) - camY + 18 + Math.sin(wx * 0.031) * 4;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + 24, sy + Math.sin(wx * 0.021) * 7);
+        ctx.stroke();
+      }
 
       ctx.beginPath();
       for (let sx = 0; sx <= W; sx += 5) {
         const sy = terrainY(camX + sx) - camY;
         sx === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
       }
-      ctx.lineWidth = 8;
-      ctx.strokeStyle = '#3f9d4f';
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = '#1a1410';
       ctx.lineJoin = 'round';
       ctx.stroke();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(140,230,150,0.6)';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#6a3c24';
+      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(255,190,112,0.62)';
       ctx.stroke();
     };
 
@@ -486,7 +640,63 @@ export default function GhostRider({ room }) {
       }
     };
 
-    const drawBike = (sx, sy, angle, color, isGhost, spin) => {
+    const drawParticles = (camX, camY) => {
+      for (const p of particles) {
+        const alpha = Math.max(0, p.life / p.maxLife);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x - camX, p.y - camY, p.r * (p.spark ? 0.7 : 1 + (1 - alpha) * 0.7), 0, Math.PI * 2);
+        ctx.fill();
+        if (p.spark) {
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(p.x - camX, p.y - camY);
+          ctx.lineTo(p.x - camX - p.vx * 2.8, p.y - camY - p.vy * 2.8);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    };
+
+    const drawExhaustTrail = (sx, sy, angle, color, intensity = 0.6) => {
+      ctx.save();
+      ctx.translate(sx, sy - WHEEL_R);
+      ctx.rotate(angle);
+      const g = ctx.createLinearGradient(-18, 0, -78, 6);
+      g.addColorStop(0, color);
+      g.addColorStop(1, 'rgba(255,122,60,0)');
+      ctx.globalAlpha = intensity;
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-20, -8);
+      ctx.quadraticCurveTo(-54, -20, -88, -8);
+      ctx.quadraticCurveTo(-46, 8, -20, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const drawHeadlight = (sx, sy, angle) => {
+      ctx.save();
+      ctx.translate(sx, sy - WHEEL_R);
+      ctx.rotate(angle);
+      const g = ctx.createLinearGradient(22, -18, 150, -28);
+      g.addColorStop(0, 'rgba(204,236,255,0.42)');
+      g.addColorStop(1, 'rgba(204,236,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(20, -18);
+      ctx.lineTo(155, -48);
+      ctx.lineTo(150, 14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    };
+
+    const drawBike = (sx, sy, angle, color, isGhost, spin, suspension = 0) => {
       const R = WHEEL_R;
       ctx.save();
       ctx.translate(sx, sy);
@@ -495,33 +705,66 @@ export default function GhostRider({ room }) {
       ctx.translate(0, R);
       ctx.globalAlpha = isGhost ? 0.5 : 1;
 
+      const suspensionDrop = isGhost ? 0 : suspension;
+      const frameY = -R - 12 + suspensionDrop * 0.55;
+      const rearX = -22;
+      const frontX = 23;
+
+      ctx.strokeStyle = isGhost ? color : 'rgba(20,22,28,0.95)';
+      ctx.lineWidth = 7;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(rearX, -R - 1);
+      ctx.lineTo(-7, frameY - 7);
+      ctx.lineTo(12, frameY - 8);
+      ctx.lineTo(frontX, -R - 1);
+      ctx.stroke();
+
       ctx.strokeStyle = isGhost ? color : '#d3d7ea';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(-18, -R);
-      ctx.lineTo(-4, -R - 11);
-      ctx.lineTo(12, -R - 11);
-      ctx.lineTo(18, -R);
+      ctx.moveTo(rearX, -R);
+      ctx.lineTo(-7, frameY - 8);
+      ctx.lineTo(12, frameY - 8);
+      ctx.lineTo(frontX, -R);
+      ctx.moveTo(-7, frameY - 8);
+      ctx.lineTo(1, -R - 1);
+      ctx.lineTo(12, frameY - 8);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(230,235,255,0.72)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(rearX + 4, -R - 1);
+      ctx.lineTo(-5, frameY - 5);
+      ctx.moveTo(frontX - 4, -R - 1);
+      ctx.lineTo(14, frameY - 6);
       ctx.stroke();
 
       ctx.fillStyle = color;
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(-13, -R - 17, 26, 8, 3);
-      else ctx.rect(-13, -R - 17, 26, 8);
+      if (ctx.roundRect) ctx.roundRect(-18, frameY - 16, 31, 10, 4);
+      else ctx.rect(-18, frameY - 16, 31, 10);
+      ctx.fill();
+
+      ctx.fillStyle = isGhost ? color : '#111722';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(4, frameY - 20, 18, 8, 3);
+      else ctx.rect(4, frameY - 20, 18, 8);
       ctx.fill();
 
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(12, -R - 13);
-      ctx.lineTo(21, -R - 18);
+      ctx.moveTo(13, frameY - 15);
+      ctx.lineTo(28, frameY - 21);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(11, -R - 11);
-      ctx.lineTo(18, -R);
+      ctx.moveTo(16, frameY - 9);
+      ctx.lineTo(frontX, -R);
       ctx.stroke();
 
-      for (const wx of [-18, 18]) {
+      for (const wx of [rearX, frontX]) {
         ctx.beginPath();
         ctx.arc(wx, -R, R, 0, Math.PI * 2);
         ctx.lineWidth = 4;
@@ -555,22 +798,46 @@ export default function GhostRider({ room }) {
         ctx.strokeStyle = '#e8ebff';
         ctx.lineWidth = 4;
         ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(-2, -R - 16); ctx.lineTo(7, -R - 27); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(7, -R - 27); ctx.lineTo(19, -R - 16); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-2, -R - 16); ctx.lineTo(-7, -R - 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-4, frameY - 17); ctx.lineTo(7, frameY - 31); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(7, frameY - 31); ctx.lineTo(22, frameY - 21); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-4, frameY - 17); ctx.lineTo(-12, -R - 4); ctx.stroke();
         ctx.lineCap = 'butt';
+        ctx.fillStyle = '#171a24';
+        ctx.beginPath(); ctx.ellipse(8, frameY - 32, 7, 6, -0.15, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = color;
-        ctx.beginPath(); ctx.arc(9, -R - 31, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(9, frameY - 33, 5, 0, Math.PI * 2); ctx.fill();
       } else {
         ctx.fillStyle = color;
-        ctx.beginPath(); ctx.arc(7, -R - 27, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(7, frameY - 31, 5, 0, Math.PI * 2); ctx.fill();
+      }
+
+      if (!isGhost && performance.now() < car.damageFlashUntil) {
+        ctx.strokeStyle = 'rgba(255,95,80,0.75)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, -R - 16, 42, 0, Math.PI * 2);
+        ctx.stroke();
       }
 
       ctx.restore();
       ctx.globalAlpha = 1;
     };
 
-    const drawHUD = () => {
+    const drawHUD = (now) => {
+      const speedText = `${Math.round(Math.abs(car.spd) * 12)} km/h`;
+      const stabilityText = `${Math.round(car.bikeHealth)}%`;
+      const distanceText = `${Math.round(Math.max(0, trackLength - car.x))} m`;
+      const hud = wrap.querySelector('.gr-hud');
+      if (hud) {
+        hud.classList.toggle('is-damaged', now < car.damageFlashUntil || car.bikeHealth < 45);
+        const speedEl = hud.querySelector('[data-gr-speed]');
+        const stabilityEl = hud.querySelector('[data-gr-stability]');
+        const distanceEl = hud.querySelector('[data-gr-distance]');
+        if (speedEl) speedEl.textContent = speedText;
+        if (stabilityEl) stabilityEl.textContent = stabilityText;
+        if (distanceEl) distanceEl.textContent = distanceText;
+      }
+
       const pad = 16;
       const barW = W - pad * 2;
       const barH = 8;
@@ -606,10 +873,10 @@ export default function GhostRider({ room }) {
         ctx.fillStyle = '#ff5d6c';
         ctx.font = '800 46px "Chakra Petch", sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('CRASHED!', W / 2, H / 2);
+        ctx.fillText('BIKE DOWN', W / 2, H / 2);
         ctx.font = '600 16px Inter, sans-serif';
         ctx.fillStyle = '#ffd4d8';
-        ctx.fillText('Respawning…', W / 2, H / 2 + 34);
+        ctx.fillText('Recovering stability...', W / 2, H / 2 + 34);
         ctx.textAlign = 'left';
       }
 
@@ -653,16 +920,35 @@ export default function GhostRider({ room }) {
 
   return (
     <div className="gr-wrap">
+      <div className="gr-hud" aria-hidden="true">
+        <div>
+          <span className="gr-hud__label">Speed</span>
+          <strong className="gr-hud__value" data-gr-speed>0 km/h</strong>
+        </div>
+        <div>
+          <span className="gr-hud__label">Stability</span>
+          <strong className="gr-hud__value" data-gr-stability>100%</strong>
+        </div>
+        <div>
+          <span className="gr-hud__label">Finish</span>
+          <strong className="gr-hud__value" data-gr-distance>0 m</strong>
+        </div>
+      </div>
       <canvas ref={canvasRef} className="gr-canvas" />
-      <div className="gr-controls">
-        <button className="gr-btn gr-brake" type="button">◀ Brake / lean fwd</button>
-        <button className="gr-btn gr-gas" type="button">Gas / lean back ▶</button>
+      <div className="gr-controls gr-thumb-controls" aria-label="Ghost Rider controls">
+        <button className="gr-btn gr-brake" type="button">
+          <span className="gr-control-icon">◀</span>
+          <span>Brake</span>
+        </button>
+        <button className="gr-btn gr-gas" type="button">
+          <span>Gas</span>
+          <span className="gr-control-icon">▶</span>
+        </button>
       </div>
       <p className="gr-hint muted">
         <b>→</b>/<b>Space</b> gas · <b>←</b> brake. Hit a ramp fast for big air — the more speed,
-        the longer you hang. In the air <b>gas</b> backflips, <b>brake</b> frontflips; release to
-        hold. Finish the rotation and land on your wheels, or you wreck and respawn. Grab the
-        glowing <b>⚡ boost pads</b> for a speed surge — first across the line wins.
+        the longer you hang. In the air <b>gas</b> backflips and <b>brake</b> frontflips. Rough
+        landings damage stability before the bike goes down. Grab glowing boost pads and finish first.
       </p>
     </div>
   );

@@ -20,6 +20,14 @@ test('createSim appends bot karts after the human karts', () => {
   assert.ok(sim.karts.slice(1).every((k) => k.bot === true));
 });
 
+test('createSim uses lobby bot seats without duplicating them', () => {
+  const sim = game.createSim([{ user: { id: 1 } }, { user: { id: -1, bot: true } }], START, { map: 'arena', bots: 1 });
+
+  assert.equal(sim.karts.length, 2);
+  assert.equal(sim.karts[0].bot, false);
+  assert.equal(sim.karts[1].bot, true);
+});
+
 test('bots are team-balanced in teams mode', () => {
   // one human on team 0, then 3 bots should fill toward 2v2
   const sim = game.createSim([{}], START, { map: 'arena', mode: 'teams', teams: [0], bots: 3 });

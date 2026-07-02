@@ -79,12 +79,37 @@ db.exec(`
   );
 `);
 
+function ensureColumn(table, column, definition) {
+  const existing = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!existing.some((row) => row.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+ensureColumn('users', 'display_name', 'TEXT');
+ensureColumn('users', 'nickname', "TEXT NOT NULL DEFAULT ''");
+ensureColumn('users', 'avatar', "TEXT NOT NULL DEFAULT 'pilot'");
+ensureColumn('users', 'updated_at', 'TEXT');
+db.prepare(
+  `UPDATE users
+   SET display_name = username
+   WHERE display_name IS NULL OR trim(display_name) = ''`
+).run();
+db.prepare(
+  `UPDATE users
+   SET updated_at = COALESCE(updated_at, created_at, datetime('now'))
+   WHERE updated_at IS NULL`
+).run();
+
 // ---- Users ---------------------------------------------------------------
 
 export function createUser(username, passwordHash) {
   const info = db
-    .prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')
-    .run(username, passwordHash);
+    .prepare(
+      `INSERT INTO users (username, password_hash, display_name, nickname, avatar, updated_at)
+       VALUES (?, ?, ?, '', 'pilot', datetime('now'))`
+    )
+    .run(username, passwordHash, username);
   return getUserById(info.lastInsertRowid);
 }
 
@@ -99,7 +124,49 @@ export function getUserById(id) {
 // Public-safe shape (never expose password_hash)
 export function publicUser(user) {
   if (!user) return null;
-  return { id: user.id, username: user.username };
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.display_name || user.username,
+    nickname: user.nickname || '',
+    avatar: user.avatar || 'pilot',
+  };
+}
+
+export function updateUserProfile(userId, patch = {}) {
+  const user = getUserById(userId);
+  if (!user) return null;
+
+  const sets = [];
+  const params = [];
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'username')) {
+    const existing = getUserByUsername(patch.username);
+    if (existing && existing.id !== userId) {
+      const error = new Error('Username already taken.');
+      error.code = 'USERNAME_TAKEN';
+      throw error;
+    }
+    sets.push('username = ?');
+    params.push(patch.username);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'displayName')) {
+    sets.push('display_name = ?');
+    params.push(patch.displayName);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'nickname')) {
+    sets.push('nickname = ?');
+    params.push(patch.nickname);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'avatar')) {
+    sets.push('avatar = ?');
+    params.push(patch.avatar);
+  }
+
+  if (sets.length === 0) return user;
+  sets.push("updated_at = datetime('now')");
+  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params, userId);
+  return getUserById(userId);
 }
 
 // ---- Friendships ---------------------------------------------------------

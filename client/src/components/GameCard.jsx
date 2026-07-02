@@ -26,13 +26,23 @@ export default function GameCard({ game, onClick, onQuickPlay, searching = false
     el.style.setProperty('--rx', '0deg');
     el.style.setProperty('--ry', '0deg');
   };
+  const onCardKeyDown = (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick(game);
+    }
+  };
 
   return (
-    <button
+    <div
       ref={ref}
       className="game-card"
+      role="button"
+      tabIndex={0}
       style={{ '--card-accent': game.accent || 'var(--accent)' }}
       onClick={() => onClick(game)}
+      onKeyDown={onCardKeyDown}
       onMouseMove={onMove}
       onMouseLeave={reset}
     >
@@ -40,23 +50,15 @@ export default function GameCard({ game, onClick, onQuickPlay, searching = false
         {Thumb ? <Thumb /> : <div className="game-thumb-fallback">🎮</div>}
         <span className="play-cta">▶ Play</span>
         {onQuickPlay && (
-          <span
+          <button
+            type="button"
             className={`quick-cta${searching ? ' searching' : ''}`}
-            role="button"
-            tabIndex={0}
-            aria-disabled={searching}
+            disabled={searching}
             title={searching ? 'Searching for players' : 'Match with anyone online'}
             onClick={(e) => { e.stopPropagation(); if (!searching) onQuickPlay(game); }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!searching) onQuickPlay(game);
-              }
-            }}
           >
             {searching ? 'Searching…' : 'Quick Play'}
-          </span>
+          </button>
         )}
       </div>
       <div className="game-name">
@@ -71,6 +73,6 @@ export default function GameCard({ game, onClick, onQuickPlay, searching = false
           ))}
         </div>
       )}
-    </button>
+    </div>
   );
 }

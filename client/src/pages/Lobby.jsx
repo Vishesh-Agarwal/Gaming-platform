@@ -9,6 +9,8 @@ import InviteModal from '../components/InviteModal.jsx';
 import LobbyModal from '../components/LobbyModal.jsx';
 import FriendsChat from '../components/FriendsChat.jsx';
 import Modal from '../components/Modal.jsx';
+import { setGameMuted } from '../gameAudio.js';
+import { PROFILE_AVATARS, getUserSettings, saveUserSettings } from '../preferences.js';
 
 // Chat panel width: default bumped +10% again (352 -> 387), user-resizable + persisted.
 const CHAT_WIDTH_KEY = 'gp-chat-width-v2';
@@ -54,6 +56,7 @@ export default function Lobby({
   onBack,
   onSendChat,
   onLogout,
+  onUpdateProfile,
   onShowStats,
   stats,
   statsOpen,
@@ -63,9 +66,26 @@ export default function Lobby({
   const [showAdd, setShowAdd] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [showJoinCode, setShowJoinCode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const [touchStart, setTouchStart] = useState(null);
+  const [settings, setSettings] = useState(getUserSettings);
+  const [profileDraft, setProfileDraft] = useState({
+    username: currentUser.username || '',
+    displayName: currentUser.displayName || currentUser.username || '',
+    nickname: currentUser.nickname || '',
+    avatar: currentUser.avatar || 'pilot',
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const [addName, setAddName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const unreadTotal = Object.values(unread || {}).reduce((sum, n) => sum + Number(n || 0), 0);
+  const activeAvatar = PROFILE_AVATARS.find((a) => a.id === (currentUser.avatar || 'pilot')) || PROFILE_AVATARS[0];
+  const profileName = currentUser.displayName || currentUser.username;
+  const profileNickname = currentUser.nickname || '';
 
   // Clicking a game: multiplayer games open a lobby, 1v1 games open the invite modal.
   const pickGame = (g) => (g.maxPlayers > 2 ? onCreateLobby(g.id) : setPickedGame(g));
@@ -86,6 +106,17 @@ export default function Lobby({
   useEffect(() => {
     localStorage.setItem(CHAT_WIDTH_KEY, String(chatWidth));
   }, [chatWidth]);
+
+  useEffect(() => {
+    if (!showProfile) return;
+    setProfileDraft({
+      username: currentUser.username || '',
+      displayName: currentUser.displayName || currentUser.username || '',
+      nickname: currentUser.nickname || '',
+      avatar: currentUser.avatar || 'pilot',
+    });
+    setProfileError('');
+  }, [showProfile, currentUser]);
 
   // Drag the divider to resize the chat panel (it's anchored to the right edge).
   const startResize = (e) => {
@@ -113,8 +144,62 @@ export default function Lobby({
     setShowAdd(false);
   };
 
+  const updateSettings = (patch) => {
+    const next = saveUserSettings(patch);
+    setSettings(next);
+    if (Object.prototype.hasOwnProperty.call(patch, 'soundEffects')) {
+      setGameMuted(!next.soundEffects);
+    }
+  };
+
+  const updateProfileDraft = (patch) => {
+    setProfileDraft((prev) => ({ ...prev, ...patch }));
+    setProfileError('');
+  };
+
+  const submitProfile = async (e) => {
+    e.preventDefault();
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      await onUpdateProfile({
+        username: profileDraft.username,
+        displayName: profileDraft.displayName,
+        nickname: profileDraft.nickname,
+        avatar: profileDraft.avatar,
+      });
+      setShowProfile(false);
+    } catch (err) {
+      setProfileError(err.message || 'Could not save profile.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const openMobileMenuAction = (action) => {
+    setMobileMenuOpen(false);
+    action();
+  };
+
+  const onShellTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    setTouchStart({ x: t.clientX, y: t.clientY });
+  };
+
+  const onShellTouchEnd = (e) => {
+    if (!touchStart || e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    setTouchStart(null);
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    if (dx < 0) setMobileChatOpen(true);
+    else setMobileChatOpen(false);
+  };
+
   return (
-    <div className="app">
+    <div className={`app${mobileChatOpen ? ' mobile-chat-open' : ''}`} onTouchStart={onShellTouchStart} onTouchEnd={onShellTouchEnd}>
       {/* Incoming game + lobby invites — float on top, hard to miss */}
       {(invites.length > 0 || lobbyInvites?.length > 0) && (
         <div className="invite-banner">
@@ -172,9 +257,12 @@ export default function Lobby({
           <button className="ghost" onClick={() => { onShowStats(); setMobileMenuOpen(false); }}>
             Stats
           </button>
-          <span className="username">{currentUser.username}</span>
-          <button className="link" onClick={onLogout}>
-            Log out
+          <button className="ghost" onClick={() => { setShowSettings(true); setMobileMenuOpen(false); }}>
+            Settings
+          </button>
+          <button className="profile-chip ghost" onClick={() => { setShowProfile(true); setMobileMenuOpen(false); }}>
+            <span className="profile-avatar">{activeAvatar.icon}</span>
+            <span>{profileName}</span>
           </button>
         </div>
       </header>
@@ -215,6 +303,9 @@ export default function Lobby({
         />
 
         <aside className="chat-side">
+          <button className="mobile-chat-close ghost" onClick={() => setMobileChatOpen(false)} aria-label="Close chat">
+            ‹
+          </button>
           <FriendsChat
             friends={friends}
             onlineIds={onlineIds}
@@ -228,6 +319,55 @@ export default function Lobby({
           />
         </aside>
       </div>
+
+      <div className="mobile-bottom-actions">
+        <button className="mobile-chat-fab mobile-action-icon" onClick={() => { setMobileMenuOpen(false); setMobileChatOpen(true); }} aria-label="Open chat">
+          <span className="icon-chat" aria-hidden="true" />
+          {unreadTotal > 0 && <b>{unreadTotal}</b>}
+        </button>
+        <button
+          className="mobile-menu-fab mobile-action-icon"
+          onClick={() => { setMobileChatOpen(false); setMobileMenuOpen((open) => !open); }}
+          aria-label="Open menu"
+          aria-expanded={mobileMenuOpen}
+        >
+          <span className="icon-menu" aria-hidden="true" />
+        </button>
+      </div>
+
+      {mobileMenuOpen && (
+        <div className="mobile-menu-sheet" role="dialog" aria-label="Menu">
+          <button type="button" onClick={() => openMobileMenuAction(() => setShowJoinCode(true))} aria-label="Join by code">
+            <span className="menu-action-icon icon-join" aria-hidden="true" />
+            <span>Join</span>
+          </button>
+          <button type="button" onClick={() => openMobileMenuAction(onShowRooms)} aria-label="Open rooms">
+            <span className="menu-action-icon icon-rooms" aria-hidden="true" />
+            <span>Rooms</span>
+          </button>
+          <button type="button" onClick={() => openMobileMenuAction(() => setShowAdd(true))} aria-label="Add friend">
+            <span className="menu-action-icon icon-add" aria-hidden="true" />
+            <span>Add</span>
+          </button>
+          <button type="button" onClick={() => openMobileMenuAction(() => setShowRequests(true))} aria-label="Friend requests">
+            <span className="menu-action-icon icon-requests" aria-hidden="true" />
+            <span>Requests</span>
+            {requests.length > 0 && <b>{requests.length}</b>}
+          </button>
+          <button type="button" onClick={() => openMobileMenuAction(onShowStats)} aria-label="Stats">
+            <span className="menu-action-icon icon-stats" aria-hidden="true" />
+            <span>Stats</span>
+          </button>
+          <button type="button" onClick={() => openMobileMenuAction(() => setShowSettings(true))} aria-label="Settings">
+            <span className="menu-action-icon icon-settings" aria-hidden="true" />
+            <span>Settings</span>
+          </button>
+          <button type="button" onClick={() => openMobileMenuAction(() => setShowProfile(true))} aria-label="Profile">
+            <span className="menu-action-icon">{activeAvatar.icon}</span>
+            <span>Profile</span>
+          </button>
+        </div>
+      )}
 
       {pickedGame && (
         <InviteModal
@@ -320,6 +460,147 @@ export default function Lobby({
               <button onClick={() => onAccept(r.requestId)}>Accept</button>
             </div>
           ))}
+        </Modal>
+      )}
+
+      {showSettings && (
+        <Modal title="Settings" onClose={() => setShowSettings(false)}>
+          <div className="settings-panel">
+            <section className="settings-group">
+              <div>
+                <b>Theme</b>
+                <span>Change the platform look on this device.</span>
+              </div>
+              <div className="settings-options" role="group" aria-label="Theme">
+                {[
+                  ['default', 'Default'],
+                  ['light', 'Light'],
+                  ['arcade', 'Arcade'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`settings-choice${settings.theme === value ? ' active' : ''}`}
+                    onClick={() => updateSettings({ theme: value })}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <div>
+                <b>Controls</b>
+                <span>Set the mobile Smash Karts throttle behavior.</span>
+              </div>
+              <div className="settings-options" role="group" aria-label="Mobile controls">
+                {[
+                  ['auto-gas', 'Auto gas'],
+                  ['manual-gas', 'Manual gas'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`settings-choice${settings.mobileControls === value ? ' active' : ''}`}
+                    onClick={() => updateSettings({ mobileControls: value })}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="settings-group settings-row">
+              <div>
+                <b>Sound effects</b>
+                <span>Moves, timers, reactions, and Karts effects.</span>
+              </div>
+              <button
+                type="button"
+                className={`settings-toggle${settings.soundEffects ? ' active' : ''}`}
+                onClick={() => updateSettings({ soundEffects: !settings.soundEffects })}
+                aria-pressed={settings.soundEffects}
+              >
+                {settings.soundEffects ? 'On' : 'Off'}
+              </button>
+            </section>
+          </div>
+        </Modal>
+      )}
+
+      {showProfile && (
+        <Modal title="Profile" onClose={() => setShowProfile(false)}>
+          <form className="profile-panel" onSubmit={submitProfile}>
+            <section className="profile-summary">
+              <span className="profile-avatar large">
+                {(PROFILE_AVATARS.find((a) => a.id === profileDraft.avatar) || activeAvatar).icon}
+              </span>
+              <div>
+                <b>{profileDraft.displayName.trim() || currentUser.displayName || currentUser.username}</b>
+                <span>{profileDraft.nickname.trim() || `@${profileDraft.username || currentUser.username}`}</span>
+              </div>
+            </section>
+
+            <label className="profile-field">
+              <span>Username</span>
+              <input
+                value={profileDraft.username}
+                onChange={(e) => updateProfileDraft({ username: e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) })}
+                placeholder={currentUser.username}
+                maxLength={20}
+              />
+            </label>
+
+            <label className="profile-field">
+              <span>Display name</span>
+              <input
+                value={profileDraft.displayName}
+                onChange={(e) => updateProfileDraft({ displayName: e.target.value.slice(0, 24) })}
+                placeholder={currentUser.displayName || currentUser.username}
+                maxLength={24}
+              />
+            </label>
+
+            <label className="profile-field">
+              <span>Nickname</span>
+              <input
+                value={profileDraft.nickname}
+                onChange={(e) => updateProfileDraft({ nickname: e.target.value.slice(0, 24) })}
+                placeholder={currentUser.username}
+                maxLength={24}
+              />
+            </label>
+
+            <section className="profile-avatar-section">
+              <span>Avatar</span>
+              <div className="profile-avatar-grid">
+                {PROFILE_AVATARS.map((avatar) => (
+                  <button
+                    key={avatar.id}
+                    type="button"
+                    className={`profile-avatar-choice${profileDraft.avatar === avatar.id ? ' active' : ''}`}
+                    onClick={() => updateProfileDraft({ avatar: avatar.id })}
+                    aria-label={`Choose ${avatar.label} avatar`}
+                  >
+                    <span className="profile-avatar">{avatar.icon}</span>
+                    <small>{avatar.label}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {profileError && <p className="profile-error">{profileError}</p>}
+
+            <div className="profile-actions">
+              <button type="submit" disabled={profileSaving}>
+                {profileSaving ? 'Saving...' : 'Save profile'}
+              </button>
+              <button className="profile-logout ghost" onClick={onLogout} type="button">
+                Log out
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 

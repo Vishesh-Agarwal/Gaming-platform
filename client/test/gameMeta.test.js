@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   modeSummary,
   playerCountLabel,
+  requiresLandscape,
   rulesForGame,
 } from '../src/games/gameMeta.js';
 
@@ -36,4 +37,11 @@ test('rulesForGame builds concise rules from registry metadata', () => {
     { name: 'Blitz', hint: '8-Ball with a 20s shot clock.' },
   ]);
   assert.deepEqual(rules.options, [{ label: 'Rounds', value: 3 }]);
+});
+
+test('requiresLandscape identifies games that need horizontal mobile play', () => {
+  assert.equal(requiresLandscape('karts'), true);
+  assert.equal(requiresLandscape('ghostrider'), true);
+  assert.equal(requiresLandscape('artillery'), true);
+  assert.equal(requiresLandscape('carrom'), false);
 });

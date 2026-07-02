@@ -3,7 +3,27 @@ import { useMemo, useState } from 'react';
 const SIZE = 5;
 const idx = (r, c) => r * SIZE + c;
 const rc = (i) => ({ r: Math.floor(i / SIZE), c: i % SIZE });
-const labels = { king: 'K', queen: 'Q', rook: 'R', bishop: 'B', knight: 'N', pawn: 'P' };
+const pieceGlyph = {
+  king: { white: '♔', black: '♚' },
+  queen: { white: '♕', black: '♛' },
+  rook: { white: '♖', black: '♜' },
+  bishop: { white: '♗', black: '♝' },
+  knight: { white: '♘', black: '♞' },
+  pawn: { white: '♙', black: '♟' },
+};
+
+function pieceColor(piece) {
+  return piece?.owner === 0 ? 'white' : 'black';
+}
+
+function pieceLabel(type, owner = 0) {
+  return pieceGlyph[type]?.[owner === 0 ? 'white' : 'black'] || '';
+}
+
+function pieceName(pieceOrType) {
+  const type = typeof pieceOrType === 'string' ? pieceOrType : pieceOrType?.type;
+  return String(type || 'piece').replace(/^\w/, (ch) => ch.toUpperCase());
+}
 
 function playerName(room, seat, youAreIndex) {
   if (seat === youAreIndex) return 'You';
@@ -53,7 +73,7 @@ function legalTargets(board, from) {
 }
 
 export function Thumbnail() {
-  const pieces = ['R', 'N', 'B', 'Q', 'K'];
+  const pieces = ['rook', 'knight', 'bishop', 'queen', 'king'];
   return (
     <svg viewBox="0 0 120 120" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-hidden>
       <rect width="120" height="120" fill="#1b1720" />
@@ -64,10 +84,10 @@ export function Thumbnail() {
           return <rect key={i} x={c * 17} y={r * 17} width="17" height="17" fill={(r + c) % 2 ? '#3fc7ad' : '#f1ece5'} opacity={(r + c) % 2 ? 0.75 : 0.18} />;
         })}
         {pieces.map((p, i) => (
-          <text key={p} x={8.5 + i * 17} y="15" textAnchor="middle" fontFamily="sans-serif" fontSize="12" fontWeight="900" fill="#f1ece5">{p}</text>
+          <text key={p} x={8.5 + i * 17} y="15" textAnchor="middle" fontFamily="Georgia, 'Times New Roman', serif" fontSize="13" fontWeight="900" fill="#f1ece5">{pieceLabel(p, 1)}</text>
         ))}
         {pieces.map((p, i) => (
-          <text key={`b${p}`} x={8.5 + i * 17} y="83" textAnchor="middle" fontFamily="sans-serif" fontSize="12" fontWeight="900" fill="#e85f70">{p}</text>
+          <text key={`b${p}`} x={8.5 + i * 17} y="83" textAnchor="middle" fontFamily="Georgia, 'Times New Roman', serif" fontSize="13" fontWeight="900" fill="#e85f70">{pieceLabel(p, 0)}</text>
         ))}
       </g>
     </svg>
@@ -107,13 +127,13 @@ export default function MicroChess({ room, youAreIndex, onMove }) {
         </span>
       </div>
       <div className="move-tray">
-        <span>Last: {state.lastMove ? `${labels[state.lastMove.captured?.type] || ''} ${state.lastMove.from} -> ${state.lastMove.to}` : 'none'}</span>
+        <span>Last: {state.lastMove ? `${state.lastMove.captured ? pieceLabel(state.lastMove.captured.type, state.lastMove.captured.owner) : ''} ${state.lastMove.from} -> ${state.lastMove.to}` : 'none'}</span>
         <span>You captured <b>{state.captured?.[youAreIndex] || 0}</b></span>
         <span>{playerName(room, opponent, youAreIndex)} captured <b>{state.captured?.[opponent] || 0}</b></span>
       </div>
       <div className="history-strip">
         {(state.history || []).slice(-6).map((m, i) => (
-          <span key={`${m.from}-${m.to}-${i}`}>{m.seat === youAreIndex ? 'You' : playerName(room, m.seat, youAreIndex)} {labels[m.piece]} {`${m.from}->${m.to}`}{m.captured ? ` x${labels[m.captured]}` : ''}</span>
+          <span key={`${m.from}-${m.to}-${i}`}>{m.seat === youAreIndex ? 'You' : playerName(room, m.seat, youAreIndex)} {pieceLabel(m.piece, m.seat)} {`${m.from}->${m.to}`}{m.captured ? ` x${pieceLabel(m.captured, 1 - m.seat)}` : ''}</span>
         ))}
       </div>
       <div className="mc-board">
@@ -125,8 +145,8 @@ export default function MicroChess({ room, youAreIndex, onMove }) {
           return (
             <button key={i} type="button" className={cls.join(' ')} onClick={() => clickCell(i)} disabled={!myTurn && !piece}>
               {piece && (
-                <span className={`mc-piece ${piece.owner === youAreIndex ? 'mine' : 'theirs'} ${piece.type}`}>
-                  {labels[piece.type]}
+                <span className={`mc-piece ${piece.owner === youAreIndex ? 'mine' : 'theirs'} ${piece.type}`} aria-label={pieceName(piece)}>
+                  <span className={`mc-piece-glyph ${pieceColor(piece)}`}>{pieceLabel(piece.type, piece.owner)}</span>
                 </span>
               )}
             </button>

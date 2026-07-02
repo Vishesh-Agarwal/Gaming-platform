@@ -8,7 +8,7 @@
 //            launchpad). For any mesa you want to be drive-up climbable, use a flat
 //            wedge plateau in `ramps` instead — see below.) |
 //            {kind:'cyl',x,z,r} (solid pillar, never drivable on top, no top access).
-// ramps: {kind:'wedge',x,z,w,d,axis:'x'|'z',loY,hiY} — lives in `ramps`, not
+// ramps: {kind:'wedge',x,z,w,d,axis:'x'|'z',loY,hiY,launch?} — lives in `ramps`, not
 //        `obstacles`, so it has NO wall push-out; it only contributes to
 //        surfaceHeight. A linear slope runs across the footprint along `axis`: the
 //        low end sits at x|z minus half the footprint length, the high end at x|z
@@ -90,7 +90,7 @@ export const MAPS = {
   launchpad: {
     id: 'launchpad', name: 'Launchpad', arena: { w: 90, d: 90 },
     obstacles: [{ kind: 'box', x: 0, z: 26, w: 24, d: 18, top: 5 }],
-    ramps: [{ kind: 'wedge', x: 0, z: -6, w: 12, d: 16, axis: 'z', loY: 0, hiY: 6 }],
+    ramps: [{ kind: 'wedge', x: 0, z: -6, w: 12, d: 16, axis: 'z', loY: 0, hiY: 6, launch: true }],
     boosts: [{ x: 0, z: -28, r: 6, strength: 45 }],
     spawns: [
       { x: -34, z: -34, heading: 0.78 },

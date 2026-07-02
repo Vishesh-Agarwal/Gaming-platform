@@ -82,6 +82,24 @@ test('only the drawer can draw and clear', () => {
   assert.equal(state.strokes.length, 0);
 });
 
+test('streamed drawing segments retain enough strokes for a full turn', () => {
+  let state = skribble.createInitialState({ seed: 1 }, 2);
+  state = skribble.applyMove(state, 0, { type: 'chooseWord', word: state.secret.choices[0] }).state;
+
+  for (let i = 0; i < 420; i += 1) {
+    const x = (i % 100) / 100;
+    const nextX = ((i + 1) % 100) / 100;
+    state = skribble.applyMove(state, 0, {
+      type: 'stroke',
+      color: '#18151c',
+      size: 5,
+      points: [{ x, y: 0.2 }, { x: nextX, y: 0.21 }],
+    }).state;
+  }
+
+  assert.equal(state.strokes.length, 420);
+});
+
 test('wrong guesses are chat messages and correct guesses score', () => {
   let state = skribble.createInitialState({ seed: 7 }, 3);
   state = skribble.applyMove(state, 0, { type: 'chooseWord', word: state.secret.choices[0] }).state;

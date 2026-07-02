@@ -70,7 +70,8 @@ const registry = {
     thumbnail: KartsThumb,
     accent: '#ff5d6c',
     rules: 'Drive, grab weapons, and score eliminations before the match ends.',
-    maxPlayers: 4,
+    maxPlayers: 8,
+    botCap: 7,
     modes: [
       { id: 'ffa', name: 'Free-for-all', hint: 'Most kills wins.' },
       { id: 'teams', name: 'Teams', hint: 'Two squads — team kills decide it.' },

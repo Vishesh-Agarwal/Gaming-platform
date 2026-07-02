@@ -9,7 +9,7 @@ import Game from './Game.jsx';
 import ToastStack from '../components/ToastStack.jsx';
 
 export default function Home() {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, updateProfile } = useAuth();
 
   const [friends, setFriends] = useState([]);
   const [onlineIds, setOnlineIds] = useState(new Set());
@@ -309,7 +309,7 @@ export default function Home() {
     if (res.error) flash(res.error);
   };
   const onLeave = () => {
-    getSocket()?.emit('game:leave');
+    if (activeRoom?.status !== 'over') getSocket()?.emit('game:leave');
     setActiveRoom(null);
     setYouAreIndex(null);
     setGameError('');
@@ -394,6 +394,7 @@ export default function Home() {
         onBack={onBackToFriends}
         onSendChat={onSendChat}
         onLogout={onLogout}
+        onUpdateProfile={updateProfile}
         onShowStats={onShowStats}
         stats={stats}
         statsOpen={statsOpen}

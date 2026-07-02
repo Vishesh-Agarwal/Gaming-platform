@@ -21,3 +21,13 @@ test('room creation rejects too few seats for fixed larger games', () => {
   const created = createRoom('codenames', undefined, users.map((u) => u.id));
   assert.equal(created.error, 'Need at least 4 players.');
 });
+
+test('smash karts can start from one human and one lobby bot', () => {
+  const suffix = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  const user = createUser(`karts_bot_${suffix}`, 'x');
+  const created = createRoom('karts', { bots: 1 }, [user.id]);
+
+  assert.equal(created.error, undefined);
+  assert.equal(created.room.players.length, 2);
+  assert.equal(created.room.players.filter((p) => p.bot).length, 1);
+});

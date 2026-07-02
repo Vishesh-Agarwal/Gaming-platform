@@ -2,7 +2,6 @@
 // takes aim input, replays the shot frames, then settles to state.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
-import PowerBar from './PowerBar.jsx';
 import ShotClock from './ShotClock.jsx';
 
 const VIEW_W = 900;                 // on-screen width; logical table is 1000x500 (2:1)
@@ -10,6 +9,8 @@ const PALETTE = ['#e7b416', '#2f6fd0', '#d8453a', '#7d3cc0', '#e07b2c', '#2f9e54
 const PULL_MAX = 320;               // logical drag length that maps to full power
 const MIN_FIRE = 8;
 const BLITZ_MS = 20000;
+const PREDICT_CUE_LEN = 190;
+const PREDICT_OBJECT_LEN = 70;
 
 // A pool ball's id IS its number, so color + stripe derive straight from the id.
 function ballBase(id) {
@@ -19,6 +20,17 @@ function ballBase(id) {
   return PALETTE[id - 9];                // stripes 9-15 share the solid colors
 }
 const isStripe = (id) => id >= 9;
+
+function aimForViewVector(vector, flip) {
+  const visual = { dx: -vector.dx, dy: -vector.dy };
+  return flip ? { dx: -visual.dx, dy: -visual.dy } : visual;
+}
+
+function shotFromCueDrag(vector, flip) {
+  const dist = Math.hypot(vector.dx, vector.dy);
+  const power = Math.max(0, Math.min(100, Math.round((dist / PULL_MAX) * 100)));
+  return { aim: aimForViewVector(vector, flip), power };
+}
 
 export function Thumbnail() {
   return (
@@ -46,12 +58,10 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const flip = youAreIndex === 1; // player 2 views the table rotated 180° (plays from the bottom)
 
   const [aim, setAim] = useState(null);          // { dx, dy } pointing from the cue
-  const [power, setPower] = useState(55);
+  const [power, setPower] = useState(0);
   const [spin, setSpin] = useState({ along: 0, side: 0 }); // english: follow/draw + side
-  const [locked, setLocked] = useState(false);    // click to freeze the aim
   const [cuePlace, setCuePlace] = useState(null); // local cue placement when ball-in-hand/break
   const [dragging, setDragging] = useState(null); // 'cue' | 'pull' | null
-  const gestureRef = useRef(null);
   const baseCue = useMemo(() => cuePlace || st.cue, [cuePlace, st.cue, st.seq]);
   const bounds = useMemo(() => ({ loX: 46, hiX: st.W - 46, loY: 46, hiY: st.H - 46 }), [st.W, st.H]);
   const objectBalls = useMemo(() => st.balls.filter((b) => b.id !== 0).map((b) => ({ ...b, r: st.ballR })), [st.balls, st.ballR]);
@@ -77,7 +87,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
   useEffect(() => {
     if (st.seq === lastSeq.current) return;
     lastSeq.current = st.seq;
-    setAim(null); setCuePlace(null); setSpin({ along: 0, side: 0 }); setLocked(false);
+    setAim(null); setPower(0); setCuePlace(null); setSpin({ along: 0, side: 0 });
     const frames = st.lastShot?.frames;
     if (!frames || frames.length === 0) { setFrameIdx(null); return; }
     let i = 0; setFrameIdx(0);
@@ -109,7 +119,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
       drawBall(ctx, baseCue.x, baseCue.y, 0, st.ballR);
       if (myTurn && aim && (aim.dx || aim.dy)) {
         const pred = predictShot(baseCue, { x: aim.dx, y: aim.dy }, objectBalls, st.ballR, bounds, 0);
-        drawPrediction(ctx, pred, st.ballR);
+        drawPrediction(ctx, pred, st.ballR, predictionAllowedForHit(st, youAreIndex, pred.hit?.ball));
         drawCueStick(ctx, baseCue, aim, power, st.ballR);
       }
     }
@@ -124,15 +134,17 @@ export default function Pool({ room, youAreIndex, onMove }) {
     if (flip) { x = st.W - x; y = st.H - y; }
     return { x, y };
   };
+  const cuePullFrom = (vector) => shotFromCueDrag(vector, flip);
+  const aimFromPoint = (p) => ({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
   const onDown = (e) => {
     if (!myTurn || frameIdx != null) return;
     canvasRef.current.setPointerCapture?.(e.pointerId);
     const p = toLogical(e);
     const onCue = Math.hypot(p.x - baseCue.x, p.y - baseCue.y) < st.ballR * 2.2;
     if (canPlace && onCue) { setDragging('cue'); return; }
-    if (onCue) { gestureRef.current = { mode: 'pull', shot: null }; setDragging('pull'); return; }
-    setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
-    setLocked((l) => !l); // click empty table to lock; click again to re-aim
+    setDragging('aim');
+    setAim(aimFromPoint(p));
+    setPower(0);
   };
   const onMoveP = (e) => {
     if (!myTurn || frameIdx != null) return;
@@ -143,31 +155,18 @@ export default function Pool({ room, youAreIndex, onMove }) {
       setCuePlace({ x: Math.max(m, Math.min(hiX, p.x)), y: Math.max(m, Math.min(st.H - m, p.y)) });
       return;
     }
-    if (gestureRef.current?.mode === 'pull') {
-      // pull-back: shot fires opposite the pull; distance sets power
-      const pdx = p.x - baseCue.x, pdy = p.y - baseCue.y;
-      const dist = Math.hypot(pdx, pdy);
-      const pw = Math.max(5, Math.min(100, Math.round((dist / PULL_MAX) * 100)));
-      const a = { dx: -pdx, dy: -pdy };
-      gestureRef.current.shot = { aim: a, power: pw };
-      setAim(a); setPower(pw); setLocked(true);
-      return;
+    if (dragging === 'aim') {
+      setAim(aimFromPoint(p));
     }
-    if (!locked) setAim({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
   };
-  const onUp = () => {
-    const g = gestureRef.current;
-    gestureRef.current = null;
-    setDragging(null);
-    if (g?.mode === 'pull' && g.shot && g.shot.power >= MIN_FIRE) doShoot(g.shot.aim, g.shot.power);
-  };
+  const onUp = () => setDragging(null);
 
   const doShoot = (a, pw) => {
     if (!myTurn || !a || (a.dx === 0 && a.dy === 0)) return;
     onMove({ dx: a.dx, dy: a.dy, power: pw, spin, ...(cuePlace ? { cue: cuePlace } : {}) });
     setAim(null);
+    setPower(0);
   };
-  const shoot = () => doShoot(aim, power);
 
   const oppIdx = 1 - youAreIndex;
   const blitz = st.mode === 'blitz';
@@ -176,29 +175,38 @@ export default function Pool({ room, youAreIndex, onMove }) {
     <div className="pool">
       <Scoreboard st={st} room={room} you={youAreIndex} opp={oppIdx} myTurn={myTurn} blitz={blitz} />
 
-      <div className="board-wrap">
-        <canvas
-          ref={canvasRef}
-          width={VIEW_W}
-          height={viewH}
-          className="pool-canvas"
-          onPointerDown={onDown}
-          onPointerMove={onMoveP}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
-        />
-        {banner && <div key={banner.key} className={`game-banner ${banner.foul ? 'foul' : 'turn'}`}>{banner.msg}</div>}
+      <div className="pool-playfield">
+        {myTurn && frameIdx == null && (
+          <PoolPowerStick
+            power={power}
+            disabled={!aim}
+            cuePullFrom={cuePullFrom}
+            onPreview={(pw) => setPower(pw)}
+            onFire={(pw) => doShoot(aim, pw)}
+          />
+        )}
+        <div className="board-wrap">
+          <canvas
+            ref={canvasRef}
+            width={VIEW_W}
+            height={viewH}
+            className="pool-canvas"
+            onPointerDown={onDown}
+            onPointerMove={onMoveP}
+            onPointerUp={onUp}
+            onPointerCancel={onUp}
+          />
+          {banner && <div key={banner.key} className={`game-banner ${banner.foul ? 'foul' : 'turn'}`}>{banner.msg}</div>}
+        </div>
       </div>
 
       {myTurn && frameIdx == null && (
         <div className="pool-controls">
           <SpinPad spin={spin} onChange={setSpin} />
-          <PowerBar value={power} onChange={setPower} />
-          <button className="pool-shoot" disabled={!aim} onClick={shoot}>Shoot</button>
           <span className="pool-hint muted">
             {canPlace
-              ? 'Drag the cue ball to place it, then aim on the table and Shoot.'
-              : 'Pull back the cue ball and release to shoot — or aim on the table.'}
+              ? 'Place the cue ball, aim on the table, then pull the side stick.'
+              : 'Aim on the table, pull the side stick, and release.'}
           </span>
         </div>
       )}
@@ -264,15 +272,65 @@ function MiniBall({ id, potted, target }) {
 }
 
 function drawTable(ctx, st) {
-  ctx.fillStyle = '#5a3a20';
+  ctx.fillStyle = '#101a33';
   ctx.fillRect(0, 0, st.W, st.H);
-  ctx.fillStyle = '#1f7a4d';
+  ctx.fillStyle = '#4b2119';
+  ctx.fillRect(18, 18, st.W - 36, st.H - 36);
+  ctx.fillStyle = '#70d7d5';
+  ctx.fillRect(34, 34, st.W - 68, st.H - 68);
+  drawRailInlays(ctx, st);
+  ctx.fillStyle = '#1d6b62';
   ctx.fillRect(36, 36, st.W - 72, st.H - 72);
+  drawFeltPattern(ctx, st);
+  ctx.fillStyle = '#123f3a';
+  ctx.fillRect(62, 62, st.W - 124, 22);
+  ctx.fillRect(62, st.H - 84, st.W - 124, 22);
+  ctx.fillRect(62, 62, 22, st.H - 124);
+  ctx.fillRect(st.W - 84, 62, 22, st.H - 124);
   ctx.fillStyle = '#0c1f16';
-  for (const p of st.pockets) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); }
+  for (const p of st.pockets) {
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 9, 0, Math.PI * 2); ctx.fillStyle = '#54140f'; ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fillStyle = '#040606'; ctx.fill();
+  }
   // head string (kitchen line)
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(232,255,250,0.22)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(st.W / 4, 46); ctx.lineTo(st.W / 4, st.H - 46); ctx.stroke();
+}
+
+function drawRailInlays(ctx, st) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 246, 214, 0.78)';
+  const marks = [190, 390, 610, 810];
+  for (const x of marks) {
+    ctx.fillRect(x - 48, 38, 96, 16);
+    ctx.fillRect(x - 48, st.H - 54, 96, 16);
+  }
+  for (const y of [150, 350]) {
+    ctx.fillRect(38, y - 40, 16, 80);
+    ctx.fillRect(st.W - 54, y - 40, 16, 80);
+  }
+  ctx.fillStyle = 'rgba(19, 31, 48, 0.72)';
+  for (const x of [250, 500, 750]) {
+    ctx.beginPath(); ctx.arc(x, 54, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, st.H - 54, 5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFeltPattern(ctx, st) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(230, 255, 246, 0.035)';
+  ctx.lineWidth = 1;
+  for (let y = 78; y < st.H - 70; y += 34) {
+    ctx.beginPath();
+    for (let x = 72; x < st.W - 70; x += 26) {
+      const yy = y + Math.sin(x * 0.035) * 5;
+      if (x === 72) ctx.moveTo(x, yy);
+      else ctx.quadraticCurveTo(x - 13, yy - 8, x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawBall(ctx, x, y, id, r) {
@@ -320,20 +378,101 @@ function drawCueStick(ctx, cue, aim, power, r) {
   ctx.restore();
 }
 
-function drawPrediction(ctx, pred, r) {
+function pointAlong(a, b, maxLen) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const dist = Math.min(maxLen, len);
+  return { x: a.x + (dx / len) * dist, y: a.y + (dy / len) * dist };
+}
+
+function predictionAllowedForHit(st, seat, ball) {
+  if (!ball) return false;
+  if (st.mode !== 'eightball' && st.mode !== 'blitz') return true;
+  const myGroup = st.groups?.[seat];
+  if (!myGroup) return ball.group === 'solid' || ball.group === 'stripe';
+  const cleared = !st.balls.some((b) => b.group === myGroup);
+  return cleared ? ball.group === 'eight' : ball.group === myGroup;
+}
+
+function drawPrediction(ctx, pred, r, showObjectLine = true) {
   ctx.save();
   ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.setLineDash([9, 7]);
-  ctx.beginPath(); ctx.moveTo(pred.path[0].x, pred.path[0].y);
-  for (let i = 1; i < pred.path.length; i++) ctx.lineTo(pred.path[i].x, pred.path[i].y);
+  const start = pred.path[0];
+  const end = pred.path[1] ? pointAlong(start, pred.path[1], PREDICT_CUE_LEN) : start;
+  ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y);
   ctx.stroke(); ctx.setLineDash([]);
   if (pred.hit) {
     const { ghost, ball, objDir } = pred.hit;
-    ctx.beginPath(); ctx.arc(ghost.x, ghost.y, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(ball.x, ball.y); ctx.lineTo(ball.x + objDir.x * 150, ball.y + objDir.y * 150);
-    ctx.strokeStyle = 'rgba(255,228,120,0.95)'; ctx.lineWidth = 2.5; ctx.stroke();
+    if (showObjectLine) {
+      ctx.beginPath(); ctx.arc(ghost.x, ghost.y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ball.x, ball.y); ctx.lineTo(ball.x + objDir.x * PREDICT_OBJECT_LEN, ball.y + objDir.y * PREDICT_OBJECT_LEN);
+      ctx.strokeStyle = 'rgba(255,228,120,0.95)'; ctx.lineWidth = 2.5; ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(ghost.x, ghost.y, r * 0.75, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,93,108,0.75)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
   }
   ctx.restore();
+}
+
+function PoolPowerStick({ power, disabled, cuePullFrom, onPreview, onFire }) {
+  const stickRef = useRef(null);
+  const pullRef = useRef(null);
+
+  const powerFrom = (event) => {
+    const startY = pullRef.current?.startY;
+    if (startY == null) return 0;
+    const rect = stickRef.current.getBoundingClientRect();
+    const dy = Math.max(0, Math.min(rect.height - 34, event.clientY - startY));
+    const vector = { dx: 0, dy };
+    const shot = cuePullFrom(vector);
+    const pw = shot.power;
+    pullRef.current.power = pw;
+    onPreview(pw);
+    return pw;
+  };
+
+  const releasePowerStick = () => {
+    const pw = pullRef.current?.power || 0;
+    pullRef.current = null;
+    onPreview(0);
+    if (!disabled && pw >= MIN_FIRE) onFire(pw);
+  };
+
+  const cancelPowerStick = () => {
+    pullRef.current = null;
+    onPreview(0);
+  };
+
+  const down = (event) => {
+    if (disabled) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const rect = stickRef.current.getBoundingClientRect();
+    pullRef.current = { startY: Math.min(event.clientY, rect.top + 18), power: 0 };
+  };
+
+  return (
+    <div
+      ref={stickRef}
+      className={`pool-power-stick${disabled ? ' disabled' : ''}`}
+      role="slider"
+      aria-label="Shot power"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow={power}
+      aria-disabled={disabled}
+      style={{ '--power': `${power}%` }}
+      onPointerDown={down}
+      onPointerMove={(event) => { if (pullRef.current) powerFrom(event); }}
+      onPointerUp={releasePowerStick}
+      onPointerCancel={cancelPowerStick}
+    >
+      <span className="pool-power-fill" />
+      <span className="pool-power-grip" />
+    </div>
+  );
 }
 
 // Click/drag the cue-ball widget to set english (where the tip strikes the ball).

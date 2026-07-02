@@ -20,6 +20,9 @@ export const api = {
     request('/api/auth/signup', { method: 'POST', body: { username, password } }),
   login: (username, password) =>
     request('/api/auth/login', { method: 'POST', body: { username, password } }),
+  me: (token) => request('/api/auth/me', { token }),
+  updateProfile: (token, profile) =>
+    request('/api/auth/me/profile', { method: 'PATCH', body: profile, token }),
 
   getFriends: (token) => request('/api/friends', { token }),
   getRequests: (token) => request('/api/friends/requests', { token }),

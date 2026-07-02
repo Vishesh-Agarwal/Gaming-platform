@@ -92,6 +92,17 @@ function groundYAt(state, x) {
   return ground[i] * (1 - f) + ground[i + 1] * f;
 }
 
+function segmentCircleHit(ax, ay, bx, by, cx, cy, r) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(ax - cx, ay - cy) <= r ? { x: ax, y: ay } : null;
+  const t = clampN(((cx - ax) * dx + (cy - ay) * dy) / len2, 0, 1);
+  const x = ax + dx * t;
+  const y = ay + dy * t;
+  return Math.hypot(x - cx, y - cy) <= r ? { x, y } : null;
+}
+
 function pickWind() {
   return Math.round((Math.random() * 2 - 1) * MAX_WIND * 1000) / 1000;
 }
@@ -200,7 +211,10 @@ function applyMove(state, playerIndex, move) {
 
   const path = [{ x: Math.round(x), y: Math.round(y) }];
   let impact = null;
+  const shotTanks = state.tanks.map((t, i) => ({ ...t, x: i === playerIndex ? shooterX : t.x }));
   for (let s = 0; s < MAX_STEPS; s++) {
+    const px = x;
+    const py = y;
     vx += state.wind;
     vy += GRAVITY;
     x += vx;
@@ -210,6 +224,17 @@ function applyMove(state, playerIndex, move) {
       impact = { x: Math.round(x), y: Math.round(y), off: true };
       break;
     }
+    for (let i = 0; i < shotTanks.length; i++) {
+      if (i === playerIndex || shotTanks[i].hp <= 0) continue;
+      const tx = shotTanks[i].x;
+      const ty = groundYAt(state, tx) - TANK_R * 0.5;
+      const hit = segmentCircleHit(px, py, x, y, tx, ty, TANK_R + 4);
+      if (hit) {
+        impact = { x: Math.round(hit.x), y: Math.round(hit.y), directHit: i };
+        break;
+      }
+    }
+    if (impact) break;
     if (y >= groundYAt(state, x)) {
       y = groundYAt(state, x);
       impact = { x: Math.round(x), y: Math.round(y) };
@@ -251,7 +276,7 @@ function applyMove(state, playerIndex, move) {
     ammo,
     turn: playerIndex === 0 ? 1 : 0,
     wind: pickWind(),
-    lastShot: { by: playerIndex, weapon, angle, power, path, impact, crater, blast: wdef.blast },
+    lastShot: { by: playerIndex, weapon, angle, power, path, impact, crater, blast: wdef.blast, directHit: impact.directHit },
     seq: (state.seq || 0) + 1,
   };
 

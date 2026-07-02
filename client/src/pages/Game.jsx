@@ -1,8 +1,8 @@
 // Hosts the active game's component (from the client registry) and the
 // game-over overlay. Server is authoritative; this only renders + emits.
-import { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getGame } from '../games/registry.js';
-import { rulesForGame } from '../games/gameMeta.js';
+import { requiresLandscape, rulesForGame } from '../games/gameMeta.js';
 import { getGameMuted, playGameSound, setGameMuted } from '../gameAudio.js';
 
 // Contains chunk-load failures (e.g. a stale lazy chunk 404 after redeploy)
@@ -68,11 +68,56 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
   const [muted, setMuted] = useState(getGameMuted);
   const [now, setNow] = useState(Date.now());
   const [stagePulse, setStagePulse] = useState(false);
+  const [landscapeNeedsTap, setLandscapeNeedsTap] = useState(false);
   const previousMoveSig = useRef(null);
   const previousStatus = useRef(room.status);
   const previousError = useRef('');
   const previousEmoteCount = useRef(emotes.length);
   const previousSecond = useRef(null);
+  const landscapeFullscreenOwned = useRef(false);
+  const landscapeRequired = def ? requiresLandscape(room.gameId) : false;
+
+  const enterLandscape = useCallback(async () => {
+    if (!landscapeRequired || typeof document === 'undefined') return;
+    setLandscapeNeedsTap(false);
+    try {
+      const root = document.documentElement;
+      if (!document.fullscreenElement && root.requestFullscreen) {
+        await root.requestFullscreen({ navigationUI: 'hide' });
+        landscapeFullscreenOwned.current = true;
+      }
+      if (window.screen?.orientation?.lock) {
+        await window.screen.orientation.lock('landscape');
+      }
+    } catch {
+      setLandscapeNeedsTap(true);
+    }
+  }, [landscapeRequired]);
+
+  useEffect(() => {
+    if (!landscapeRequired) return undefined;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        await enterLandscape();
+      } catch {
+        if (!cancelled) setLandscapeNeedsTap(true);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+      if (window.screen?.orientation?.lock) {
+        window.screen.orientation.lock('portrait').catch(() => {
+          window.screen?.orientation?.unlock?.();
+        });
+      }
+      if (landscapeFullscreenOwned.current && document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+      landscapeFullscreenOwned.current = false;
+    };
+  }, [enterLandscape, landscapeRequired]);
 
   // Let the final play/animation finish before the result overlay appears.
   const [showResult, setShowResult] = useState(false);
@@ -196,7 +241,7 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
   };
 
   return (
-    <div className="game-page">
+    <div className={`game-page${landscapeRequired ? ' landscape-game-page' : ''}`}>
       <header className="game-header">
         <div className="game-title-block">
           <span className="game-label">Playing now</span>
@@ -265,6 +310,26 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
           </button>
         </div>
       </header>
+
+      {landscapeRequired && (
+        <div className="orientation-gate" role="status" aria-live="polite">
+          <div>
+            <b>Rotate to landscape</b>
+            <span>{def.name} needs a wider screen for controls.</span>
+            {landscapeNeedsTap && (
+              <button type="button" onClick={enterLandscape}>
+                Enter landscape
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {landscapeRequired && (
+        <button className="landscape-leave ghost" type="button" onClick={onLeave}>
+          {room.status === 'over' ? 'Leave' : 'Forfeit'}
+        </button>
+      )}
 
       <div className="player-rail" style={{ '--player-count': room.players.length }}>
         {room.players.map((p) => {

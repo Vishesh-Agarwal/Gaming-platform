@@ -39,6 +39,16 @@ export function surfaceHeight(map, x, z) {
   return h;
 }
 
+function hasLaunchRampAt(map, x, z) {
+  if (!map || !map.ramps) return false;
+  for (const r of map.ramps) {
+    if (!r.launch) continue;
+    const hw = r.w / 2, hd = r.d / 2;
+    if (x >= r.x - hw && x <= r.x + hw && z >= r.z - hd && z <= r.z + hd) return true;
+  }
+  return false;
+}
+
 // Advance one movement step. Pure: depends only on (k, input, dt, map).
 export function integrateKart(k, input, dt, map = null) {
   const { ACCEL, REVERSE_ACCEL, MAX_SPEED, REVERSE_MAX, DRAG, TURN_RATE, KART_R, ARENA_W, ARENA_D, GRAVITY, SNAP, LAUNCH_MIN } = PHYS;
@@ -127,7 +137,7 @@ export function integrateKart(k, input, dt, map = null) {
       const ax = k.x + Math.sin(k.heading) * k.vel * d;
       const az = k.z + Math.cos(k.heading) * k.vel * d;
       const slopeAheadVy = (surfaceHeight(map, ax, az) - floor) / d;
-      if (vyImplied > LAUNCH_MIN && slopeAheadVy < vyImplied - LAUNCH_MIN) {
+      if (hasLaunchRampAt(map, k.x, k.z) && vyImplied > LAUNCH_MIN && slopeAheadVy < vyImplied - LAUNCH_MIN) {
         k.grounded = false;
         k.vy = vyImplied;
         k.y = floor;

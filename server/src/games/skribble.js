@@ -30,7 +30,7 @@ const MODES = [
 
 const PICK_TIMEOUT_MS = 20000;
 const DRAW_TIMEOUT_MS = 90000;
-const MAX_STROKES = 180;
+const MAX_STROKES = 600;
 const MAX_POINTS = 160;
 const COLORS = new Set(['#f1ece5', '#18151c', '#f2b049', '#3fc7ad', '#e8806a', '#e85f70', '#5fbf86', '#5b8cff']);
 

@@ -1,4 +1,4 @@
-const BOT_GAMES = new Set(['tictactoe', 'connect4', 'reversi', 'dotsboxes', 'microchess', 'uno', 'codenames']);
+const BOT_GAMES = new Set(['tictactoe', 'connect4', 'reversi', 'dotsboxes', 'microchess', 'uno', 'codenames', 'karts']);
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const copy = (value) => structuredClone(value);

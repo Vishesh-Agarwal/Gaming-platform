@@ -45,3 +45,20 @@ test('an unknown weapon id falls back to the standard shell', () => {
   const { state } = artillery.applyMove(s, 0, { angle: 45, power: 60, weapon: 'nuke' });
   assert.equal(state.lastShot.weapon, 'standard');
 });
+
+test('a shell that intersects a tank detonates on the tank instead of passing through', () => {
+  const s = artillery.createInitialState();
+  s.wind = 0;
+  s.ground = s.ground.map(() => 420);
+  s.tanks = [
+    { x: 80, hp: 100 },
+    { x: 160, hp: 100 },
+  ];
+
+  const { state, error } = artillery.applyMove(s, 0, { angle: 1, power: 51, weapon: 'sniper' });
+
+  assert.equal(error, undefined);
+  assert.equal(state.lastShot.directHit, 1);
+  assert.ok(state.lastShot.impact.x <= 176);
+  assert.ok(state.tanks[1].hp < 100);
+});

@@ -207,9 +207,11 @@ function createSim(players, now = Date.now(), options) {
       team, spawnIdx, bot: !!bot, aiNextThink: 0, aiWander: 0,
     };
   };
-  const karts = players.map((p, i) => makeKart(teams ? (teams[i] === 1 ? 1 : 0) : null, i, false));
+  const isBotPlayer = (p) => !!(p?.bot || p?.user?.bot);
+  const existingBotSeats = players.filter(isBotPlayer).length;
+  const karts = players.map((p, i) => makeKart(teams ? (teams[i] === 1 ? 1 : 0) : null, i, isBotPlayer(p)));
   // append AI karts, team-balanced in teams mode
-  const nBots = botCount(players.length, options);
+  const nBots = Math.max(0, botCount(players.length, options) - existingBotSeats);
   for (let b = 0; b < nBots; b++) {
     let team = null;
     if (teams) {
@@ -363,6 +365,7 @@ function step(sim, inputs, dt, now = Date.now()) {
       fire = !!(drained || slot.last || {}).fire;
     }
 
+    const hadWeaponBeforePickup = !!k.weapon;
     // pick up a crate when unarmed: a weapon to hold, or an instant shield power-up
     if (!k.weapon) {
       for (const c of sim.crates) {
@@ -376,7 +379,7 @@ function step(sim, inputs, dt, now = Date.now()) {
     }
 
     // firing
-    const rising = fire && !k.prevFire;
+    const rising = fire && (!k.prevFire || (!hadWeaponBeforePickup && !!k.weapon));
     if (k.weapon === 'mg') {
       if (rising) k.mgAuto = true; // one press dumps the whole magazine
       if (k.mgAuto && k.ammo > 0 && now >= k.nextShotAt) {

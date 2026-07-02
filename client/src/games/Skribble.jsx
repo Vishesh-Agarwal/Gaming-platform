@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 const COLORS = ['#18151c', '#f1ece5', '#f2b049', '#3fc7ad', '#e8806a', '#e85f70', '#5fbf86', '#5b8cff'];
+const CANVAS_BG = '#f6f1e8';
+const STREAM_POINTS = 10;
+const STREAM_MS = 70;
 
 function playerName(room, seat) {
   return room.players.find((p) => p.index === seat)?.username || `Player ${seat + 1}`;
@@ -67,12 +70,16 @@ export default function Skribble({ room, youAreIndex, onMove }) {
   const [, tick] = useState(0);
   const drawing = useRef(false);
   const svgRef = useRef(null);
+  const draftRef = useRef([]);
+  const lastFlushAt = useRef(0);
 
   useEffect(() => {
     setDraft([]);
     setReplay(false);
     setReplayPct(100);
     drawing.current = false;
+    draftRef.current = [];
+    lastFlushAt.current = 0;
   }, [state.turnNo, state.phase]);
 
   useEffect(() => {
@@ -93,26 +100,46 @@ export default function Skribble({ room, youAreIndex, onMove }) {
     if (!canDraw) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     drawing.current = true;
-    setDraft([pointFor(event)]);
+    lastFlushAt.current = performance.now();
+    const start = [pointFor(event)];
+    draftRef.current = start;
+    setDraft(start);
+  };
+
+  const flushDraftSegment = (force = false) => {
+    const points = draftRef.current;
+    const now = performance.now();
+    if (points.length < 2) return;
+    if (!force && points.length < STREAM_POINTS && now - lastFlushAt.current < STREAM_MS) return;
+    onMove({
+      type: 'stroke',
+      points,
+      color: eraser ? CANVAS_BG : color,
+      size: eraser ? Math.max(size, 12) : size,
+    });
+    const tail = points.at(-1);
+    draftRef.current = tail ? [tail] : [];
+    setDraft(draftRef.current);
+    lastFlushAt.current = now;
   };
 
   const moveStroke = (event) => {
     if (!drawing.current || !canDraw) return;
     const next = pointFor(event);
-    setDraft((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && Math.hypot(last.x - next.x, last.y - next.y) < 0.006) return prev;
-      return [...prev, next].slice(-160);
-    });
+    const last = draftRef.current[draftRef.current.length - 1];
+    if (last && Math.hypot(last.x - next.x, last.y - next.y) < 0.006) return;
+    const points = [...draftRef.current, next];
+    draftRef.current = points;
+    setDraft(points);
+    flushDraftSegment(false);
   };
 
   const endStroke = () => {
     if (!drawing.current) return;
     drawing.current = false;
-    setDraft((points) => {
-      if (points.length >= 2) onMove({ type: 'stroke', points, color: eraser ? '#f1ece5' : color, size: eraser ? Math.max(size, 12) : size });
-      return [];
-    });
+    flushDraftSegment(true);
+    draftRef.current = [];
+    setDraft([]);
   };
 
   const submitGuess = (event) => {
@@ -131,10 +158,35 @@ export default function Skribble({ room, youAreIndex, onMove }) {
   const currentWord = isDrawer ? (isChoosing ? 'Pick a word' : state.word) : (isChoosing ? 'Choosing...' : hintedShape(state.wordShape, msLeft));
   const drawerName = state.drawer == null ? 'No drawer' : playerName(room, state.drawer);
   const visibleStrokes = replay ? state.strokes.slice(0, Math.ceil((state.strokes.length * replayPct) / 100)) : state.strokes;
+  const rankedPlayers = [...room.players].sort((a, b) => (state.scores?.[b.index] || 0) - (state.scores?.[a.index] || 0) || a.index - b.index);
 
   return (
     <div className={`skrib ${isChoosing ? 'choosing' : ''}`}>
-      <section className="skrib-stage">
+      <aside className="skrib-side skrib-players" aria-label="Players">
+        <div className="skrib-panel-title">
+          <span>Players</span>
+          <b>{room.players.length}</b>
+        </div>
+        <div className="skrib-scores">
+          {rankedPlayers.map((p, rank) => {
+            const drawing = p.index === state.drawer;
+            const guessed = state.guessed?.[p.index] && p.index !== state.drawer;
+            return (
+              <div key={p.id} className={`skrib-score${drawing ? ' drawing' : ''}${guessed ? ' guessed' : ''}`}>
+                <span className="skrib-rank">{rank + 1}</span>
+                <span className="skrib-avatar">{(p.index === youAreIndex ? 'Y' : p.username?.[0] || 'P').toUpperCase()}</span>
+                <span className="skrib-score-main">
+                  <span>{p.index === youAreIndex ? 'You' : p.username}</span>
+                  <small className="skrib-score-meta">{drawing ? 'Drawing' : guessed ? 'Guessed' : 'Guessing'}</small>
+                </span>
+                <b>{state.scores?.[p.index] || 0}</b>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
+
+      <section className="skrib-stage skrib-board">
         <div className="skrib-topline">
           <div>
             <span className="skrib-kicker">Round {state.round}/{state.maxRounds}</span>
@@ -162,7 +214,7 @@ export default function Skribble({ room, youAreIndex, onMove }) {
             onPointerCancel={endStroke}
             onPointerLeave={endStroke}
           >
-            <rect width="1000" height="700" rx="16" fill="#f6f1e8" />
+            <rect width="1000" height="700" rx="16" fill={CANVAS_BG} />
             {visibleStrokes.map((stroke) => (
               <path
                 key={stroke.id}
@@ -178,7 +230,7 @@ export default function Skribble({ room, youAreIndex, onMove }) {
               <path
                 d={pathFrom(draft)}
                 fill="none"
-                stroke={eraser ? '#f1ece5' : color}
+                stroke={eraser ? CANVAS_BG : color}
                 strokeWidth={(eraser ? Math.max(size, 12) : size) * 2.2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -237,16 +289,11 @@ export default function Skribble({ room, youAreIndex, onMove }) {
         </div>
       </section>
 
-      <aside className="skrib-side">
-        <div className="skrib-scores">
-          {room.players.map((p) => (
-            <div key={p.id} className={`skrib-score${p.index === state.drawer ? ' drawing' : ''}${state.guessed?.[p.index] && p.index !== state.drawer ? ' guessed' : ''}`}>
-              <span>{p.index === youAreIndex ? 'You' : p.username}</span>
-              <b>{state.scores?.[p.index] || 0}</b>
-            </div>
-          ))}
+      <aside className="skrib-side skrib-chat-panel" aria-label="Guesses">
+        <div className="skrib-chat-title">
+          <span>Guesses</span>
+          <b>{state.chat.filter((entry) => entry.kind === 'guess').length}</b>
         </div>
-
         <div className="skrib-chat">
           <div className="skrib-chat-log">
             {state.chat.map((entry) => (

@@ -10,6 +10,7 @@ import { createFx } from './karts/fx.js';
 import { createAudio } from './karts/audio.js';
 import { integrateKart, SIM_DT, surfaceHeight } from './karts/kartPhysics.js';
 import { getMap } from './karts/kartMaps.js';
+import { getUserSettings } from '../preferences.js';
 
 const INTERP_MS = 100;
 const COLORS = ['#ff5d6c', '#5cc8ff', '#8bd450', '#ffd24a', '#c87bff', '#ff9f43', '#2ee6c0', '#f25fbf'];
@@ -29,6 +30,20 @@ export default function Karts({ room, youAreIndex }) {
   const [hud, setHud] = useState({ phase: 'countdown', countdown: 3, timeLeft: 90, players: [], me: null, teamMode: false, teams: null });
   const [muted, setMuted] = useState(false);
   const audioRef = useRef(null);
+  const controlsMode = getUserSettings().mobileControls;
+  const touchInputRef = useRef({ left: false, right: false, gas: false, brake: false, reverse: false, fire: false });
+  const fireTapRef = useRef(false);
+
+  const setTouchControl = (key, value) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (key === 'fire' && value) fireTapRef.current = true;
+    touchInputRef.current[key] = value;
+    if (value && e.currentTarget.setPointerCapture && e.pointerId != null) {
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    }
+    if (value) audioRef.current?.resume?.();
+  };
 
   useEffect(() => {
     const socket = getSocket();
@@ -155,21 +170,39 @@ export default function Karts({ room, youAreIndex }) {
     // input
     const input = { throttle: 0, steer: 0, fire: false };
     const keys = {};
+    const mobileDrive = () =>
+      window.matchMedia?.('(max-width: 900px)').matches
+      && window.matchMedia?.('(orientation: landscape)').matches;
     const apply = () => {
+      const touch = touchInputRef.current;
+      if (mobileDrive()) {
+        const autoGas = getUserSettings().mobileControls !== 'manual-gas';
+        input.throttle = touch.reverse ? -1 : touch.brake ? -0.35 : autoGas ? 1 : touch.gas ? 1 : 0;
+        input.steer = (touch.right ? 1 : 0) + (touch.left ? -1 : 0);
+        input.fire = !!touch.fire || !!fireTapRef.current;
+        return;
+      }
       input.throttle = ((keys['w'] || keys['arrowup']) ? 1 : 0) + ((keys['s'] || keys['arrowdown']) ? -1 : 0);
       input.steer = ((keys['d'] || keys['arrowright']) ? 1 : 0) + ((keys['a'] || keys['arrowleft']) ? -1 : 0);
-      input.fire = !!keys[' '];
+      input.fire = !!keys[' '] || !!fireTapRef.current;
     };
     const driveKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '];
-    const kd = (e) => { const k = e.key.toLowerCase(); if (driveKeys.includes(k)) { keys[k] = true; apply(); audio.resume(); e.preventDefault(); } };
+    const kd = (e) => {
+      const k = e.key.toLowerCase();
+      if (driveKeys.includes(k)) {
+        if (k === ' ' && !keys[k]) fireTapRef.current = true;
+        keys[k] = true; apply(); audio.resume(); e.preventDefault();
+      }
+    };
     const ku = (e) => { keys[e.key.toLowerCase()] = false; apply(); };
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup', ku);
-    const md = () => { keys[' '] = true; apply(); audio.resume(); };
+    const md = () => { keys[' '] = true; fireTapRef.current = true; apply(); audio.resume(); };
     const mu = () => { keys[' '] = false; apply(); };
     renderer.domElement.addEventListener('pointerdown', md);
     window.addEventListener('pointerup', mu);
     const sendTimer = setInterval(() => {
+      apply();
       inputSeq += 1;
       const cmd = { seq: inputSeq, throttle: input.throttle, steer: input.steer, fire: input.fire };
       if (pred.has) {
@@ -178,6 +211,7 @@ export default function Karts({ room, youAreIndex }) {
         if (pending.length > 240) pending.shift();
       }
       socket?.emit('game:rt:input', { roomId, input: cmd });
+      fireTapRef.current = false;
     }, 33);
 
     // HUD state pushed to React ~6/s
@@ -268,13 +302,13 @@ export default function Karts({ room, youAreIndex }) {
           prevCountdown = snap.countdown;
         }
         if (snap.phase !== prevPhase) {
-          if (prevPhase === 'countdown' && snap.phase === 'playing') audio.go();
+          if (prevPhase === 'countdown' && snap.phase === 'play') audio.go();
           if (snap.phase === 'over') { audio.matchEnd(); audio.musicDuck(true); audio.engineStop(); }
           prevPhase = snap.phase;
         }
-        if (!intensityOn && snap.phase === 'playing' && snap.timeLeft <= 10) { audio.musicIntensity(1); intensityOn = true; }
+        if (!intensityOn && snap.phase === 'play' && snap.timeLeft <= 10) { audio.musicIntensity(1); intensityOn = true; }
         const meAlive = !!snap.karts.find((k) => k.i === youAreIndex && k.alive && !k.gone);
-        audio.engineUpdate(localSpeed / ENGINE_MAX_SPEED, snap.phase === 'playing' && meAlive);
+        audio.engineUpdate(localSpeed / ENGINE_MAX_SPEED, snap.phase === 'play' && meAlive);
         // local-player feedback sounds
         const meMeta = snap.karts.find((k) => k.i === youAreIndex);
         if (meMeta) {
@@ -352,6 +386,8 @@ export default function Karts({ room, youAreIndex }) {
       window.removeEventListener('pointerup', mu);
       window.removeEventListener('resize', resize);
       renderer.domElement.removeEventListener('pointerdown', md);
+      touchInputRef.current = { left: false, right: false, gas: false, brake: false, reverse: false, fire: false };
+      fireTapRef.current = false;
       socket?.off('game:rt:snap', onSnap);
       audio.dispose();
       fx.dispose();
@@ -361,11 +397,19 @@ export default function Karts({ room, youAreIndex }) {
   }, []);
 
   const fmtTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const autoDrive = controlsMode !== 'manual-gas';
+  const meSpeed = Math.abs(hud.me?.v || 0);
+  const sortedPlayers = [...hud.players].sort((a, b) => b.kills - a.kills || a.i - b.i);
+  const weapon = hud.me?.weapon;
+  const ammo = Math.max(0, Number(hud.me?.ammo || 0));
+  const ammoPips = weapon === 'mg' ? Math.min(12, ammo) : Math.min(5, ammo);
 
   return (
     <div className="kt-wrap">
-      <div className="kt-stage">
+      <div className={`kt-stage${meSpeed > 18 ? ' speeding' : ''}`}>
         <div ref={mountRef} className="kt-canvas" />
+        <div className="kt-speed-vignette" aria-hidden="true" />
+        <div className="kt-reticle" aria-hidden="true" />
 
         {/* HUD overlay */}
         <div className="kt-hud">
@@ -377,9 +421,14 @@ export default function Karts({ room, youAreIndex }) {
           >
             {muted ? '🔇' : '🔊'}
           </button>
-          <div className="kt-timer">
-            {hud.phase === 'countdown' ? (hud.countdown > 0 ? hud.countdown : 'GO!')
-              : hud.phase === 'over' ? "TIME!" : fmtTime(hud.timeLeft)}
+          <div className="kt-racebar">
+            <div className="kt-timer">
+              {hud.phase === 'countdown' ? (hud.countdown > 0 ? hud.countdown : 'GO!')
+                : hud.phase === 'over' ? "TIME!" : fmtTime(hud.timeLeft)}
+            </div>
+            <div className="kt-drive-pill">
+              {autoDrive ? 'AUTO' : 'MANUAL'}
+            </div>
           </div>
           {hud.teamMode ? (
             <div className="kt-scores kt-teamscores">
@@ -396,8 +445,9 @@ export default function Karts({ room, youAreIndex }) {
             </div>
           ) : (
             <div className="kt-scores">
-              {hud.players.map((p) => (
+              {sortedPlayers.map((p, rank) => (
                 <div key={p.i} className={`kt-score ${p.gone ? 'gone' : ''}`}>
+                  <span className="kt-rank">{rank + 1}</span>
                   <span className="kt-dot" style={{ background: p.color }} />
                   <span className="kt-name">{p.i === youAreIndex ? 'You' : p.name}{p.bot ? ' 🤖' : ''}</span>
                   <span className="kt-kills">{p.kills}</span>
@@ -412,11 +462,89 @@ export default function Karts({ room, youAreIndex }) {
             <div className="kt-hpbar"><span style={{ width: `${Math.max(0, hud.me.hp)}%` }} /></div>
             <div className="kt-weapon">
               {hud.me.weapon
-                ? <><b style={{ color: WEAPON_COLOR[hud.me.weapon] }}>{WEAPON_LABEL[hud.me.weapon]}</b> ×{hud.me.ammo}</>
-                : <span className="muted">No weapon — grab a crate</span>}
+                ? (
+                  <>
+                    <span className={`kt-weapon-icon ${weapon}`} />
+                    <b style={{ color: WEAPON_COLOR[hud.me.weapon] }}>{WEAPON_LABEL[hud.me.weapon]}</b>
+                    <span className="kt-ammo" aria-label={`${ammo} ammo`}>
+                      {Array.from({ length: ammoPips }, (_, i) => <i key={i} />)}
+                    </span>
+                    <small>{ammo}</small>
+                  </>
+                )
+                : <span className="muted">Grab a crate</span>}
             </div>
           </div>
         )}
+
+        <div className={`kt-touch-controls ${controlsMode}`} aria-label="Mobile driving controls" onContextMenu={(e) => e.preventDefault()}>
+          <button
+            type="button"
+            className="kt-touch kt-left"
+            aria-label="Steer left"
+            onPointerDown={setTouchControl('left', true)}
+            onPointerUp={setTouchControl('left', false)}
+            onPointerCancel={setTouchControl('left', false)}
+            onLostPointerCapture={setTouchControl('left', false)}
+          >
+            <span className="kt-control-icon">‹</span>
+          </button>
+          <button
+            type="button"
+            className="kt-touch kt-fire"
+            aria-label="Fire weapon"
+            onPointerDown={setTouchControl('fire', true)}
+            onPointerUp={setTouchControl('fire', false)}
+            onPointerCancel={setTouchControl('fire', false)}
+            onLostPointerCapture={setTouchControl('fire', false)}
+          >
+            <span className="kt-control-icon">●</span>
+          </button>
+          <button
+            type="button"
+            className="kt-touch kt-right"
+            aria-label="Steer right"
+            onPointerDown={setTouchControl('right', true)}
+            onPointerUp={setTouchControl('right', false)}
+            onPointerCancel={setTouchControl('right', false)}
+            onLostPointerCapture={setTouchControl('right', false)}
+          >
+            <span className="kt-control-icon">›</span>
+          </button>
+          <button
+            type="button"
+            className="kt-touch kt-gas"
+            aria-label="Gas"
+            onPointerDown={setTouchControl('gas', true)}
+            onPointerUp={setTouchControl('gas', false)}
+            onPointerCancel={setTouchControl('gas', false)}
+            onLostPointerCapture={setTouchControl('gas', false)}
+          >
+            <span className="kt-control-icon">▲</span>
+          </button>
+          <button
+            type="button"
+            className="kt-touch kt-brake"
+            aria-label="Brake"
+            onPointerDown={setTouchControl('brake', true)}
+            onPointerUp={setTouchControl('brake', false)}
+            onPointerCancel={setTouchControl('brake', false)}
+            onLostPointerCapture={setTouchControl('brake', false)}
+          >
+            <span className="kt-control-icon">■</span>
+          </button>
+          <button
+            type="button"
+            className="kt-touch kt-reverse"
+            aria-label="Reverse"
+            onPointerDown={setTouchControl('reverse', true)}
+            onPointerUp={setTouchControl('reverse', false)}
+            onPointerCancel={setTouchControl('reverse', false)}
+            onLostPointerCapture={setTouchControl('reverse', false)}
+          >
+            <span className="kt-control-icon">R</span>
+          </button>
+        </div>
       </div>
       <p className="kt-hint muted">
         <b>W/S</b> drive · <b>A/D</b> steer · <b>Space</b>/click fire. Grab crates for weapons —

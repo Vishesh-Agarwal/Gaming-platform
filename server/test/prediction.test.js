@@ -60,6 +60,29 @@ test('fire travels through the queue into the sim (regression: fire was dropped)
   assert.ok(sim.projectiles.length > before, 'a projectile should have been fired');
 });
 
+test('holding fire while picking up a weapon fires without requiring a release', () => {
+  const sim = createSim([{}, {}], 0, { map: 'arena' });
+  const now = sim.startAt + 1000;
+  const k = sim.karts[0];
+  const crate = sim.crates[0];
+  k.x = crate.x;
+  k.z = crate.z;
+  k.y = 0;
+  k.grounded = true;
+  k.weapon = null;
+  k.ammo = 0;
+  k.prevFire = true;
+  crate.type = 'rocket';
+  const inputs = { 0: { queue: [{ seq: 1, throttle: 0, steer: 0, fire: true }], last: null } };
+
+  step(sim, inputs, 0.033, now);
+
+  assert.equal(sim.projectiles.length, 1, 'held fire should immediately launch the first picked-up rocket');
+  assert.equal(sim.projectiles[0].type, 'rocket');
+  assert.equal(sim.karts[0].weapon, 'rocket');
+  assert.equal(sim.karts[0].ammo, 2);
+});
+
 test('inputs queued while dead are discarded (no respawn lurch)', () => {
   const sim = createSim([{}, {}], 0);
   const t0 = sim.startAt + 1000;

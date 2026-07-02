@@ -246,6 +246,24 @@ export function unlockAchievement(userId, achievementId) {
   return info.changes > 0;
 }
 
+// ---- Daily challenges ------------------------------------------------------
+
+export function getChallengeProgress(userId, day) {
+  return db.prepare(
+    'SELECT challenge_id, progress, completed_at FROM challenge_progress WHERE user_id = ? AND day = ?'
+  ).all(userId, day);
+}
+
+export function upsertChallengeProgress(userId, day, challengeId, progress, completed) {
+  db.prepare(
+    `INSERT INTO challenge_progress (user_id, day, challenge_id, progress, completed_at)
+     VALUES (?, ?, ?, ?, CASE WHEN ? THEN datetime('now') ELSE NULL END)
+     ON CONFLICT(user_id, day, challenge_id) DO UPDATE SET
+       progress = excluded.progress,
+       completed_at = COALESCE(challenge_progress.completed_at, excluded.completed_at)`
+  ).run(userId, day, challengeId, progress, completed ? 1 : 0);
+}
+
 // ---- Friendships ---------------------------------------------------------
 
 // Returns existing row in either direction between two users, if any.

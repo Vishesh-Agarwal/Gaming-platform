@@ -231,6 +231,21 @@ export function getRecentResults(userId, gameId = null, limit = 20) {
   return rows.map((r) => r.result);
 }
 
+// ---- Achievements ----------------------------------------------------------
+
+export function getUnlockedAchievements(userId) {
+  return db.prepare('SELECT achievement_id FROM achievements WHERE user_id = ?').all(userId)
+    .map((r) => r.achievement_id);
+}
+
+// Returns true only when this call created the unlock (INSERT OR IGNORE).
+export function unlockAchievement(userId, achievementId) {
+  const info = db.prepare(
+    'INSERT OR IGNORE INTO achievements (user_id, achievement_id) VALUES (?, ?)'
+  ).run(userId, achievementId);
+  return info.changes > 0;
+}
+
 // ---- Friendships ---------------------------------------------------------
 
 // Returns existing row in either direction between two users, if any.

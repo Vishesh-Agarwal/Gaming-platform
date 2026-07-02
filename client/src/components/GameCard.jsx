@@ -1,12 +1,12 @@
-// A game tile styled like a neon arcade cabinet. Pointer parallax tilts the card
-// toward the cursor and moves a highlight; click opens the invite flow.
+// A premium key-art game tile: cinematic accent scene on top, glass info bar
+// below. Pointer parallax tilts the card toward the cursor and moves the scene
+// highlight; click opens the invite flow.
 import { useRef } from 'react';
 import { modeSummary, playerCountLabel } from '../games/gameMeta.js';
 
 export default function GameCard({ game, onClick, onQuickPlay, searching = false }) {
   const Thumb = game.thumbnail;
   const ref = useRef(null);
-  const modes = Array.isArray(game.modes) ? game.modes : [];
   const summary = modeSummary(game);
 
   const onMove = (e) => {
@@ -46,8 +46,9 @@ export default function GameCard({ game, onClick, onQuickPlay, searching = false
       onMouseMove={onMove}
       onMouseLeave={reset}
     >
-      <div className="game-thumb">
+      <div className="game-art">
         {Thumb ? <Thumb /> : <div className="game-thumb-fallback">🎮</div>}
+        <span className="game-art-glow" aria-hidden />
         <span className="play-cta">▶ Play</span>
         {onQuickPlay && (
           <button
@@ -61,18 +62,13 @@ export default function GameCard({ game, onClick, onQuickPlay, searching = false
           </button>
         )}
       </div>
-      <div className="game-name">
-        <span>{game.name}</span>
-        <span className="players-tag">{playerCountLabel(game)}</span>
+      <div className="game-tile-info">
+        <span className="game-tile-name">{game.name}</span>
+        <span className="game-tile-chips">
+          <span className="tile-chip">{playerCountLabel(game)}</span>
+          {summary && <span className="tile-chip">{summary}</span>}
+        </span>
       </div>
-      {(summary || modes.length > 0) && (
-        <div className="game-facts" aria-label="Game modes">
-          {summary && <span className="mode-count">{summary}</span>}
-          {modes.slice(0, 2).map((mode) => (
-            <span key={mode.id || mode.name} className="game-mode-chip">{mode.name}</span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

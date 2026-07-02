@@ -9,13 +9,30 @@ export const DEFAULT_USER_SETTINGS = {
   avatar: 'pilot',
 };
 
+// Mirrors server/src/unlocks.js (ids + minLevel) — the server enforces gating;
+// this list only drives display. minLevel 1 items are always available.
 export const PROFILE_AVATARS = [
-  { id: 'pilot', label: 'Pilot', icon: 'P' },
-  { id: 'bolt', label: 'Bolt', icon: 'B' },
-  { id: 'crown', label: 'Crown', icon: 'C' },
-  { id: 'target', label: 'Target', icon: 'T' },
-  { id: 'spark', label: 'Spark', icon: 'S' },
-  { id: 'shield', label: 'Shield', icon: 'D' },
+  { id: 'pilot', label: 'Pilot', icon: 'P', minLevel: 1 },
+  { id: 'bolt', label: 'Bolt', icon: 'B', minLevel: 1 },
+  { id: 'crown', label: 'Crown', icon: 'C', minLevel: 1 },
+  { id: 'target', label: 'Target', icon: 'T', minLevel: 1 },
+  { id: 'spark', label: 'Spark', icon: 'S', minLevel: 1 },
+  { id: 'shield', label: 'Shield', icon: 'D', minLevel: 1 },
+  { id: 'flame', label: 'Flame', icon: 'F', minLevel: 3 },
+  { id: 'ace', label: 'Ace', icon: 'A', minLevel: 5 },
+  { id: 'rocket', label: 'Rocket', icon: 'R', minLevel: 8 },
+  { id: 'gem', label: 'Gem', icon: 'G', minLevel: 12 },
+  { id: 'dragon', label: 'Dragon', icon: 'Y', minLevel: 16 },
+  { id: 'mythic', label: 'Mythic', icon: 'M', minLevel: 20 },
+];
+
+export const PROFILE_FRAMES = [
+  { id: 'none', label: 'None', minLevel: 1 },
+  { id: 'bronze', label: 'Bronze', minLevel: 4 },
+  { id: 'silver', label: 'Silver', minLevel: 7 },
+  { id: 'gold', label: 'Gold', minLevel: 10 },
+  { id: 'neon', label: 'Neon', minLevel: 14 },
+  { id: 'legend', label: 'Legend', minLevel: 18 },
 ];
 
 function normalizeSettings(value = {}) {

@@ -11,7 +11,7 @@ import LobbyModal from '../components/LobbyModal.jsx';
 import FriendsChat from '../components/FriendsChat.jsx';
 import Modal from '../components/Modal.jsx';
 import { setGameMuted } from '../gameAudio.js';
-import { PROFILE_AVATARS, getUserSettings, saveUserSettings } from '../preferences.js';
+import { PROFILE_AVATARS, PROFILE_FRAMES, getUserSettings, saveUserSettings } from '../preferences.js';
 import { pickFeaturedGame, recentGameIds } from '../homeRails.js';
 
 // Chat panel width: default bumped +10% again (352 -> 387), user-resizable + persisted.
@@ -63,6 +63,7 @@ export default function Lobby({
   stats,
   statsOpen,
   onCloseStats,
+  progression = null,
 }) {
   const [pickedGame, setPickedGame] = useState(null); // game chosen to invite into
   const [showAdd, setShowAdd] = useState(false);
@@ -79,7 +80,11 @@ export default function Lobby({
     displayName: currentUser.displayName || currentUser.username || '',
     nickname: currentUser.nickname || '',
     avatar: currentUser.avatar || 'pilot',
+    frame: currentUser.frame || 'none',
   });
+  // Level gates cosmetics; until progression data arrives, show everything
+  // unlocked (the server still enforces).
+  const playerLevel = progression?.level?.level ?? Infinity;
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [addName, setAddName] = useState('');
@@ -126,6 +131,7 @@ export default function Lobby({
       displayName: currentUser.displayName || currentUser.username || '',
       nickname: currentUser.nickname || '',
       avatar: currentUser.avatar || 'pilot',
+      frame: currentUser.frame || 'none',
     });
     setProfileError('');
   }, [showProfile, currentUser]);
@@ -179,6 +185,7 @@ export default function Lobby({
         displayName: profileDraft.displayName,
         nickname: profileDraft.nickname,
         avatar: profileDraft.avatar,
+        frame: profileDraft.frame,
       });
       setShowProfile(false);
     } catch (err) {
@@ -568,7 +575,7 @@ export default function Lobby({
         <Modal title="Profile" onClose={() => setShowProfile(false)}>
           <form className="profile-panel" onSubmit={submitProfile}>
             <section className="profile-summary">
-              <span className="profile-avatar large">
+              <span className={`profile-avatar large frame-${profileDraft.frame}`}>
                 {(PROFILE_AVATARS.find((a) => a.id === profileDraft.avatar) || activeAvatar).icon}
               </span>
               <div>
@@ -610,18 +617,50 @@ export default function Lobby({
             <section className="profile-avatar-section">
               <span>Avatar</span>
               <div className="profile-avatar-grid">
-                {PROFILE_AVATARS.map((avatar) => (
-                  <button
-                    key={avatar.id}
-                    type="button"
-                    className={`profile-avatar-choice${profileDraft.avatar === avatar.id ? ' active' : ''}`}
-                    onClick={() => updateProfileDraft({ avatar: avatar.id })}
-                    aria-label={`Choose ${avatar.label} avatar`}
-                  >
-                    <span className="profile-avatar">{avatar.icon}</span>
-                    <small>{avatar.label}</small>
-                  </button>
-                ))}
+                {PROFILE_AVATARS.map((avatar) => {
+                  const locked = avatar.minLevel > playerLevel;
+                  return (
+                    <button
+                      key={avatar.id}
+                      type="button"
+                      disabled={locked}
+                      className={`profile-avatar-choice${profileDraft.avatar === avatar.id ? ' active' : ''}${locked ? ' locked' : ''}`}
+                      onClick={() => updateProfileDraft({ avatar: avatar.id })}
+                      aria-label={locked ? `${avatar.label} avatar unlocks at level ${avatar.minLevel}` : `Choose ${avatar.label} avatar`}
+                      title={locked ? `Unlocks at level ${avatar.minLevel}` : avatar.label}
+                    >
+                      <span className="profile-avatar">{avatar.icon}</span>
+                      <small>{avatar.label}</small>
+                      {locked && <span className="lock-badge">Lv {avatar.minLevel}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="profile-avatar-section">
+              <span>Frame</span>
+              <div className="profile-avatar-grid">
+                {PROFILE_FRAMES.map((frame) => {
+                  const locked = frame.minLevel > playerLevel;
+                  return (
+                    <button
+                      key={frame.id}
+                      type="button"
+                      disabled={locked}
+                      className={`profile-avatar-choice${profileDraft.frame === frame.id ? ' active' : ''}${locked ? ' locked' : ''}`}
+                      onClick={() => updateProfileDraft({ frame: frame.id })}
+                      aria-label={locked ? `${frame.label} frame unlocks at level ${frame.minLevel}` : `Choose ${frame.label} frame`}
+                      title={locked ? `Unlocks at level ${frame.minLevel}` : frame.label}
+                    >
+                      <span className={`profile-avatar frame-${frame.id}`}>
+                        {(PROFILE_AVATARS.find((a) => a.id === profileDraft.avatar) || activeAvatar).icon}
+                      </span>
+                      <small>{frame.label}</small>
+                      {locked && <span className="lock-badge">Lv {frame.minLevel}</span>}
+                    </button>
+                  );
+                })}
               </div>
             </section>
 

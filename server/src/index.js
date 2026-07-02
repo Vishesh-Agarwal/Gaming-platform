@@ -17,6 +17,7 @@ import {
 } from './db.js';
 import { levelForXp } from './progression.js';
 import { getDailyChallenges, utcDay } from './challenges.js';
+import { unlocksForLevel } from './unlocks.js';
 
 const PORT = process.env.PORT || 3001;
 // Default (dev): reflect any origin so a second device on the LAN can connect.
@@ -36,7 +37,13 @@ app.get('/api/games', (_req, res) => res.json({ games: listGames() }));
 app.get('/api/stats/me', authMiddleware, (req, res) => res.json(getUserStats(req.user.id)));
 app.get('/api/progression/me', authMiddleware, (req, res) => {
   const xp = getXp(req.user.id);
-  res.json({ xp, level: levelForXp(xp), achievements: getUnlockedAchievements(req.user.id) });
+  const level = levelForXp(xp);
+  res.json({
+    xp,
+    level,
+    achievements: getUnlockedAchievements(req.user.id),
+    unlocks: unlocksForLevel(level.level),
+  });
 });
 app.get('/api/progression/challenges', authMiddleware, (req, res) => {
   const day = utcDay();

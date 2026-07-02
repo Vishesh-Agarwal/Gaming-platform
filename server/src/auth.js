@@ -2,7 +2,9 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { createUser, getUserByUsername, getUserById, publicUser, updateUserProfile } from './db.js';
+import { createUser, getUserByUsername, getUserById, publicUser, updateUserProfile, getXp } from './db.js';
+import { canUseAvatar, canUseFrame } from './unlocks.js';
+import { levelForXp } from './progression.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const TOKEN_TTL = '30d';
@@ -48,9 +50,9 @@ export function socketAuth(socket, next) {
 const router = express.Router();
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
-const AVATAR_IDS = new Set(['pilot', 'bolt', 'crown', 'target', 'spark', 'shield']);
 
-function profilePatch(body = {}) {
+// level gates avatar/frame choices — the caller's current level, from XP.
+function profilePatch(body = {}, level = 1) {
   const patch = {};
 
   if (Object.prototype.hasOwnProperty.call(body, 'username')) {
@@ -79,10 +81,18 @@ function profilePatch(body = {}) {
 
   if (Object.prototype.hasOwnProperty.call(body, 'avatar')) {
     const avatar = String(body.avatar || '').trim();
-    if (!AVATAR_IDS.has(avatar)) {
-      return { error: 'Choose a valid avatar.' };
+    if (!canUseAvatar(avatar, level)) {
+      return { error: 'That avatar is locked.' };
     }
     patch.avatar = avatar;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'frame')) {
+    const frame = String(body.frame || '').trim();
+    if (!canUseFrame(frame, level)) {
+      return { error: 'That frame is locked.' };
+    }
+    patch.frame = frame;
   }
 
   return { patch };
@@ -120,7 +130,8 @@ router.get('/me', authMiddleware, (req, res) => {
 });
 
 router.patch('/me/profile', authMiddleware, (req, res) => {
-  const { patch, error } = profilePatch(req.body || {});
+  const level = levelForXp(getXp(req.user.id)).level;
+  const { patch, error } = profilePatch(req.body || {}, level);
   if (error) return res.status(400).json({ error });
   try {
     const user = updateUserProfile(req.user.id, patch);

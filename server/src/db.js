@@ -161,6 +161,7 @@ export function publicUser(user) {
     displayName: user.display_name || user.username,
     nickname: user.nickname || '',
     avatar: user.avatar || 'pilot',
+    frame: user.frame || 'none',
   };
 }
 
@@ -192,6 +193,10 @@ export function updateUserProfile(userId, patch = {}) {
   if (Object.prototype.hasOwnProperty.call(patch, 'avatar')) {
     sets.push('avatar = ?');
     params.push(patch.avatar);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'frame')) {
+    sets.push('frame = ?');
+    params.push(patch.frame);
   }
 
   if (sets.length === 0) return user;

@@ -2053,6 +2053,39 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .party-name { font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; }
 .party-status { font-size: 11px; color: var(--muted); }
 .party-slot.ready .party-status { color: var(--green); }
+/* level-gated cosmetics: locked picker tiles + avatar frames */
+.profile-avatar-choice.locked {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+  position: relative;
+  cursor: default;
+}
+.profile-avatar-choice { position: relative; }
+.lock-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.profile-avatar.frame-bronze { box-shadow: 0 0 0 2px #b0793f; }
+.profile-avatar.frame-silver { box-shadow: 0 0 0 2px #b9c4d6; }
+.profile-avatar.frame-gold {
+  box-shadow: 0 0 0 2px var(--amber), 0 0 12px color-mix(in srgb, var(--amber) 40%, transparent);
+}
+.profile-avatar.frame-neon {
+  box-shadow: 0 0 0 2px var(--teal), 0 0 14px color-mix(in srgb, var(--teal) 50%, transparent);
+}
+.profile-avatar.frame-legend {
+  box-shadow: 0 0 0 2px #ffffff40, 0 0 18px color-mix(in srgb, var(--blue) 60%, transparent);
+  background: var(--grad);
+}
 /* option selects inside the party screen adopt the console look */
 .lb-map select,
 .lb-options select {

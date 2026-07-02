@@ -1482,18 +1482,19 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   inset: 0;
   z-index: 90;
   background:
-    radial-gradient(circle at 50% 30%, rgba(242,176,73,0.14), transparent 36%),
-    rgba(15, 12, 18, 0.74);
+    radial-gradient(circle at 50% 30%, rgba(108, 140, 255, 0.14), transparent 36%),
+    rgba(6, 8, 14, 0.74);
   backdrop-filter: blur(8px);
   display: grid;
   place-items: center;
   padding: 20px;
 }
 .overlay-card {
-  width: min(440px, 100%);
-  background: var(--panel-solid);
+  width: min(460px, 100%);
+  background: var(--panel);
+  backdrop-filter: blur(var(--panel-blur));
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 24px;
   padding: 34px 44px;
   text-align: center;
   display: flex;
@@ -1502,7 +1503,10 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
   animation: result-rise 0.24s var(--ease);
 }
-.overlay-card.win { border-color: color-mix(in srgb, var(--teal) 52%, var(--border)); }
+.overlay-card.win {
+  border-color: color-mix(in srgb, var(--teal) 52%, var(--border));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6), var(--glow);
+}
 .overlay-card.loss { border-color: color-mix(in srgb, var(--red) 45%, var(--border)); }
 .overlay-card.draw { border-color: color-mix(in srgb, var(--amber) 50%, var(--border)); }
 .overlay-badge {
@@ -1575,20 +1579,52 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 @keyframes emote-pop { from { opacity: 0; transform: translateY(8px) scale(0.85); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .overlay-scores { margin: 0; color: var(--muted); font-size: 15px; }
 .overlay-scores b { color: var(--text); font-family: var(--display); }
-.overlay-standings {
+
+/* podium end screen: 2nd — 1st — 3rd, winner's block tallest and lit */
+.podium {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: min(260px, 100%);
-  padding: 8px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.04);
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  margin: 4px 0;
 }
-.overlay-rank { display: flex; justify-content: space-between; gap: 18px; color: var(--muted); font-size: 15px; padding: 7px 8px; border-bottom: 1px solid var(--border); }
-.overlay-rank:last-child { border-bottom: 0; }
-.overlay-rank.you { color: var(--text); }
-.overlay-rank.you b { color: var(--amber); }
-.overlay-rank b { font-family: var(--display); color: var(--text); }
+.podium-step { display: grid; justify-items: center; gap: 4px; min-width: 84px; }
+.podium-step .podium-block {
+  width: 100%;
+  border-radius: 10px 10px 4px 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transform-origin: bottom;
+  animation: podium-rise 0.5s var(--ease-spring) backwards;
+}
+.podium-step.first { order: 2; }
+.podium-step.first .podium-block {
+  height: 76px;
+  border-color: color-mix(in srgb, var(--amber) 65%, transparent);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--amber) 30%, transparent);
+}
+.podium-step.second { order: 1; }
+.podium-step.second .podium-block { height: 52px; animation-delay: 0.12s; }
+.podium-step.third { order: 3; }
+.podium-step.third .podium-block { height: 36px; animation-delay: 0.2s; }
+.podium.draw .podium-block { height: 52px; box-shadow: none; }
+.podium-medal { font-size: 22px; line-height: 1; }
+.podium-name { font-weight: 700; font-size: 13px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.podium-step.you .podium-name { color: var(--accent); }
+.podium-score { font-family: var(--display); font-size: 15px; }
+.podium-rest { display: grid; gap: 2px; color: var(--muted); font-size: 13px; }
+.podium-rest .you { color: var(--text); font-weight: 600; }
+.podium-progression {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+@keyframes podium-rise {
+  from { transform: scaleY(0); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
+}
 
 @media (max-width: 680px) {
   .game-page { padding: 14px; }

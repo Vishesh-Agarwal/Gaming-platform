@@ -59,7 +59,7 @@ function moveLabel(room, move, youAreIndex) {
   return '';
 }
 
-export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, rematch, onEmote, onUndoRequest, onUndoAccept, emotes = [], error }) {
+export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, rematch, onEmote, onUndoRequest, onUndoAccept, emotes = [], error, progression = null }) {
   const def = getGame(room.gameId);
   const opponent = room.players.find((p) => p.index !== youAreIndex);
   const myId = room.players.find((p) => p.index === youAreIndex)?.id;
@@ -225,11 +225,23 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
     : room.result?.mode === 'teams'
       ? ((room.result.winner === (room.state?.teams?.[youAreIndex] ?? 0)) ? 'win' : 'loss')
       : (room.result?.winner === youAreIndex ? 'win' : 'loss');
-  const rankedScores = room.result?.scores
-    ? room.players
-        .map((p) => ({ idx: p.index, name: p.index === youAreIndex ? 'You' : p.username, s: room.result.scores[p.index] ?? 0 }))
-        .sort((a, b) => b.s - a.s)
-    : null;
+  // Podium placements: rank by score when the game reports them, otherwise
+  // winner(s) first. Works for 1v1 (winner tall / loser short) and lobbies.
+  const placements = (() => {
+    if (!room.result) return [];
+    const scores = room.result.scores;
+    const rows = room.players.map((p) => ({
+      idx: p.index,
+      name: p.index === youAreIndex ? 'You' : p.username,
+      score: scores?.[p.index] ?? null,
+      won: !room.result.draw && (room.result.mode === 'teams'
+        ? room.result.winner === (room.state?.teams?.[p.index] ?? 0)
+        : room.result.winner === p.index),
+    }));
+    if (scores) rows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    else rows.sort((a, b) => Number(b.won) - Number(a.won));
+    return rows;
+  })();
   const timeline = Array.isArray(room.state?.history)
     ? room.state.history.map((m) => moveLabel(room, m, youAreIndex)).filter(Boolean).slice(-6)
     : [];
@@ -396,16 +408,28 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
                 Team A: <b>{room.result.teams[0]}</b> · Team B: <b>{room.result.teams[1]}</b>
               </p>
             )}
-            {rankedScores && (
-              <div className="overlay-standings">
-                {rankedScores.map((row, i) => (
-                  <div key={row.idx} className={`overlay-rank ${row.idx === youAreIndex ? 'you' : ''}`}>
-                    <span>{i + 1}. {row.name}</span>
-                    <b>{row.s}</b>
+            {placements.length > 0 && (
+              <div className={`podium${room.result?.draw ? ' draw' : ''}`}>
+                {placements.slice(0, 3).map((row, i) => (
+                  <div key={row.idx} className={`podium-step ${['first', 'second', 'third'][i]}${row.idx === youAreIndex ? ' you' : ''}`}>
+                    <span className="podium-medal">{['🥇', '🥈', '🥉'][i]}</span>
+                    <span className="podium-name">{row.name}</span>
+                    {row.score != null && <b className="podium-score">{row.score}</b>}
+                    <span className="podium-block" aria-hidden />
                   </div>
                 ))}
               </div>
             )}
+            {placements.length > 3 && (
+              <div className="podium-rest">
+                {placements.slice(3).map((row, i) => (
+                  <span key={row.idx} className={row.idx === youAreIndex ? 'you' : ''}>
+                    {i + 4}. {row.name}{row.score != null ? ` — ${row.score}` : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+            {progression && <div className="podium-progression">{/* A2: XP tick, level-up, achievements */}</div>}
             {timeline.length > 0 && (
               <div className="overlay-timeline">
                 <span className="overlay-section-label">Last moves</span>

@@ -1,40 +1,44 @@
 :root {
-  /* Cozy dark depth — warm charcoal surfaces lit by amber + teal, built from soft
-     elevation (layered shadows) instead of neon glow. */
-  --bg: #18151c;            /* warm charcoal base */
-  --bg-soft: #1d1923;       /* gentle vignette tone */
-  --surface: #241f2b;       /* raised card/panel */
-  --surface-2: #2c2636;     /* hover / nested surface */
-  --panel: rgba(36, 31, 43, 0.74);
-  --panel-solid: #241f2b;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
-  --glass: rgba(255, 255, 255, 0.04);
-  --text: #f1ece5;          /* warm off-white */
-  --muted: #a39aa8;         /* muted warm gray */
+  /* Premium console — cool near-black surfaces, glassy panels, electric blue
+     accent, restrained glow reserved for interactive states. */
+  --bg: #0a0d14;            /* near-black cool base */
+  --bg-soft: #0e1220;       /* gentle vignette tone */
+  --surface: #12182a;       /* raised card/panel */
+  --surface-2: #1a2138;     /* hover / nested surface */
+  --panel: rgba(18, 24, 42, 0.62);
+  --panel-solid: #12182a;
+  --border: rgba(148, 170, 255, 0.10);
+  --border-strong: rgba(148, 170, 255, 0.22);
+  --glass: rgba(148, 170, 255, 0.05);
+  --text: #edf1fc;
+  --muted: #8e99b8;
 
-  --amber: #f2b049;         /* primary warm accent */
-  --teal: #3fc7ad;          /* secondary accent */
-  --coral: #e8806a;
-  --green: #5fbf86;
-  --red: #e85f70;
-  --accent: var(--amber);
+  --blue: #6c8cff;          /* platform accent */
+  --amber: #f5b452;
+  --teal: #38d4c0;
+  --coral: #ff7d68;
+  --green: #52d489;
+  --red: #ff5c74;
+  --accent: var(--blue);
 
-  /* layered, colorless elevation shadows (the "depth" of cozy depth) */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.28);
-  --shadow-2: 0 6px 16px rgba(0, 0, 0, 0.36), 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-3: 0 18px 40px rgba(0, 0, 0, 0.5), 0 6px 14px rgba(0, 0, 0, 0.4);
+  /* layered elevation shadows + interactive glow */
+  --shadow-1: 0 1px 2px rgba(2, 4, 10, 0.5), 0 2px 6px rgba(2, 4, 10, 0.4);
+  --shadow-2: 0 6px 16px rgba(2, 4, 10, 0.55), 0 2px 4px rgba(2, 4, 10, 0.45);
+  --shadow-3: 0 18px 44px rgba(2, 4, 10, 0.65), 0 6px 14px rgba(2, 4, 10, 0.5);
+  --glow: 0 0 0 1px rgba(108, 140, 255, 0.35), 0 0 24px rgba(108, 140, 255, 0.25);
+  --panel-blur: 14px;
 
-  /* legacy colour-named aliases so existing rules adopt the warm palette */
+  /* legacy colour-named aliases so existing rules adopt the console palette */
   --cyan: var(--teal);
-  --purple: var(--amber);
+  --purple: var(--blue);
   --pink: var(--coral);
 
-  --grad: linear-gradient(120deg, #f2b049, #e8806a);
-  --grad-2: linear-gradient(125deg, #f4b855, #e89446);
+  --grad: linear-gradient(120deg, #6c8cff, #38d4c0);
+  --grad-2: linear-gradient(125deg, #8ea4ff, #5f79ff);
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --display: 'Chakra Petch', var(--font);
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.4, 1);
   --dur: 0.18s;
 }
 
@@ -50,6 +54,7 @@
   --glass: rgba(42, 28, 6, 0.04);
   --text: #241b15;
   --muted: #746a60;
+  --blue: #3757d6;
   --amber: #c98518;
   --teal: #178b79;
   --coral: #c75f4b;
@@ -69,6 +74,7 @@
   --glass: rgba(104, 240, 255, 0.06);
   --text: #f7f2ff;
   --muted: #b8a9cf;
+  --blue: #4df4ff;
   --amber: #ffe66d;
   --teal: #4df4ff;
   --coral: #ff5bac;
@@ -86,9 +92,9 @@ body {
   color: var(--text);
   min-height: 100vh;
   background:
-    radial-gradient(1100px 720px at 18% -10%, rgba(242, 176, 73, 0.10), transparent 60%),
-    radial-gradient(1000px 760px at 100% 8%, rgba(63, 199, 173, 0.07), transparent 58%),
-    linear-gradient(180deg, #1c1823, var(--bg) 60%);
+    radial-gradient(1100px 720px at 18% -10%, rgba(108, 140, 255, 0.10), transparent 60%),
+    radial-gradient(1000px 760px at 100% 8%, rgba(56, 212, 192, 0.06), transparent 58%),
+    linear-gradient(180deg, #0d1120, var(--bg) 60%);
   background-attachment: fixed;
 }
 

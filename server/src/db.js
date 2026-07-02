@@ -231,6 +231,14 @@ export function getRecentResults(userId, gameId = null, limit = 20) {
   return rows.map((r) => r.result);
 }
 
+// Distinct game ids a user has played on a given UTC day (for daily challenges).
+export function getGamesPlayedOnDay(userId, day) {
+  return db.prepare(
+    `SELECT DISTINCT m.game_id FROM match_players mp JOIN matches m ON m.id = mp.match_id
+     WHERE mp.user_id = ? AND date(m.created_at) = ?`
+  ).all(userId, day).map((r) => r.game_id);
+}
+
 // ---- Achievements ----------------------------------------------------------
 
 export function getUnlockedAchievements(userId) {

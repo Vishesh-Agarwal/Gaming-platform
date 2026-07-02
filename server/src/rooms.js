@@ -4,6 +4,7 @@
 import { nanoid } from 'nanoid';
 import { getGame } from './games/registry.js';
 import { areFriends, getUserById, publicUser, saveMatchResult } from './db.js';
+import { processMatch } from './progression.js';
 import { chooseBotMove, supportsRoomBots } from './bots.js';
 import { resolveGameOptions } from './gameOptions.js';
 
@@ -52,13 +53,28 @@ function botUser(roomId, n) {
 
 function recordIfDone(room) {
   if (room.status === 'over' && room.result) {
-    saveMatchResult({
+    const matchId = saveMatchResult({
       roomId: room.id,
       gameId: room.gameId,
       gameName: room.game.name,
       players: room.players,
       result: room.result,
     });
+    // Progression is best-effort: a failure here must never break match
+    // recording or the game:over flow.
+    if (matchId) {
+      try {
+        processMatch({
+          matchId,
+          gameId: room.gameId,
+          playerCount: room.players.length,
+          players: room.players,
+          result: room.result,
+        });
+      } catch (err) {
+        console.error('[progression] failed (match still recorded):', err);
+      }
+    }
   }
 }
 

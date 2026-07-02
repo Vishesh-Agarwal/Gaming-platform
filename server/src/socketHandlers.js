@@ -35,6 +35,7 @@ import {
   acceptUndo,
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
+import { setProgressionNotifier } from './progression.js';
 import { armTurnClock, stopTurnClock } from './turnclock.js';
 import {
   createLobby,
@@ -81,6 +82,12 @@ function scheduleBotTurn(io, roomId) {
 }
 
 export function initSockets(io) {
+  // Push per-player progression summaries (XP, level, achievements, challenge
+  // progress) to their sockets right after a match records.
+  setProgressionNotifier((userId, summary) => {
+    emitToUser(io, userId, 'progression:update', summary);
+  });
+
   io.on('connection', (socket) => {
     const me = socket.user; // { id, username }
     socket.join(userRoom(me.id));

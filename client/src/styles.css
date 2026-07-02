@@ -1635,6 +1635,103 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   to { transform: scaleY(1); opacity: 1; }
 }
 
+/* ---- Progression UI: level chip, challenges, leaderboards, badges ---- */
+.level-chip { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; }
+.xp-ring {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle, var(--panel-solid) 58%, transparent 59%),
+    conic-gradient(var(--accent) var(--xp-pct, 0%), var(--surface-2) 0);
+  font-family: var(--display);
+  font-size: 14px;
+}
+.level-chip-copy { display: grid; text-align: left; line-height: 1.15; }
+.level-chip-copy small { color: var(--muted); font-size: 10px; }
+.challenge-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.challenge-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  backdrop-filter: blur(var(--panel-blur));
+}
+.challenge-card.done { border-color: color-mix(in srgb, var(--green) 55%, transparent); }
+.challenge-icon { font-size: 22px; line-height: 1; }
+.challenge-copy { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.challenge-copy small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.challenge-bar { height: 5px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.challenge-bar i { display: block; height: 100%; background: var(--grad); border-radius: 99px; transition: width 0.4s var(--ease); }
+.challenge-xp { font-family: var(--display); color: var(--accent); font-size: 12px; white-space: nowrap; }
+.challenge-card.done .challenge-xp { color: var(--green); font-size: 16px; }
+.leaderboard-panel { display: grid; gap: 12px; }
+.leaderboard-tabs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.leaderboard-tabs .active {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--accent);
+}
+.leaderboard-rows { display: grid; gap: 4px; }
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.leaderboard-row.you { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.leaderboard-rank { font-family: var(--display); width: 26px; color: var(--muted); }
+.leaderboard-row:nth-child(1) .leaderboard-rank { color: var(--amber); }
+.leaderboard-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.leaderboard-value { font-family: var(--display); }
+.badge-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  font-size: 12px;
+}
+.badge-icon { font-size: 16px; line-height: 1; }
+.podium-xp { display: grid; gap: 4px; }
+.podium-xp-gained { font-family: var(--display); color: var(--accent); font-size: 18px; }
+.podium-xp-bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.podium-xp-bar i { display: block; height: 100%; background: var(--grad); border-radius: 99px; transition: width 0.9s var(--ease); }
+.podium-xp small { color: var(--muted); }
+.level-up {
+  font-family: var(--display);
+  font-size: 20px;
+  color: var(--amber);
+  animation: levelPop 0.6s var(--ease-spring);
+}
+@keyframes levelPop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.podium-achievements { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.achievement-pop {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  font-size: 13px;
+  animation: levelPop 0.5s var(--ease-spring) backwards;
+}
+.achievement-pop small { color: var(--muted); }
+.podium-achievements .achievement-pop:nth-child(2) { animation-delay: 0.15s; }
+.podium-achievements .achievement-pop:nth-child(3) { animation-delay: 0.3s; }
+
 @media (max-width: 680px) {
   .game-page { padding: 14px; }
   .game-header {

@@ -13,6 +13,7 @@ import Modal from '../components/Modal.jsx';
 import { setGameMuted } from '../gameAudio.js';
 import { PROFILE_AVATARS, PROFILE_FRAMES, getUserSettings, saveUserSettings } from '../preferences.js';
 import { pickFeaturedGame, recentGameIds } from '../homeRails.js';
+import { achievementMeta } from '../achievementMeta.js';
 
 // Chat panel width: default bumped +10% again (352 -> 387), user-resizable + persisted.
 const CHAT_WIDTH_KEY = 'gp-chat-width-v2';
@@ -64,6 +65,11 @@ export default function Lobby({
   statsOpen,
   onCloseStats,
   progression = null,
+  challenges = null,
+  onShowLeaderboard,
+  leaderboard = null,
+  leaderboardOpen = false,
+  onCloseLeaderboard,
 }) {
   const [pickedGame, setPickedGame] = useState(null); // game chosen to invite into
   const [showAdd, setShowAdd] = useState(false);
@@ -87,6 +93,8 @@ export default function Lobby({
   const playerLevel = progression?.level?.level ?? Infinity;
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
+  const [lbBoard, setLbBoard] = useState('xp');
+  const [lbGame, setLbGame] = useState('');
   const [addName, setAddName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const unreadTotal = Object.values(unread || {}).reduce((sum, n) => sum + Number(n || 0), 0);
@@ -279,8 +287,26 @@ export default function Lobby({
           <button className="ghost" onClick={() => { setShowSettings(true); setMobileMenuOpen(false); }}>
             Settings
           </button>
+          {progression && (
+            <button
+              className="level-chip ghost"
+              onClick={() => { onShowLeaderboard?.(); setMobileMenuOpen(false); }}
+              title="Leaderboards"
+            >
+              <span
+                className="xp-ring"
+                style={{ '--xp-pct': `${Math.round((100 * progression.level.intoLevel) / progression.level.neededForNext)}%` }}
+              >
+                <b>{progression.level.level}</b>
+              </span>
+              <span className="level-chip-copy">
+                <b>Level {progression.level.level}</b>
+                <small>{progression.level.intoLevel}/{progression.level.neededForNext} XP</small>
+              </span>
+            </button>
+          )}
           <button className="profile-chip ghost" onClick={() => { setShowProfile(true); setMobileMenuOpen(false); }}>
-            <span className="profile-avatar">{activeAvatar.icon}</span>
+            <span className={`profile-avatar frame-${currentUser.frame || 'none'}`}>{activeAvatar.icon}</span>
             <span>{profileName}</span>
           </button>
         </div>
@@ -304,6 +330,26 @@ export default function Lobby({
             onQuickPlay={(game) => onQuickPlay(game)}
             searching={quickSearch?.gameId === featured?.id}
           />
+          {challenges?.challenges?.length > 0 && (
+            <section className="home-rail">
+              <h3 className="home-rail-title">Daily challenges</h3>
+              <div className="challenge-row">
+                {challenges.challenges.map((c) => (
+                  <div key={c.id} className={`challenge-card${c.completed ? ' done' : ''}`}>
+                    <span className="challenge-icon">{c.icon}</span>
+                    <span className="challenge-copy">
+                      <b>{c.name}</b>
+                      <small>{c.desc}</small>
+                      <span className="challenge-bar">
+                        <i style={{ width: `${Math.min(100, (100 * c.progress) / c.target)}%` }} />
+                      </span>
+                    </span>
+                    <span className="challenge-xp">{c.completed ? '✓' : `+${c.xp} XP`}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {recentGames.length > 0 && (
             <section className="home-rail">
               <h3 className="home-rail-title">Continue playing</h3>
@@ -664,6 +710,23 @@ export default function Lobby({
               </div>
             </section>
 
+            {progression?.achievements?.length > 0 && (
+              <section className="profile-avatar-section">
+                <span>Badges ({progression.achievements.length})</span>
+                <div className="badge-grid">
+                  {progression.achievements.map((id) => {
+                    const meta = achievementMeta(id);
+                    return (
+                      <span key={id} className="badge-tile" title={meta.desc}>
+                        <span className="badge-icon">{meta.icon}</span>
+                        <small>{meta.name}</small>
+                      </span>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
             {profileError && <p className="profile-error">{profileError}</p>}
 
             <div className="profile-actions">
@@ -704,6 +767,63 @@ export default function Lobby({
                     <span>{m.gameName}</span>
                     <b>{m.result}</b>
                     {m.score != null && <small>{m.score}</small>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {leaderboardOpen && (
+        <Modal title="Leaderboards" onClose={onCloseLeaderboard}>
+          <div className="leaderboard-panel">
+            <div className="leaderboard-tabs" role="tablist" aria-label="Leaderboard">
+              {[
+                { id: 'xp', label: 'XP' },
+                { id: 'weekly', label: 'This week' },
+                { id: 'game', label: 'Per game' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={lbBoard === tab.id}
+                  className={`ghost${lbBoard === tab.id ? ' active' : ''}`}
+                  onClick={() => {
+                    setLbBoard(tab.id);
+                    const gameId = tab.id === 'game' ? (lbGame || availableGames[0]?.id || '') : '';
+                    if (tab.id === 'game' && !lbGame) setLbGame(gameId);
+                    onShowLeaderboard?.(tab.id, gameId);
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+              {lbBoard === 'game' && (
+                <select
+                  value={lbGame}
+                  onChange={(e) => { setLbGame(e.target.value); onShowLeaderboard?.('game', e.target.value); }}
+                  aria-label="Game"
+                >
+                  {availableGames.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {(!leaderboard?.rows || leaderboard.rows.length === 0) && (
+              <p className="muted">No entries yet — play some matches!</p>
+            )}
+            {leaderboard?.rows?.length > 0 && (
+              <div className="leaderboard-rows">
+                {leaderboard.rows.map((row) => (
+                  <div key={row.userId} className={`leaderboard-row${row.you ? ' you' : ''}`}>
+                    <span className="leaderboard-rank">{row.rank}</span>
+                    <span className="leaderboard-name">{row.name}</span>
+                    <b className="leaderboard-value">
+                      {row.value}{leaderboard.board === 'xp' ? ' XP' : ' wins'}
+                    </b>
                   </div>
                 ))}
               </div>

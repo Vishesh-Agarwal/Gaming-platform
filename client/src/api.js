@@ -34,4 +34,9 @@ export const api = {
   getConversation: (token, friendId) => request('/api/chat/' + friendId, { token }),
   getGames: () => request('/api/games'),
   getStats: (token) => request('/api/stats/me', { token }),
+
+  getProgression: (token) => request('/api/progression/me', { token }),
+  getChallenges: (token) => request('/api/progression/challenges', { token }),
+  getLeaderboard: (token, board = 'xp', gameId = '') =>
+    request(`/api/leaderboard?board=${board}${gameId ? `&gameId=${encodeURIComponent(gameId)}` : ''}`, { token }),
 };

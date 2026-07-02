@@ -19,6 +19,11 @@ export default function Home() {
   const toastSeq = useRef(0);
   const [stats, setStats] = useState(null);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [progression, setProgression] = useState(null); // { xp, level, achievements, unlocks }
+  const [challenges, setChallenges] = useState(null); // { day, challenges }
+  const [lastMatchProgression, setLastMatchProgression] = useState(null); // per-match summary
+  const [leaderboard, setLeaderboard] = useState(null); // { board, rows }
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
 
   const [selectedFriendId, setSelectedFriendId] = useState(null);
@@ -118,6 +123,7 @@ export default function Home() {
       setQuickSearch(null);
       setGameError('');
       setRematch(null);
+      setLastMatchProgression(null);
       setYouAreIndex(youAreIndex);
       setActiveRoom(room);
     });
@@ -128,6 +134,13 @@ export default function Home() {
       setRematch(null);
       flash('Opponent left — no rematch.');
     });
+    // Post-match progression summary (XP, level, achievements, challenges).
+    socket.on('progression:update', (summary) => {
+      setLastMatchProgression(summary);
+      setProgression((prev) => (prev ? { ...prev, xp: summary.xp, level: summary.level } : prev));
+      api.getChallenges(token).then(setChallenges).catch(() => {});
+    });
+
     socket.on('game:emote', (e) => {
       const id = `${Date.now()}-${Math.random()}`;
       setEmotes((prev) => [...prev, { ...e, id }]);
@@ -156,11 +169,22 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Prefetch stats so the Home hero + "Continue playing" rail have data.
+  // Prefetch stats + progression so the hero, rails, and level chip have data.
   useEffect(() => {
     if (!token) return;
     api.getStats(token).then(setStats).catch(() => {});
+    api.getProgression(token).then(setProgression).catch(() => {});
+    api.getChallenges(token).then(setChallenges).catch(() => {});
   }, [token]);
+
+  const onShowLeaderboard = async (board = 'xp', gameId = '') => {
+    try {
+      setLeaderboard(await api.getLeaderboard(token, board, gameId));
+      setLeaderboardOpen(true);
+    } catch (e) {
+      flash(e.message);
+    }
+  };
 
   // ---- Friend actions ----
   const onAddFriend = async (username) => {
@@ -320,6 +344,7 @@ export default function Home() {
     setYouAreIndex(null);
     setGameError('');
     setRematch(null);
+    setLastMatchProgression(null);
   };
 
   const onLogout = () => {
@@ -353,6 +378,7 @@ export default function Home() {
           onUndoAccept={onUndoAccept}
           emotes={emotes}
           error={gameError}
+          progression={lastMatchProgression}
         />
       </>
     );
@@ -405,6 +431,12 @@ export default function Home() {
         stats={stats}
         statsOpen={statsOpen}
         onCloseStats={() => setStatsOpen(false)}
+        progression={progression}
+        challenges={challenges}
+        onShowLeaderboard={onShowLeaderboard}
+        leaderboard={leaderboard}
+        leaderboardOpen={leaderboardOpen}
+        onCloseLeaderboard={() => setLeaderboardOpen(false)}
       />
     </>
   );

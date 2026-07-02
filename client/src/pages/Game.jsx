@@ -429,7 +429,27 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
                 ))}
               </div>
             )}
-            {progression && <div className="podium-progression">{/* A2: XP tick, level-up, achievements */}</div>}
+            {progression && (
+              <div className="podium-progression">
+                <div className="podium-xp">
+                  <span className="podium-xp-gained">+{progression.xpGained} XP</span>
+                  <span className="podium-xp-bar">
+                    <i style={{ width: `${Math.round((100 * progression.level.intoLevel) / progression.level.neededForNext)}%` }} />
+                  </span>
+                  <small>Level {progression.level.level} · {progression.level.intoLevel}/{progression.level.neededForNext} XP</small>
+                </div>
+                {progression.leveledUp && <div className="level-up">⬆ Level {progression.level.level}!</div>}
+                {progression.achievements?.length > 0 && (
+                  <div className="podium-achievements">
+                    {progression.achievements.map((a) => (
+                      <span key={a.id} className="achievement-pop" title={a.desc}>
+                        {a.icon} {a.name} <small>+{a.xp} XP</small>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {timeline.length > 0 && (
               <div className="overlay-timeline">
                 <span className="overlay-section-label">Last moves</span>

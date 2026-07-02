@@ -90,6 +90,37 @@ ensureColumn('users', 'display_name', 'TEXT');
 ensureColumn('users', 'nickname', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('users', 'avatar', "TEXT NOT NULL DEFAULT 'pilot'");
 ensureColumn('users', 'updated_at', 'TEXT');
+ensureColumn('users', 'xp', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'frame', "TEXT NOT NULL DEFAULT 'none'");
+
+// Progression tables: XP audit trail, achievement unlocks, daily challenge progress.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS xp_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount     INTEGER NOT NULL,
+    reason     TEXT NOT NULL,
+    match_id   INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_xp_events_user ON xp_events(user_id, id);
+
+  CREATE TABLE IF NOT EXISTS achievements (
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    achievement_id TEXT NOT NULL,
+    unlocked_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, achievement_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS challenge_progress (
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day          TEXT NOT NULL,             -- YYYY-MM-DD (UTC)
+    challenge_id TEXT NOT NULL,
+    progress     INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT,
+    PRIMARY KEY (user_id, day, challenge_id)
+  );
+`);
 db.prepare(
   `UPDATE users
    SET display_name = username
@@ -167,6 +198,37 @@ export function updateUserProfile(userId, patch = {}) {
   sets.push("updated_at = datetime('now')");
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params, userId);
   return getUserById(userId);
+}
+
+// ---- Progression (XP) ------------------------------------------------------
+
+export function addXp(userId, amount, reason, matchId = null) {
+  const tx = db.transaction(() => {
+    db.prepare('INSERT INTO xp_events (user_id, amount, reason, match_id) VALUES (?, ?, ?, ?)')
+      .run(userId, amount, reason, matchId);
+    db.prepare('UPDATE users SET xp = xp + ? WHERE id = ?').run(amount, userId);
+    return db.prepare('SELECT xp FROM users WHERE id = ?').get(userId)?.xp ?? 0;
+  });
+  return tx();
+}
+
+export function getXp(userId) {
+  return db.prepare('SELECT xp FROM users WHERE id = ?').get(userId)?.xp ?? 0;
+}
+
+// Newest-first results ('win' | 'loss' | 'draw') for streak computation.
+// gameId=null means across all games.
+export function getRecentResults(userId, gameId = null, limit = 20) {
+  const rows = gameId
+    ? db.prepare(
+        `SELECT mp.result FROM match_players mp JOIN matches m ON m.id = mp.match_id
+         WHERE mp.user_id = ? AND m.game_id = ? ORDER BY m.id DESC LIMIT ?`
+      ).all(userId, gameId, limit)
+    : db.prepare(
+        `SELECT mp.result FROM match_players mp JOIN matches m ON m.id = mp.match_id
+         WHERE mp.user_id = ? ORDER BY m.id DESC LIMIT ?`
+      ).all(userId, limit);
+  return rows.map((r) => r.result);
 }
 
 // ---- Friendships ---------------------------------------------------------

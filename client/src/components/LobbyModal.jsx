@@ -38,16 +38,25 @@ export default function LobbyModal({ lobby, currentUser, friends, onlineIds, onI
 
       <div className="lb-members">
         <span className="mode-label">Players {lobby.members.length}/{lobby.maxPlayers}</span>
-        {lobby.members.map((m) => (
-          <div key={m.id} className="lb-member">
-            <span className={`dot ${m.ready ? 'online' : 'offline'}`} />
-            <span className="friend-name">
-              {m.id === currentUser.id ? 'You' : m.username}
-              {m.id === lobby.hostId && <span className="lb-host">host</span>}
-            </span>
-            <span className={`lb-ready ${m.ready ? 'yes' : ''}`}>{m.ready ? 'Ready' : 'Not ready'}</span>
-          </div>
-        ))}
+        <div className="party-slots">
+          {lobby.members.map((m) => (
+            <div key={m.id} className={`party-slot filled${m.ready ? ' ready' : ''}`}>
+              <span className="party-avatar">{(m.username || '?').charAt(0).toUpperCase()}</span>
+              <span className="party-name">
+                {m.id === currentUser.id ? 'You' : m.username}
+                {m.id === lobby.hostId && <span className="lb-host">host</span>}
+              </span>
+              <span className="party-status">{m.ready ? '✓ Ready' : 'Not ready'}</span>
+            </div>
+          ))}
+          {Array.from({ length: Math.max(0, (lobby.maxPlayers || 2) - lobby.members.length) }).map((_, i) => (
+            <div key={`empty-${i}`} className="party-slot empty">
+              <span className="party-avatar">+</span>
+              <span className="party-name">Open slot</span>
+              <span className="party-status">Invite a friend</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {maps && (

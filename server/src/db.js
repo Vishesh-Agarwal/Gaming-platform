@@ -239,6 +239,35 @@ export function getGamesPlayedOnDay(userId, day) {
   ).all(userId, day).map((r) => r.game_id);
 }
 
+// ---- Leaderboards ----------------------------------------------------------
+
+export function topByXp(limit = 20) {
+  return db.prepare(
+    `SELECT id, username, display_name, avatar, xp FROM users
+     WHERE xp > 0 ORDER BY xp DESC, id ASC LIMIT ?`
+  ).all(limit);
+}
+
+export function topByGameWins(gameId, limit = 20) {
+  return db.prepare(
+    `SELECT u.id, u.username, u.display_name, u.avatar, ps.wins
+     FROM player_stats ps JOIN users u ON u.id = ps.user_id
+     WHERE ps.game_id = ? AND ps.wins > 0
+     ORDER BY ps.wins DESC, u.id ASC LIMIT ?`
+  ).all(gameId, limit);
+}
+
+export function topByWeeklyWins(limit = 20) {
+  return db.prepare(
+    `SELECT u.id, u.username, u.display_name, u.avatar, COUNT(*) AS wins
+     FROM match_players mp
+     JOIN matches m ON m.id = mp.match_id
+     JOIN users u ON u.id = mp.user_id
+     WHERE mp.result = 'win' AND m.created_at >= datetime('now', '-7 days')
+     GROUP BY u.id ORDER BY wins DESC, u.id ASC LIMIT ?`
+  ).all(limit);
+}
+
 // ---- Achievements ----------------------------------------------------------
 
 export function getUnlockedAchievements(userId) {

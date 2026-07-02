@@ -11,7 +11,12 @@ import createFriendsRouter from './friends.js';
 import chatRouter from './chat.js';
 import { listGames } from './games/registry.js';
 import { initSockets } from './socketHandlers.js';
-import { getUserStats } from './db.js';
+import {
+  getUserStats, getXp, getUnlockedAchievements,
+  topByXp, topByGameWins, topByWeeklyWins,
+} from './db.js';
+import { levelForXp } from './progression.js';
+import { getDailyChallenges, utcDay } from './challenges.js';
 
 const PORT = process.env.PORT || 3001;
 // Default (dev): reflect any origin so a second device on the LAN can connect.
@@ -29,6 +34,32 @@ io.use(socketAuth);
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/games', (_req, res) => res.json({ games: listGames() }));
 app.get('/api/stats/me', authMiddleware, (req, res) => res.json(getUserStats(req.user.id)));
+app.get('/api/progression/me', authMiddleware, (req, res) => {
+  const xp = getXp(req.user.id);
+  res.json({ xp, level: levelForXp(xp), achievements: getUnlockedAchievements(req.user.id) });
+});
+app.get('/api/progression/challenges', authMiddleware, (req, res) => {
+  const day = utcDay();
+  res.json({ day, challenges: getDailyChallenges(req.user.id, day) });
+});
+app.get('/api/leaderboard', authMiddleware, (req, res) => {
+  const board = String(req.query.board || 'xp');
+  let rows;
+  if (board === 'game') rows = topByGameWins(String(req.query.gameId || ''), 20).map((r) => ({ ...r, value: r.wins }));
+  else if (board === 'weekly') rows = topByWeeklyWins(20).map((r) => ({ ...r, value: r.wins }));
+  else rows = topByXp(20).map((r) => ({ ...r, value: r.xp }));
+  res.json({
+    board,
+    rows: rows.map((r, i) => ({
+      rank: i + 1,
+      userId: r.id,
+      name: r.display_name || r.username,
+      avatar: r.avatar,
+      value: r.value,
+      you: r.id === req.user.id,
+    })),
+  });
+});
 app.use('/api/auth', authRouter);
 app.use('/api/friends', createFriendsRouter(io));
 app.use('/api/chat', chatRouter);

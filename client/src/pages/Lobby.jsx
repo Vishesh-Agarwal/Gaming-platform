@@ -5,12 +5,14 @@ import { availableGames } from '../games/registry.js';
 import { listMaps } from '../games/karts/kartMaps.js';
 import { APP_NAME } from '../config.js';
 import GameCard from '../components/GameCard.jsx';
+import HeroBanner from '../components/HeroBanner.jsx';
 import InviteModal from '../components/InviteModal.jsx';
 import LobbyModal from '../components/LobbyModal.jsx';
 import FriendsChat from '../components/FriendsChat.jsx';
 import Modal from '../components/Modal.jsx';
 import { setGameMuted } from '../gameAudio.js';
 import { PROFILE_AVATARS, getUserSettings, saveUserSettings } from '../preferences.js';
+import { pickFeaturedGame, recentGameIds } from '../homeRails.js';
 
 // Chat panel width: default bumped +10% again (352 -> 387), user-resizable + persisted.
 const CHAT_WIDTH_KEY = 'gp-chat-width-v2';
@@ -89,6 +91,16 @@ export default function Lobby({
 
   // Clicking a game: multiplayer games open a lobby, 1v1 games open the invite modal.
   const pickGame = (g) => (g.maxPlayers > 2 ? onCreateLobby(g.id) : setPickedGame(g));
+
+  // Home rails: hero features your most-played game (daily rotation before any
+  // matches exist); "Continue playing" lists recently played games.
+  const gameIds = availableGames.map((g) => g.id);
+  const daySeed = Math.floor(Date.now() / 86400000);
+  const featuredId = pickFeaturedGame(gameIds, stats?.stats, daySeed);
+  const featured = availableGames.find((g) => g.id === featuredId) || null;
+  const recentGames = recentGameIds(stats?.recent, gameIds)
+    .filter((id) => id !== featuredId)
+    .map((id) => availableGames.find((g) => g.id === id));
 
   const submitJoinCode = (e) => {
     e.preventDefault();
@@ -279,19 +291,42 @@ export default function Lobby({
 
       <div className="app-body" style={{ '--chat-w': `${chatWidth}px` }}>
         <main className="games-area">
-          <h2>Games</h2>
-          <p className="muted">Pick a game to invite a friend, or hit Quick Play to open a lobby, match with players, or add bots.</p>
-          <div className="games-grid">
-            {availableGames.map((g) => (
-              <GameCard
-                key={g.id}
-                game={g}
-                onClick={pickGame}
-                onQuickPlay={(game) => onQuickPlay(game)}
-                searching={quickSearch?.gameId === g.id}
-              />
-            ))}
-          </div>
+          <HeroBanner
+            game={featured}
+            onPlay={pickGame}
+            onQuickPlay={(game) => onQuickPlay(game)}
+            searching={quickSearch?.gameId === featured?.id}
+          />
+          {recentGames.length > 0 && (
+            <section className="home-rail">
+              <h3 className="home-rail-title">Continue playing</h3>
+              <div className="rail-scroll">
+                {recentGames.map((g) => (
+                  <GameCard
+                    key={g.id}
+                    game={g}
+                    onClick={pickGame}
+                    onQuickPlay={(game) => onQuickPlay(game)}
+                    searching={quickSearch?.gameId === g.id}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+          <section className="home-rail">
+            <h3 className="home-rail-title">All games</h3>
+            <div className="games-grid">
+              {availableGames.map((g) => (
+                <GameCard
+                  key={g.id}
+                  game={g}
+                  onClick={pickGame}
+                  onQuickPlay={(game) => onQuickPlay(game)}
+                  searching={quickSearch?.gameId === g.id}
+                />
+              ))}
+            </div>
+          </section>
         </main>
 
         <div

@@ -280,8 +280,8 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   align-items: center;
   gap: 12px;
   padding: 14px 22px;
-  background: rgba(28, 24, 34, 0.7);
-  backdrop-filter: blur(14px);
+  background: var(--panel);
+  backdrop-filter: blur(var(--panel-blur));
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-1);
   z-index: 40;
@@ -408,6 +408,62 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 /* ---- Games grid ---- */
 .games-area { padding: 28px; overflow-y: auto; }
 .games-area h2 { margin: 0 0 4px; font-family: var(--display); font-size: 24px; }
+
+/* ---- Hero banner + home rails ---- */
+.hero-banner {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  align-items: center;
+  gap: 18px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 35%, var(--border));
+  padding: clamp(18px, 4vw, 34px);
+  min-height: 200px;
+  background:
+    radial-gradient(90% 130% at 85% 20%, color-mix(in srgb, var(--card-accent) 38%, transparent), transparent 65%),
+    linear-gradient(120deg, color-mix(in srgb, var(--card-accent) 22%, #0b0f1c), #0b0f1c 75%);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  animation: heroIn 0.5s var(--ease) backwards;
+}
+@keyframes heroIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-kicker {
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--card-accent) 80%, white);
+}
+.hero-copy h2 { font-family: var(--display); font-size: clamp(26px, 4vw, 40px); margin: 6px 0 8px; }
+.hero-copy p { color: var(--muted); max-width: 46ch; margin: 0 0 14px; }
+.hero-actions { display: flex; gap: 10px; }
+.hero-art {
+  max-height: 220px;
+  aspect-ratio: 1;
+  justify-self: center;
+  line-height: 0;
+  filter: drop-shadow(0 16px 30px rgba(2, 4, 10, 0.6));
+}
+.hero-art svg { width: 100%; height: 100%; max-height: 220px; }
+.home-rail { margin-top: 22px; animation: heroIn 0.5s var(--ease) 0.08s backwards; }
+.home-rail-title {
+  font-family: var(--display);
+  letter-spacing: 0.04em;
+  font-size: 17px;
+  margin: 0 0 10px;
+}
+.rail-scroll {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(160px, 200px);
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
 .games-grid {
   margin-top: 20px;
   display: grid;
@@ -4624,6 +4680,16 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   }
   .games-area {
     padding: 18px 14px;
+  }
+  .hero-banner {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .hero-art {
+    display: none;
+  }
+  .rail-scroll {
+    grid-auto-columns: minmax(140px, 160px);
   }
   .games-grid {
     grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));

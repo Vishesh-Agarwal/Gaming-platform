@@ -117,7 +117,7 @@ export function applyMove(state, seat, move) {
   const cueDisc = { id: 0, x: cuePos.x, y: cuePos.y, vx: (dx / len) * speed, vy: (dy / len) * speed, r: TABLE.ballR, mass: 1, spin };
   const discs = [cueDisc, ...objectBalls.map((b) => ({ id: b.id, x: b.x, y: b.y, vx: 0, vy: 0, r: TABLE.ballR, mass: 1 }))];
 
-  const { frames, finalDiscs, pocketed, firstContact } = simulateShot(discs);
+  const { frames, finalDiscs, pocketed, firstContact, events } = simulateShot(discs);
 
   const metaById = new Map(objectBalls.map((b) => [b.id, b]));
   const newObjects = finalDiscs
@@ -130,14 +130,14 @@ export function applyMove(state, seat, move) {
     : { x: Math.round(cueDiscFinal.x), y: Math.round(cueDiscFinal.y) };
   const newBalls = [{ id: 0, n: 0, group: 'cue', x: newCue.x, y: newCue.y }, ...newObjects];
 
-  const ctx = { pocketed, firstContact, cueScratched, newBalls, newObjects, newCue, frames };
+  const ctx = { pocketed, firstContact, cueScratched, newBalls, newObjects, newCue, frames, events };
   if (state.mode === 'nineball') return { state: resolveNineball(state, seat, ctx) };
   if (state.mode === 'practice') return { state: resolvePractice(state, seat, ctx) };
   return { state: resolveEightball(state, seat, ctx) }; // eightball + blitz
 }
 
 function resolveEightball(state, seat, ctx) {
-  const { pocketed, firstContact, cueScratched, frames } = ctx;
+  const { pocketed, firstContact, cueScratched, frames, events } = ctx;
   let { newBalls, newCue } = ctx;
   const groups = { ...state.groups };
   const myGroup = state.groups[seat];
@@ -202,14 +202,14 @@ function resolveEightball(state, seat, ctx) {
     phase,
     winner,
     draw: false,
-    lastShot: { frames, pocketed, foul, by: seat },
+    lastShot: { frames, events, pocketed, foul, by: seat },
     seq: state.seq + 1,
   };
 }
 
 // 9-Ball: must contact the lowest-numbered ball first; legally pot the 9 to win.
 function resolveNineball(state, seat, ctx) {
-  const { pocketed, firstContact, cueScratched, frames } = ctx;
+  const { pocketed, firstContact, cueScratched, frames, events } = ctx;
   let { newBalls, newCue } = ctx;
   const pottedNonCue = pocketed.filter((p) => p.id !== 0);
   const remaining = state.balls.filter((b) => b.id !== 0).map((b) => b.n);
@@ -235,12 +235,12 @@ function resolveNineball(state, seat, ctx) {
 
   return {
     ...state, balls: newBalls, cue: newCue, turn, ballInHand, onBreak: false,
-    phase, winner, scores, lastShot: { frames, pocketed, foul, by: seat }, seq: state.seq + 1,
+    phase, winner, scores, lastShot: { frames, events, pocketed, foul, by: seat }, seq: state.seq + 1,
   };
 }
 // Practice: points race. Pot any ball to score; scratch just re-spots the cue.
 function resolvePractice(state, seat, ctx) {
-  const { pocketed, cueScratched, newBalls, newCue, frames } = ctx;
+  const { pocketed, cueScratched, newBalls, newCue, frames, events } = ctx;
   const pottedNonCue = pocketed.filter((p) => p.id !== 0);
   const scores = state.scores.slice();
   scores[seat] += pottedNonCue.length;
@@ -257,7 +257,7 @@ function resolvePractice(state, seat, ctx) {
 
   return {
     ...state, balls: newBalls, cue: newCue, turn, scores, onBreak: false, ballInHand: false,
-    phase, winner, draw, lastShot: { frames, pocketed, foul: cueScratched, by: seat }, seq: state.seq + 1,
+    phase, winner, draw, lastShot: { frames, events, pocketed, foul: cueScratched, by: seat }, seq: state.seq + 1,
   };
 }
 
@@ -277,7 +277,7 @@ export function onTimeout(state) {
       turn: 1 - state.turn,
       ballInHand: false,
       onBreak: false,
-      lastShot: { frames: [], pocketed: [], foul: 'timeout', by: state.turn },
+      lastShot: { frames: [], events: [], pocketed: [], foul: 'timeout', by: state.turn },
       seq: state.seq + 1,
     },
   };

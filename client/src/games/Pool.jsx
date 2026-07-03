@@ -2,6 +2,7 @@
 // takes aim input, replays the shot frames, then settles to state.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
+import { createRollState, advanceRoll, rollFor } from './poolRoll.js';
 import ShotClock from './ShotClock.jsx';
 
 const VIEW_W = 900;                 // on-screen width; logical table is 1000x500 (2:1)
@@ -71,6 +72,8 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const [banner, setBanner] = useState(null);
   const lastSeq = useRef(st.seq);
   const rafRef = useRef(0);
+  const rollRef = useRef(createRollState()); // per-ball roll during the replay
+  const rollFrameRef = useRef(-1);
 
   useEffect(() => {
     if (room.status !== 'playing') return;
@@ -88,6 +91,8 @@ export default function Pool({ room, youAreIndex, onMove }) {
     if (st.seq === lastSeq.current) return;
     lastSeq.current = st.seq;
     setAim(null); setPower(0); setCuePlace(null); setSpin({ along: 0, side: 0 });
+    rollRef.current = createRollState();
+    rollFrameRef.current = -1;
     const frames = st.lastShot?.frames;
     if (!frames || frames.length === 0) { setFrameIdx(null); return; }
     let i = 0; setFrameIdx(0);
@@ -112,7 +117,13 @@ export default function Pool({ room, youAreIndex, onMove }) {
     drawTable(ctx, st);
     const playing = frameIdx != null && st.lastShot?.frames;
     if (playing) {
-      for (const d of st.lastShot.frames[frameIdx]) drawBall(ctx, d.x, d.y, d.id, st.ballR);
+      if (rollFrameRef.current !== frameIdx) {
+        advanceRoll(rollRef.current, st.lastShot.frames[frameIdx], st.ballR);
+        rollFrameRef.current = frameIdx;
+      }
+      for (const d of st.lastShot.frames[frameIdx]) {
+        drawBall(ctx, d.x, d.y, d.id, st.ballR, rollFor(rollRef.current, d.id));
+      }
     } else {
       for (const b of st.balls) if (b.id !== 0) drawBall(ctx, b.x, b.y, b.id, st.ballR);
       if (canPlace) { ctx.save(); ctx.strokeStyle = 'rgba(45,212,191,0.9)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(baseCue.x, baseCue.y, st.ballR + 5, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
@@ -396,21 +407,42 @@ function drawFeltPattern(ctx, st) {
   ctx.restore();
 }
 
-function drawBall(ctx, x, y, id, r) {
+// Draw a ball; `roll` ({angle, dirX, dirY} or null) slides the stripe band and
+// number cap across the face so a moving ball visibly rolls (2.5D illusion —
+// the light/shading stays fixed).
+function drawBall(ctx, x, y, id, r, roll = null) {
   // contact shadow
   ctx.beginPath(); ctx.ellipse(x + 1.5, y + 2.5, r, r * 0.92, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
 
   const base = ballBase(id);
+  const phase = roll ? Math.sin(roll.angle) : 0;        // -1..1 across the face
+  const facing = roll ? Math.cos(roll.angle) : 1;       // 1 = cap dead centre
+  const offX = roll ? roll.dirX * phase * r * 0.62 : 0;
+  const offY = roll ? roll.dirY * phase * r * 0.62 : 0;
+
   ctx.save();
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
   if (isStripe(id)) {
     ctx.fillStyle = '#f4f0e6'; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
-    ctx.fillStyle = base; ctx.fillRect(x - r, y - r * 0.5, 2 * r, r);
+    // the stripe band slides with the vertical roll component and its
+    // thickness breathes with the horizontal one, so it reads as rotating
+    const th = roll ? r * (0.55 + 0.45 * Math.abs(facing)) : r;
+    ctx.fillStyle = base;
+    ctx.fillRect(x - r, y - th / 2 + offY, 2 * r, th);
   } else {
     ctx.fillStyle = base; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
   }
-  // spherical shading: bright highlight top-left, shadow bottom-right
+  // number cap slides across the face and foreshortens toward the limb
+  if (id !== 0 && (!roll || facing > -0.15)) {
+    const capR = r * 0.5 * (roll ? Math.max(0.2, Math.sqrt(Math.max(0, 1 - (phase * 0.62) ** 2))) : 1);
+    ctx.beginPath(); ctx.arc(x + offX, y + offY, capR, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    if (!roll || facing > 0.35) {
+      ctx.fillStyle = '#111'; ctx.font = `bold ${Math.round(capR * 1.5)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(id), x + offX, y + offY + 0.5);
+    }
+  }
+  // spherical shading: bright highlight top-left, shadow bottom-right (fixed light)
   const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
   g.addColorStop(0, 'rgba(255,255,255,0.6)');
   g.addColorStop(0.35, 'rgba(255,255,255,0.08)');
@@ -419,11 +451,6 @@ function drawBall(ctx, x, y, id, r) {
   ctx.restore();
 
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.stroke();
-  if (id !== 0) {
-    ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
-    ctx.fillStyle = '#111'; ctx.font = `bold ${Math.round(r * 0.78)}px sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(id), x, y + 0.5);
-  }
 }
 
 function drawCueStick(ctx, cue, aim, power, r) {

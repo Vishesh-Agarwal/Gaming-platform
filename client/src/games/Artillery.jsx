@@ -5,6 +5,7 @@
 // carving its own displayed terrain at the impact moment and throwing debris so
 // the crater isn't revealed before the shell lands.
 import { useEffect, useRef, useState } from 'react';
+import { createTankDuelAudio } from './tankDuelAudio.js';
 
 // These mirror server/src/games/artillery.js so the aim guide & crater match.
 const GRAVITY = 0.18;
@@ -176,6 +177,12 @@ export default function Artillery({ room, youAreIndex, onMove }) {
   };
   fireRef.current = fire;
 
+  const audioRef = useRef(null);
+  useEffect(() => {
+    audioRef.current = createTankDuelAudio();
+    return () => audioRef.current?.dispose();
+  }, []);
+
   // new server shot -> animate it (keep showing pre-crater terrain until impact)
   useEffect(() => {
     const st = room.state;
@@ -193,6 +200,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
         boom: 0,
         carved: false,
       };
+      audioRef.current?.fire(Math.min(1, st.lastShot.path.length / 120));
       setBusy(true);
     } else if (!st.lastShot) {
       lastSeqRef.current = st.seq ?? 0;
@@ -245,6 +253,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
     if (phase !== 'roundover' || busy || nextSentRef.current) return;
     let n = 3;
     setCountdown(n);
+    audioRef.current?.roundOver();
     const id = setInterval(() => {
       n -= 1;
       if (n <= 0) { clearInterval(id); setCountdown(0); advance(); }
@@ -300,6 +309,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
       if (dt > 3) dt = 3;
       const st = stateRef.current;
 
+      audioRef.current?.updateDrive(canFireRef.current ? Math.abs(driveVelRef.current) / MAX_DRIVE : 0);
       // ---- driving (only on our turn, while not animating) ----
       if (canFireRef.current) {
         const dir = heldDirRef.current;
@@ -335,6 +345,7 @@ export default function Artillery({ room, youAreIndex, onMove }) {
             anim.i = anim.path.length - 1;
             anim.phase = 'boom';
             anim.boom = 0;
+            audioRef.current?.explosion(Math.min(1, (anim.blast || 95) / 130));
             hpTargetRef.current = st.tanks.map((t) => t.hp);
             if (anim.crater && !anim.carved) {
               carveLocal(groundRef.current, st.step, anim.crater.x, anim.crater.y, anim.crater.r, st.H);

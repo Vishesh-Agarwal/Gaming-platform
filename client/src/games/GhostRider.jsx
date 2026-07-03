@@ -10,6 +10,7 @@
 // CRASH, then respawn after a short delay (a time penalty).
 import { useEffect, useRef } from 'react';
 import { getSocket } from '../socket.js';
+import { createGhostRiderAudio } from './ghostRiderAudio.js';
 
 const ACCEL = 0.34;
 const BRAKE = 0.42;
@@ -158,6 +159,7 @@ export default function GhostRider({ room }) {
     const ghosts = new Map(); // id -> { x,y,angle, tx,ty,tAngle, color }
     const input = { gas: false, brake: false };
     const particles = [];
+    const audio = createGhostRiderAudio();
 
     // Deterministic boost pads floating just above the track (same for everyone).
     const pickups = [];
@@ -178,6 +180,7 @@ export default function GhostRider({ room }) {
           car.boostUntil = performance.now() + BOOST_MS;
           car.spd = Math.min(BOOST_MAX, Math.max(car.spd, 0) + BOOST_KICK);
           emitSparks(car.x, car.y, 14);
+          audio.pickup();
         }
       }
     };
@@ -372,6 +375,7 @@ export default function GhostRider({ room }) {
 
         if (car.x >= trackLength && !car.finished) {
           car.finished = true;
+          audio.finish();
           socket?.emit('game:rt:finish', { roomId });
         }
       } else if (live) {
@@ -400,6 +404,7 @@ export default function GhostRider({ room }) {
             car.crashes += 1;
             car.vx = 0; car.vy = 0; car.spd = 0;
             car.av = (Math.random() < 0.5 ? -1 : 1) * 0.14;
+            audio.crash();
           } else {
             // landing: snap to slope, keep most speed, and let stability absorb roughness
             car.y = groundY;
@@ -410,16 +415,23 @@ export default function GhostRider({ room }) {
             car.spd = (car.vx * Math.cos(ga) + car.vy * Math.sin(ga)) * (tilt > BAD_LANDING_ANGLE ? 0.72 : 0.94);
             if (car.spd > speedCap()) car.spd = speedCap();
             if (Math.abs(car.spd) > 2) emitDust(car.x, groundY, 8 + impact * 0.6, 'rgba(226,198,148,0.78)');
+            audio.land(Math.min(1, impact / 12));
           }
         }
 
         if (car.x >= trackLength && !car.finished) {
           car.finished = true;
+          audio.finish();
           socket?.emit('game:rt:finish', { roomId });
         }
       }
 
       if (live) grabPickups();
+      audio.updateEngine(
+        live && !car.crashed ? Math.abs(car.spd) / BOOST_MAX : 0,
+        live && !car.crashed && input.gas,
+        boosting()
+      );
       updateParticles(dt);
 
       sendState(now);
@@ -903,6 +915,7 @@ export default function GhostRider({ room }) {
     raf = requestAnimationFrame(loop);
 
     return () => {
+      audio.dispose();
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', keydown);

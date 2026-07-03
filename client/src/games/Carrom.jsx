@@ -2,6 +2,7 @@
 // board, takes aim input, replays the shot frames, then settles to state.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
+import { createCarromAudio, clamp01 } from './poolAudio.js';
 import PowerBar from './PowerBar.jsx';
 import ShotClock from './ShotClock.jsx';
 
@@ -10,6 +11,7 @@ const COLORS = { white: '#f4f0e6', black: '#2a2a2a', queen: '#e4453a', striker: 
 const PULL_MAX = 240;      // logical drag length that maps to full power
 const MIN_FIRE = 8;        // a pull below this just sets aim, doesn't fire
 const BLITZ_MS = 20000;
+const SINK_FRAMES = 10;    // replay frames a pocketed coin takes to sink
 
 export function Thumbnail() {
   return (
@@ -60,6 +62,14 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   const [banner, setBanner] = useState(null);
   const lastSeq = useRef(st.seq);
   const rafRef = useRef(0);
+  const lastPosRef = useRef(new Map());  // id -> {x, y, color} seen last frame
+  const seenFrameRef = useRef(-1);
+  const sinksRef = useRef([]);           // cosmetic pocket-sink animations
+  const audioRef = useRef(null);
+  useEffect(() => {
+    audioRef.current = createCarromAudio();
+    return () => audioRef.current?.dispose();
+  }, []);
 
   // transient banner on turn change / foul
   useEffect(() => {
@@ -81,6 +91,9 @@ export default function Carrom({ room, youAreIndex, onMove }) {
     setSlotX(st.striker.x);
     setAim(null);
     setLocked(false);
+    lastPosRef.current = new Map();
+    seenFrameRef.current = -1;
+    sinksRef.current = [];
     const frames = st.lastShot?.frames;
     if (!frames || frames.length === 0) { setFrameIdx(null); return; }
     let i = 0;
@@ -107,7 +120,40 @@ export default function Carrom({ room, youAreIndex, onMove }) {
 
     const playing = frameIdx != null && st.lastShot?.frames;
     if (playing) {
+      if (seenFrameRef.current !== frameIdx) {
+        seenFrameRef.current = frameIdx;
+        // event sounds + pocket-sink queueing, synced to this frame
+        for (const e of st.lastShot.events || []) {
+          if (e.f !== frameIdx) continue;
+          audioRef.current?.play(e.type, clamp01(e.speed / 12));
+          if (e.type === 'pocket') {
+            const from = lastPosRef.current.get(e.id);
+            if (from) {
+              const pocket = st.pockets.reduce((best, p) =>
+                (Math.hypot(p.x - from.x, p.y - from.y) < Math.hypot(best.x - from.x, best.y - from.y) ? p : best));
+              sinksRef.current.push({ color: from.color, from, pocket, startF: frameIdx });
+            }
+          }
+        }
+        for (const d of st.lastShot.frames[frameIdx]) {
+          lastPosRef.current.set(d.id, { x: d.x, y: d.y, color: d.color });
+        }
+      }
       for (const d of st.lastShot.frames[frameIdx]) drawDisc(ctx, d.x, d.y, d.color, st);
+      // cosmetic sinks: pocketed coins ease into the pocket, shrinking and fading
+      for (const s of sinksRef.current) {
+        const p = (frameIdx - s.startF) / SINK_FRAMES;
+        if (p < 0 || p >= 1) continue;
+        const ease = 1 - (1 - p) * (1 - p);
+        const sx = s.from.x + (s.pocket.x - s.from.x) * ease;
+        const sy = s.from.y + (s.pocket.y - s.from.y) * ease;
+        ctx.save();
+        ctx.globalAlpha = 1 - p * 0.7;
+        ctx.translate(sx, sy);
+        ctx.scale(1 - p * 0.7, 1 - p * 0.7);
+        drawDisc(ctx, 0, 0, s.color, st);
+        ctx.restore();
+      }
     } else {
       if (myTurn) drawBaseline(ctx, st, baselineY, slotX);
       for (const c of st.coins) drawDisc(ctx, c.x, c.y, c.color, st);
@@ -136,7 +182,8 @@ export default function Carrom({ room, youAreIndex, onMove }) {
   };
   const onDown = (e) => {
     if (!myTurn || frameIdx != null) return;
-    canvasRef.current.setPointerCapture?.(e.pointerId);
+    // capture can throw (e.g. pointer already released) — aim must still work
+    try { canvasRef.current.setPointerCapture?.(e.pointerId); } catch { /* noop */ }
     const p = toLogical(e);
     if (Math.hypot(p.x - slotX, p.y - baselineY) < st.strikerR * 1.8) {
       // grab the striker: drag sideways to slide, or pull back to aim+power
@@ -192,6 +239,7 @@ export default function Carrom({ room, youAreIndex, onMove }) {
 
   const doFire = (a, pw) => {
     if (!myTurn || !a || strikerBlocked) return;
+    audioRef.current?.play('cue', pw / 100); // flick tap
     onMove({ x: Math.round(slotX), dx: a.dx, dy: a.dy, power: pw });
     setAim(null);
   };

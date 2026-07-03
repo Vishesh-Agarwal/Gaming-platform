@@ -35,7 +35,7 @@ test('the shooter sees a cue strike animation before the replay starts', () => {
 
 test('procedural pool audio: four sound types, mute-aware, intensity clamped', async () => {
   const src = readFileSync(new URL('../src/games/poolAudio.js', import.meta.url), 'utf8');
-  for (const type of ["'ball'", "'rail'", "'pocket'", "'cue'"]) assert.match(src, new RegExp(type));
+  for (const type of ['ball:', 'rail:', 'pocket:', 'cue:']) assert.ok(src.includes(type), type);
   assert.match(src, /gameSoundMuted/);
   const { clamp01 } = await import('../src/games/poolAudio.js');
   assert.equal(clamp01(-2), 0);

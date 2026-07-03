@@ -1,7 +1,8 @@
-// Procedural pool SFX (Web Audio, asset-free) — same pattern as the Karts
-// audio module. createPoolAudio() returns { play(type, intensity01), dispose };
-// a no-op stub when Web Audio is unavailable. Respects the platform mute flag
-// (localStorage gameSoundMuted, toggled by the Game header Sound button).
+// Procedural impact SFX for the disc-physics games (Web Audio, asset-free) —
+// same pattern as the Karts audio module. createPoolAudio()/createCarromAudio()
+// return { play(type, intensity01), dispose }; a no-op stub when Web Audio is
+// unavailable. Respects the platform mute flag (localStorage gameSoundMuted,
+// toggled by the Game header Sound button).
 
 export function clamp01(v) {
   return Math.max(0, Math.min(1, Number(v) || 0));
@@ -11,7 +12,8 @@ function muted() {
   try { return window.localStorage?.getItem('gameSoundMuted') === '1'; } catch { return false; }
 }
 
-export function createPoolAudio() {
+// Shared synth engine; `recipes[type](k, fx)` triggers the voices for one hit.
+function createImpactAudio(recipes) {
   const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (!AC) return { play() {}, dispose() {} };
   const ctx = new AC();
@@ -19,7 +21,7 @@ export function createPoolAudio() {
   master.gain.value = 0.5;
   master.connect(ctx.destination);
 
-  // Short filtered noise burst — the "click" body of ball/rail impacts.
+  // Short filtered noise burst — the "click"/"clack" body of impacts.
   const noiseBurst = (dur, freq, q, gain, when = 0) => {
     const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -50,27 +52,57 @@ export function createPoolAudio() {
     o.stop(t0 + dur + 0.02);
   };
 
-  const play = (type, intensity = 0.5) => {
-    if (muted()) return;
-    const k = clamp01(intensity);
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    if (type === 'ball') {
+  const fx = { noiseBurst, tone };
+  return {
+    play(type, intensity = 0.5) {
+      if (muted()) return;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      recipes[type]?.(clamp01(intensity), fx);
+    },
+    dispose() { ctx.close().catch(() => {}); },
+  };
+}
+
+// Pool: phenolic balls on slate — glassy clicks, soft rail thud.
+export function createPoolAudio() {
+  return createImpactAudio({
+    ball: (k, { noiseBurst, tone }) => {
       noiseBurst(0.006 + 0.006 * k, 1800 + 1400 * k, 1.2, 0.25 + 0.55 * k);
       tone(2400 + 800 * k, 1800, 0.03, 0.06 + 0.1 * k, 'triangle');
-    } else if (type === 'rail') {
+    },
+    rail: (k, { noiseBurst, tone }) => {
       noiseBurst(0.02, 420, 0.9, 0.18 + 0.35 * k);
       tone(150 + 60 * k, 90, 0.08, 0.12 + 0.18 * k);
-    } else if (type === 'pocket') {
+    },
+    pocket: (k, { noiseBurst, tone }) => {
       tone(220, 90, 0.18, 0.3 + 0.2 * k);
       noiseBurst(0.03, 900, 1.5, 0.12, 0.1);
       noiseBurst(0.02, 700, 1.5, 0.08, 0.19);
-    } else if (type === 'cue') {
+    },
+    cue: (k, { noiseBurst }) => {
       noiseBurst(0.008, 1200 + 800 * k, 1.4, 0.2 + 0.4 * k);
-    }
-  };
+    },
+  });
+}
 
-  return {
-    play,
-    dispose() { ctx.close().catch(() => {}); },
-  };
+// Carrom: wooden coins on plywood — harder, brighter "clack", woody frame knock.
+export function createCarromAudio() {
+  return createImpactAudio({
+    ball: (k, { noiseBurst, tone }) => {
+      noiseBurst(0.005 + 0.005 * k, 2600 + 1600 * k, 1.6, 0.3 + 0.6 * k);
+      tone(3200 + 600 * k, 2300, 0.025, 0.08 + 0.1 * k, 'triangle');
+    },
+    rail: (k, { noiseBurst, tone }) => {
+      noiseBurst(0.015, 700, 1.1, 0.2 + 0.35 * k);
+      tone(240 + 80 * k, 130, 0.07, 0.14 + 0.16 * k);
+    },
+    pocket: (k, { noiseBurst, tone }) => {
+      tone(320, 120, 0.14, 0.26 + 0.2 * k);
+      noiseBurst(0.025, 1100, 1.4, 0.12, 0.08);
+      noiseBurst(0.02, 800, 1.4, 0.08, 0.16);
+    },
+    cue: (k, { noiseBurst }) => {
+      noiseBurst(0.007, 1600 + 900 * k, 1.5, 0.22 + 0.4 * k);
+    },
+  });
 }

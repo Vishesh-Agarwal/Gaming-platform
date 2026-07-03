@@ -20,3 +20,15 @@ test('rails have wood grain and brass diamond sights', () => {
   assert.match(pool, /grain/i);
   assert.match(pool, /diamond/i);
 });
+
+test('pocketed balls sink into the pocket instead of vanishing', () => {
+  assert.match(pool, /sinks?Ref/);
+  assert.match(pool, /type === 'pocket'/);
+  assert.match(pool, /SINK_FRAMES/);
+});
+
+test('the shooter sees a cue strike animation before the replay starts', () => {
+  assert.match(pool, /STRIKE_MS/);
+  assert.match(pool, /lastFireRef/);
+  assert.match(pool, /by === youAreIndex/);
+});

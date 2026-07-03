@@ -12,6 +12,8 @@ const MIN_FIRE = 8;
 const BLITZ_MS = 20000;
 const PREDICT_CUE_LEN = 190;
 const PREDICT_OBJECT_LEN = 70;
+const SINK_FRAMES = 10;             // replay frames a potted ball takes to sink
+const STRIKE_MS = 130;              // cue thrust animation before the replay
 
 // A pool ball's id IS its number, so color + stripe derive straight from the id.
 function ballBase(id) {
@@ -74,6 +76,10 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const rafRef = useRef(0);
   const rollRef = useRef(createRollState()); // per-ball roll during the replay
   const rollFrameRef = useRef(-1);
+  const sinksRef = useRef([]);               // cosmetic pocket-sink animations
+  const lastFireRef = useRef(null);          // { aim, power } captured when WE fire
+  const [strike, setStrike] = useState(null); // { t: 0..1 } cue thrust phase
+  const strikeRafRef = useRef(0);
 
   useEffect(() => {
     if (room.status !== 'playing') return;
@@ -93,18 +99,41 @@ export default function Pool({ room, youAreIndex, onMove }) {
     setAim(null); setPower(0); setCuePlace(null); setSpin({ along: 0, side: 0 });
     rollRef.current = createRollState();
     rollFrameRef.current = -1;
+    sinksRef.current = [];
     const frames = st.lastShot?.frames;
     if (!frames || frames.length === 0) { setFrameIdx(null); return; }
-    let i = 0; setFrameIdx(0);
+
+    let i = 0;
     const tick = () => {
       i += 1;
       if (i >= frames.length) { setFrameIdx(null); return; }
       setFrameIdx(i);
       rafRef.current = requestAnimationFrame(tick);
     };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [st.seq]);
+    const startReplay = () => {
+      setStrike(null);
+      setFrameIdx(0);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    // Our own shot: thrust the cue into the ball first, then roll the replay.
+    const fire = lastFireRef.current;
+    lastFireRef.current = null;
+    if (st.lastShot?.by === youAreIndex && fire) {
+      const t0 = performance.now();
+      const strikeTick = (now) => {
+        const t = Math.min(1, (now - t0) / STRIKE_MS);
+        setStrike({ t, ...fire });
+        if (t < 1) strikeRafRef.current = requestAnimationFrame(strikeTick);
+        else startReplay();
+      };
+      setStrike({ t: 0, ...fire });
+      strikeRafRef.current = requestAnimationFrame(strikeTick);
+    } else {
+      startReplay();
+    }
+    return () => { cancelAnimationFrame(rafRef.current); cancelAnimationFrame(strikeRafRef.current); };
+  }, [st.seq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // draw
   useEffect(() => {
@@ -115,14 +144,51 @@ export default function Pool({ room, youAreIndex, onMove }) {
     ctx.scale(scale, scale);
     if (flip) { ctx.translate(st.W, st.H); ctx.rotate(Math.PI); } // rotate 180° for player 2
     drawTable(ctx, st);
+    if (strike && st.lastShot?.frames?.length) {
+      // Cue-thrust phase: pre-shot positions with the stick closing its gap.
+      for (const d of st.lastShot.frames[0]) {
+        if (d.id !== 0) drawBall(ctx, d.x, d.y, d.id, st.ballR);
+      }
+      const cue0 = st.lastShot.frames[0].find((d) => d.id === 0);
+      if (cue0) {
+        drawBall(ctx, cue0.x, cue0.y, 0, st.ballR);
+        drawCueStick(ctx, cue0, strike.aim, strike.power * (1 - strike.t), st.ballR);
+      }
+      ctx.restore();
+      return;
+    }
     const playing = frameIdx != null && st.lastShot?.frames;
     if (playing) {
       if (rollFrameRef.current !== frameIdx) {
         advanceRoll(rollRef.current, st.lastShot.frames[frameIdx], st.ballR);
         rollFrameRef.current = frameIdx;
+        // queue pocket-sink animations the moment their event frame is reached
+        for (const e of st.lastShot.events || []) {
+          if (e.f === frameIdx && e.type === 'pocket') {
+            const last = rollRef.current.get(e.id);
+            const from = last ? { x: last.x, y: last.y } : null;
+            if (from) {
+              const pocket = st.pockets.reduce((best, p) =>
+                (Math.hypot(p.x - from.x, p.y - from.y) < Math.hypot(best.x - from.x, best.y - from.y) ? p : best));
+              sinksRef.current.push({ id: e.id, from, pocket, startF: frameIdx });
+            }
+          }
+        }
       }
       for (const d of st.lastShot.frames[frameIdx]) {
         drawBall(ctx, d.x, d.y, d.id, st.ballR, rollFor(rollRef.current, d.id));
+      }
+      // cosmetic sinks: potted balls ease into the pocket, shrinking and fading
+      for (const s of sinksRef.current) {
+        const p = (frameIdx - s.startF) / SINK_FRAMES;
+        if (p < 0 || p >= 1) continue;
+        const ease = 1 - (1 - p) * (1 - p);
+        const sx = s.from.x + (s.pocket.x - s.from.x) * ease;
+        const sy = s.from.y + (s.pocket.y - s.from.y) * ease;
+        ctx.save();
+        ctx.globalAlpha = 1 - p * 0.7;
+        drawBall(ctx, sx, sy, s.id, st.ballR * (1 - p * 0.75));
+        ctx.restore();
       }
     } else {
       for (const b of st.balls) if (b.id !== 0) drawBall(ctx, b.x, b.y, b.id, st.ballR);
@@ -135,7 +201,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
       }
     }
     ctx.restore();
-  }, [st, frameIdx, aim, power, baseCue, myTurn, canPlace, scale, objectBalls, bounds, flip]);
+  }, [st, frameIdx, aim, power, baseCue, myTurn, canPlace, scale, objectBalls, bounds, flip, strike]);
 
   // Map a pointer event to logical table coords (robust to CSS scaling + the flip).
   const toLogical = (e) => {
@@ -174,6 +240,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
 
   const doShoot = (a, pw) => {
     if (!myTurn || !a || (a.dx === 0 && a.dy === 0)) return;
+    lastFireRef.current = { aim: { ...a }, power: pw }; // drives the strike animation
     onMove({ dx: a.dx, dy: a.dy, power: pw, spin, ...(cuePlace ? { cue: cuePlace } : {}) });
     setAim(null);
     setPower(0);

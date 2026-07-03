@@ -284,16 +284,52 @@ function drawBoard(ctx, st) {
   const frame = ctx.createLinearGradient(0, 0, W, H);
   frame.addColorStop(0, '#5a3a1c'); frame.addColorStop(1, '#3a2410');
   ctx.fillStyle = frame; ctx.fillRect(0, 0, W, H);
-  // playing surface (light wood)
+  // playing surface (light plywood)
   const surf = ctx.createLinearGradient(0, 0, 0, H);
   surf.addColorStop(0, '#e7c885'); surf.addColorStop(1, '#d9b676');
   const pad = ins - 18;
   ctx.fillStyle = surf; ctx.fillRect(pad, pad, W - 2 * pad, H - 2 * pad);
-  ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 4; ctx.strokeRect(pad, pad, W - 2 * pad, H - 2 * pad);
 
-  // corner pockets with brass rings
+  // plywood grain: faint wavering horizontal strokes across the surface
+  ctx.save();
+  ctx.strokeStyle = 'rgba(120, 80, 30, 0.07)';
+  ctx.lineWidth = 1;
+  for (let y0 = pad + 12; y0 < H - pad - 8; y0 += 22) {
+    ctx.beginPath();
+    for (let x = pad + 8; x < W - pad - 8; x += 30) {
+      const yy = y0 + Math.sin(x * 0.021 + y0 * 0.6) * 3;
+      if (x === pad + 8) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // overhead lamp: warm pool of light in the middle, darker toward the frame,
+  // plus a corner vignette so the board sits under a single light
+  const lamp = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.68);
+  lamp.addColorStop(0, 'rgba(255, 246, 214, 0.20)');
+  lamp.addColorStop(0.5, 'rgba(255, 246, 214, 0.04)');
+  lamp.addColorStop(1, 'rgba(60, 30, 5, 0.26)');
+  ctx.fillStyle = lamp; ctx.fillRect(pad, pad, W - 2 * pad, H - 2 * pad);
+  const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.52, W / 2, H / 2, W * 0.75);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(20, 10, 0, 0.28)');
+  ctx.fillStyle = vignette; ctx.fillRect(pad, pad, W - 2 * pad, H - 2 * pad);
+
+  // inner frame shadow so the surface reads as recessed
+  ctx.strokeStyle = 'rgba(30, 16, 4, 0.35)'; ctx.lineWidth = 10;
+  ctx.strokeRect(pad + 5, pad + 5, W - 2 * pad - 10, H - 2 * pad - 10);
+  ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 4;
+  ctx.strokeRect(pad, pad, W - 2 * pad, H - 2 * pad);
+
+  // corner pockets: brass ring, dark cavity, inner depth gradient
   for (const p of st.pockets) {
     ctx.beginPath(); ctx.arc(p.x, p.y, st.pocketR, 0, Math.PI * 2); ctx.fillStyle = '#140d06'; ctx.fill();
+    const depth = ctx.createRadialGradient(p.x, p.y - st.pocketR * 0.3, st.pocketR * 0.15, p.x, p.y, st.pocketR);
+    depth.addColorStop(0, 'rgba(70, 52, 30, 0.55)');
+    depth.addColorStop(0.6, 'rgba(16, 10, 4, 0.3)');
+    depth.addColorStop(1, 'rgba(0, 0, 0, 0.92)');
+    ctx.beginPath(); ctx.arc(p.x, p.y, st.pocketR, 0, Math.PI * 2); ctx.fillStyle = depth; ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = '#b9893f'; ctx.stroke();
   }
 
@@ -354,20 +390,54 @@ function drawBaseline(ctx, st, baselineY, slotX) {
   ctx.restore();
 }
 
+// Carrom men are flat wooden discs, not balls: an edge-thickness rim below the
+// face, concentric groove rings on top, and a ring+star inlay on the striker.
 function drawDisc(ctx, x, y, color, st) {
   const r = color === 'striker' ? st.strikerR : st.coinR;
+  const base = COLORS[color] || '#888';
   // contact shadow
-  ctx.beginPath(); ctx.ellipse(x + 1.5, y + 2.5, r, r * 0.92, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
-  // body
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = COLORS[color] || '#888'; ctx.fill();
-  // spherical shading
-  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
-  g.addColorStop(0, 'rgba(255,255,255,0.5)');
-  g.addColorStop(0.4, 'rgba(255,255,255,0.06)');
-  g.addColorStop(1, 'rgba(0,0,0,0.32)');
+  ctx.beginPath(); ctx.ellipse(x + 1.5, y + 3, r, r * 0.9, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
+  // edge rim (the disc's side wall, slightly below the face)
+  ctx.beginPath(); ctx.arc(x, y + 1.8, r, 0, Math.PI * 2);
+  ctx.fillStyle = shadeRim(color); ctx.fill();
+  // face
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = base; ctx.fill();
+  // top lighting (soft, flat — these are discs, not spheres)
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.15, x, y, r);
+  g.addColorStop(0, 'rgba(255,255,255,0.38)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+  g.addColorStop(1, 'rgba(0,0,0,0.22)');
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  // concentric groove rings
+  ctx.strokeStyle = color === 'black' ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.18)';
+  ctx.lineWidth = 1.2;
+  for (const k of [0.72, 0.45]) {
+    ctx.beginPath(); ctx.arc(x, y, r * k, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (color === 'striker') {
+    // striker inlay: inner ring + six-point star
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(x, y, r * 0.28, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * r * 0.28, y + Math.sin(a) * r * 0.28);
+      ctx.lineTo(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62);
+      ctx.stroke();
+    }
+  }
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+}
+
+// Darker side-wall tint for the disc's edge rim.
+function shadeRim(color) {
+  if (color === 'white') return '#b9ac93';
+  if (color === 'black') return '#0d0d0d';
+  if (color === 'queen') return '#8f271f';
+  return '#3956a8'; // striker
 }
 
 // Full trajectory guideline: cue path (with rail bounces), a ghost striker at the

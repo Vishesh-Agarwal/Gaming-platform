@@ -31,10 +31,14 @@ function buildArena(scene, map, mat) {
   scene.add(asphalt);
 
   // Grass aprons around obstacle/plateau bases (reads as ground patches).
+  // Cylinders get round aprons so no square grass corners poke out.
   const apronMat = mat.grass;
   const addApron = (o) => {
     const f = footprint(o);
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(f.w + 4, f.d + 4), apronMat);
+    const geo = o.kind === 'cyl'
+      ? new THREE.CircleGeometry(f.w / 2 + 2, 28)
+      : new THREE.PlaneGeometry(f.w + 4, f.d + 4);
+    const apron = new THREE.Mesh(geo, apronMat);
     apron.rotation.x = -Math.PI / 2;
     apron.position.set(f.x, 0.02, f.z);
     apron.receiveShadow = true;

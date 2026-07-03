@@ -138,6 +138,9 @@ function makeBoostTexture() {
   c.width = c.height = 128;
   const g = c.getContext('2d');
   g.clearRect(0, 0, 128, 128);
+  // inset the chevrons (scale 0.72 about the centre) so the circular pad cut
+  // never clips the arrow corners
+  g.translate(64, 64); g.scale(0.72, 0.72); g.translate(-64, -64);
   g.strokeStyle = '#f2c200';
   g.lineWidth = 12;
   g.lineCap = 'round';

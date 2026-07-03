@@ -223,7 +223,8 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const aimFromPoint = (p) => ({ dx: p.x - baseCue.x, dy: p.y - baseCue.y });
   const onDown = (e) => {
     if (!myTurn || frameIdx != null) return;
-    canvasRef.current.setPointerCapture?.(e.pointerId);
+    // capture can throw (e.g. pointer already released) — aim must still work
+    try { canvasRef.current.setPointerCapture?.(e.pointerId); } catch { /* noop */ }
     const p = toLogical(e);
     const onCue = Math.hypot(p.x - baseCue.x, p.y - baseCue.y) < st.ballR * 2.2;
     if (canPlace && onCue) { setDragging('cue'); return; }
@@ -614,7 +615,7 @@ function PoolPowerStick({ power, disabled, cuePullFrom, onPreview, onFire }) {
 
   const down = (event) => {
     if (disabled) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* noop */ }
     const rect = stickRef.current.getBoundingClientRect();
     pullRef.current = { startY: Math.min(event.clientY, rect.top + 18), power: 0 };
   };
@@ -660,7 +661,7 @@ function SpinPad({ spin, onChange }) {
         className="pool-spin"
         ref={ref}
         title="Spin (english): click where the cue tip strikes the ball"
-        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e); }}
+        onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* noop */ } set(e); }}
         onPointerMove={(e) => { if (e.buttons) set(e); }}
       >
         <span className="pool-spin-cross" />

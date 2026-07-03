@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { predictShot } from './aimPredict.js';
 import { createRollState, advanceRoll, rollFor } from './poolRoll.js';
+import { createPoolAudio, clamp01 } from './poolAudio.js';
 import ShotClock from './ShotClock.jsx';
 
 const VIEW_W = 900;                 // on-screen width; logical table is 1000x500 (2:1)
@@ -80,6 +81,11 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const lastFireRef = useRef(null);          // { aim, power } captured when WE fire
   const [strike, setStrike] = useState(null); // { t: 0..1 } cue thrust phase
   const strikeRafRef = useRef(0);
+  const audioRef = useRef(null);
+  useEffect(() => {
+    audioRef.current = createPoolAudio();
+    return () => audioRef.current?.dispose();
+  }, []);
 
   useEffect(() => {
     if (room.status !== 'playing') return;
@@ -162,9 +168,11 @@ export default function Pool({ room, youAreIndex, onMove }) {
       if (rollFrameRef.current !== frameIdx) {
         advanceRoll(rollRef.current, st.lastShot.frames[frameIdx], st.ballR);
         rollFrameRef.current = frameIdx;
-        // queue pocket-sink animations the moment their event frame is reached
+        // fire event sounds + queue pocket sinks the moment their frame arrives
         for (const e of st.lastShot.events || []) {
-          if (e.f === frameIdx && e.type === 'pocket') {
+          if (e.f !== frameIdx) continue;
+          audioRef.current?.play(e.type, clamp01(e.speed / 12));
+          if (e.type === 'pocket') {
             const last = rollRef.current.get(e.id);
             const from = last ? { x: last.x, y: last.y } : null;
             if (from) {
@@ -241,6 +249,7 @@ export default function Pool({ room, youAreIndex, onMove }) {
   const doShoot = (a, pw) => {
     if (!myTurn || !a || (a.dx === 0 && a.dy === 0)) return;
     lastFireRef.current = { aim: { ...a }, power: pw }; // drives the strike animation
+    audioRef.current?.play('cue', pw / 100);
     onMove({ dx: a.dx, dy: a.dy, power: pw, spin, ...(cuePlace ? { cue: cuePlace } : {}) });
     setAim(null);
     setPower(0);

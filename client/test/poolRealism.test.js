@@ -32,3 +32,19 @@ test('the shooter sees a cue strike animation before the replay starts', () => {
   assert.match(pool, /lastFireRef/);
   assert.match(pool, /by === youAreIndex/);
 });
+
+test('procedural pool audio: four sound types, mute-aware, intensity clamped', async () => {
+  const src = readFileSync(new URL('../src/games/poolAudio.js', import.meta.url), 'utf8');
+  for (const type of ["'ball'", "'rail'", "'pocket'", "'cue'"]) assert.match(src, new RegExp(type));
+  assert.match(src, /gameSoundMuted/);
+  const { clamp01 } = await import('../src/games/poolAudio.js');
+  assert.equal(clamp01(-2), 0);
+  assert.equal(clamp01(0.4), 0.4);
+  assert.equal(clamp01(9), 1);
+});
+
+test('replay plays event sounds synced to the frame index', () => {
+  assert.match(pool, /createPoolAudio/);
+  assert.match(pool, /audioRef/);
+  assert.match(pool, /play\(e\.type/);
+});

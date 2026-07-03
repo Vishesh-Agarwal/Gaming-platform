@@ -31,12 +31,15 @@ const TABLE = {
 
 // Carrom's public API is unchanged: frames and pocketed carry `color` (looked up
 // by id), finalDiscs keep every input field (color/r/mass ride through the solver).
+// The solver's events timeline is forwarded so the client can sync sounds and
+// pocket-sink animations to the replay; pocket events gain the disc's color.
 export function simulateShot(discs) {
   const colorById = new Map(discs.map((d) => [d.id, d.color]));
-  const { frames, finalDiscs, pocketed } = solve(discs, TABLE);
+  const { frames, finalDiscs, pocketed, events } = solve(discs, TABLE);
   return {
     frames: frames.map((f) => f.map((d) => ({ id: d.id, color: colorById.get(d.id), x: d.x, y: d.y }))),
     finalDiscs,
     pocketed: pocketed.map((p) => ({ id: p.id, color: colorById.get(p.id) })),
+    events: events.map((e) => (e.type === 'pocket' ? { ...e, color: colorById.get(e.id) } : e)),
   };
 }

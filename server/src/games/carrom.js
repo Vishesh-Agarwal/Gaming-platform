@@ -123,13 +123,13 @@ export function applyMove(state, seat, move) {
     return { error: 'A coin is blocking the striker — slide it to a clear spot.' };
   }
   const discs = [...state.coins.map(toDisc), striker];
-  const { frames, finalDiscs, pocketed } = simulateShot(discs);
+  const { frames, finalDiscs, pocketed, events } = simulateShot(discs);
 
-  if (state.mode === 'points') return { state: resolvePoints(state, seat, frames, finalDiscs, pocketed) };
-  return { state: resolveClassic(state, seat, striker, frames, finalDiscs, pocketed) };
+  if (state.mode === 'points') return { state: resolvePoints(state, seat, frames, finalDiscs, pocketed, events) };
+  return { state: resolveClassic(state, seat, striker, frames, finalDiscs, pocketed, events) };
 }
 
-function resolveClassic(state, seat, striker, frames, finalDiscs, pocketed) {
+function resolveClassic(state, seat, striker, frames, finalDiscs, pocketed, events) {
   const colors = { ...state.colors };
   const pocketedByColor = { ...state.pocketedByColor };
   let { queenAwaitingCover, queenCoveredBy, queenOnBoard, nextId } = state;
@@ -190,7 +190,7 @@ function resolveClassic(state, seat, striker, frames, finalDiscs, pocketed) {
     turn: continues ? seat : 1 - seat,
     colors, pocketedByColor, queenOnBoard, queenAwaitingCover, queenCoveredBy,
     scores, nextId,
-    lastShot: { frames, pocketed, foul, queenReturned, by: seat },
+    lastShot: { frames, events, pocketed, foul, queenReturned, by: seat },
     seq: state.seq + 1,
   };
   const r = getResult(next);
@@ -198,7 +198,7 @@ function resolveClassic(state, seat, striker, frames, finalDiscs, pocketed) {
   return next;
 }
 
-function resolvePoints(state, seat, frames, finalDiscs, pocketed) {
+function resolvePoints(state, seat, frames, finalDiscs, pocketed, events) {
   const scores = state.scores.slice();
   const strikerPocketed = pocketed.some((p) => p.id === 'striker');
   const coinPockets = pocketed.filter((p) => p.id !== 'striker');
@@ -220,7 +220,7 @@ function resolvePoints(state, seat, frames, finalDiscs, pocketed) {
     striker: { x: finalDiscs.find((d) => d.id === 'striker')?.x ?? state.striker.x, y: baselineY(continues ? seat : 1 - seat) },
     turn: continues ? seat : 1 - seat,
     scores,
-    lastShot: { frames, pocketed, foul, by: seat },
+    lastShot: { frames, events, pocketed, foul, by: seat },
     seq: state.seq + 1,
   };
   const r = getResult(next);
@@ -262,7 +262,7 @@ export function onTimeout(state) {
     ...state,
     turn: 1 - state.turn,
     queenAwaitingCover: null, // a pending cover is lost when the clock runs out
-    lastShot: { frames: [], pocketed: [], foul: 'timeout', by: state.turn },
+    lastShot: { frames: [], events: [], pocketed: [], foul: 'timeout', by: state.turn },
     seq: state.seq + 1,
   };
   return { state: next };

@@ -45,8 +45,8 @@ test('pool landscape styles prioritize the table and keep cue tools reachable', 
   assert.match(css, /@media\s*\(max-width:\s*1100px\)\s*and\s*\(orientation:\s*landscape\)/);
 });
 
-test('pool table art is closer to the 8-ball reference with teal rails and inlays', () => {
-  assert.match(pool, /#70d7d5/);
-  assert.match(pool, /drawRailInlays/);
+test('pool table art matches the realism pass (lit felt, wood rails, deep pockets)', () => {
+  assert.match(pool, /drawRailWood/);
+  assert.match(pool, /drawPocket/);
   assert.match(pool, /drawFeltPattern/);
 });

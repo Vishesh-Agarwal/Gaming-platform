@@ -272,49 +272,112 @@ function MiniBall({ id, potted, target }) {
 }
 
 function drawTable(ctx, st) {
-  ctx.fillStyle = '#101a33';
+  // surround (floor beneath the table edge)
+  ctx.fillStyle = '#0b0f1c';
   ctx.fillRect(0, 0, st.W, st.H);
-  ctx.fillStyle = '#4b2119';
-  ctx.fillRect(18, 18, st.W - 36, st.H - 36);
-  ctx.fillStyle = '#70d7d5';
+
+  // wooden outer frame with grain + inner gloss edge
+  drawRailWood(ctx, st);
+
+  // cushion band (rubber) between wood and cloth
+  ctx.fillStyle = '#124b34';
   ctx.fillRect(34, 34, st.W - 68, st.H - 68);
-  drawRailInlays(ctx, st);
-  ctx.fillStyle = '#1d6b62';
+  ctx.fillStyle = '#0e3d2a';
   ctx.fillRect(36, 36, st.W - 72, st.H - 72);
+
+  // felt: deep green under an overhead lamp — bright pool of light in the
+  // middle fading to darker edges, plus a corner vignette.
+  ctx.fillStyle = '#1a6f4e';
+  ctx.fillRect(46, 46, st.W - 92, st.H - 92);
+  const lamp = ctx.createRadialGradient(st.W / 2, st.H * 0.42, 40, st.W / 2, st.H / 2, st.W * 0.62);
+  lamp.addColorStop(0, 'rgba(255,250,220,0.14)');
+  lamp.addColorStop(0.45, 'rgba(255,250,220,0.03)');
+  lamp.addColorStop(1, 'rgba(2,12,8,0.38)');
+  ctx.fillStyle = lamp;
+  ctx.fillRect(46, 46, st.W - 92, st.H - 92);
+  // corner vignette so the cloth reads as fabric under a single light
+  const vignette = ctx.createRadialGradient(st.W / 2, st.H / 2, st.H * 0.55, st.W / 2, st.H / 2, st.W * 0.72);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(46, 46, st.W - 92, st.H - 92);
   drawFeltPattern(ctx, st);
-  ctx.fillStyle = '#123f3a';
-  ctx.fillRect(62, 62, st.W - 124, 22);
-  ctx.fillRect(62, st.H - 84, st.W - 124, 22);
-  ctx.fillRect(62, 62, 22, st.H - 124);
-  ctx.fillRect(st.W - 84, 62, 22, st.H - 124);
-  ctx.fillStyle = '#0c1f16';
-  for (const p of st.pockets) {
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 9, 0, Math.PI * 2); ctx.fillStyle = '#54140f'; ctx.fill();
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fillStyle = '#040606'; ctx.fill();
-  }
-  // head string (kitchen line)
-  ctx.strokeStyle = 'rgba(232,255,250,0.22)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(st.W / 4, 46); ctx.lineTo(st.W / 4, st.H - 46); ctx.stroke();
+
+  // pockets with jaw depth
+  for (const p of st.pockets) drawPocket(ctx, p);
+
+  // head string (kitchen line) + foot spot
+  ctx.strokeStyle = 'rgba(232,255,250,0.18)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(st.W / 4, 48); ctx.lineTo(st.W / 4, st.H - 48); ctx.stroke();
+  ctx.beginPath(); ctx.arc(st.W * 0.75, st.H / 2, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(232,255,250,0.25)'; ctx.fill();
 }
 
-function drawRailInlays(ctx, st) {
+// Wooden rails: warm base, along-rail grain strokes, a gloss highlight on the
+// inner edge, and brass diamond sights at the standard rail positions.
+function drawRailWood(ctx, st) {
   ctx.save();
-  ctx.fillStyle = 'rgba(255, 246, 214, 0.78)';
-  const marks = [190, 390, 610, 810];
-  for (const x of marks) {
-    ctx.fillRect(x - 48, 38, 96, 16);
-    ctx.fillRect(x - 48, st.H - 54, 96, 16);
+  ctx.fillStyle = '#4a2c16';
+  ctx.fillRect(14, 14, st.W - 28, st.H - 28);
+  const woodLight = ctx.createLinearGradient(0, 14, 0, st.H - 14);
+  woodLight.addColorStop(0, 'rgba(255,205,150,0.16)');
+  woodLight.addColorStop(0.5, 'rgba(0,0,0,0.05)');
+  woodLight.addColorStop(1, 'rgba(0,0,0,0.28)');
+  ctx.fillStyle = woodLight;
+  ctx.fillRect(14, 14, st.W - 28, st.H - 28);
+  // grain: long wavering strokes on the horizontal rails, short on verticals
+  ctx.strokeStyle = 'rgba(30,14,4,0.35)';
+  ctx.lineWidth = 1;
+  for (const y0 of [20, 26, st.H - 27, st.H - 21]) {
+    ctx.beginPath();
+    for (let x = 20; x < st.W - 20; x += 24) {
+      const yy = y0 + Math.sin(x * 0.05 + y0) * 1.6;
+      if (x === 20) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
   }
-  for (const y of [150, 350]) {
-    ctx.fillRect(38, y - 40, 16, 80);
-    ctx.fillRect(st.W - 54, y - 40, 16, 80);
+  for (const x0 of [20, 26, st.W - 27, st.W - 21]) {
+    ctx.beginPath();
+    for (let y = 20; y < st.H - 20; y += 24) {
+      const xx = x0 + Math.sin(y * 0.05 + x0) * 1.6;
+      if (y === 20) ctx.moveTo(xx, y); else ctx.lineTo(xx, y);
+    }
+    ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(19, 31, 48, 0.72)';
-  for (const x of [250, 500, 750]) {
-    ctx.beginPath(); ctx.arc(x, 54, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x, st.H - 54, 5, 0, Math.PI * 2); ctx.fill();
-  }
+  // gloss highlight along the inner wooden edge
+  ctx.strokeStyle = 'rgba(255,232,190,0.28)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(33, 33, st.W - 66, st.H - 66);
+
+  // brass diamond sights (3 per half-rail on the long rails, 1 mid short rail)
+  ctx.fillStyle = '#d9b25c';
+  const diamond = (x, y) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-4, -4, 8, 8);
+    ctx.restore();
+  };
+  for (const x of [171, 296, 421, 579, 704, 829]) { diamond(x, 24); diamond(x, st.H - 24); }
+  for (const y of [150, 250, 350]) { diamond(24, y); diamond(st.W - 24, y); }
   ctx.restore();
+}
+
+// A pocket that reads as a hole: leather-dark rim ring, black cavity, and an
+// inner radial shadow for depth.
+function drawPocket(ctx, p) {
+  ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 9, 0, Math.PI * 2);
+  ctx.fillStyle = '#2b1409'; ctx.fill();
+  ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#120a05'; ctx.fill();
+  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fillStyle = '#020404'; ctx.fill();
+  const depth = ctx.createRadialGradient(p.x, p.y - p.r * 0.35, p.r * 0.15, p.x, p.y, p.r);
+  depth.addColorStop(0, 'rgba(40,48,46,0.5)');
+  depth.addColorStop(0.6, 'rgba(6,10,9,0.2)');
+  depth.addColorStop(1, 'rgba(0,0,0,0.9)');
+  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fillStyle = depth; ctx.fill();
 }
 
 function drawFeltPattern(ctx, st) {

@@ -79,6 +79,7 @@ const registry = {
   },
   ludo: {
     name: 'Ludo',
+    botCap: 3,
     Component: Ludo,
     thumbnail: LudoThumb,
     accent: '#e4453a',

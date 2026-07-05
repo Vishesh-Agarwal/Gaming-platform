@@ -7,6 +7,12 @@ import { emitToUser } from './presence.js';
 
 const clocks = new Map(); // roomId -> timeout id
 
+// socketHandlers registers scheduleBotTurn here (avoids a circular import), so
+// a bot whose turn arrives via an opponent's TIMEOUT plays immediately instead
+// of stalling until its own clock expires.
+let botNudge = null;
+export function setBotNudge(fn) { botNudge = fn; }
+
 export function armTurnClock(io, roomId) {
   stopTurnClock(roomId);
   const endsAt = getTurnEndsAt(roomId);
@@ -21,6 +27,7 @@ export function armTurnClock(io, roomId) {
       for (const pid of out.players) emitToUser(io, pid, 'game:over', { room: out.rooms?.get(pid) || out.room });
     } else {
       armTurnClock(io, roomId); // next player's turn
+      botNudge?.(roomId);
     }
   }, delay);
   clocks.set(roomId, id);

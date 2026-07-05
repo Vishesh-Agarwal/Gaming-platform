@@ -36,7 +36,7 @@ import {
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
 import { setProgressionNotifier } from './progression.js';
-import { armTurnClock, stopTurnClock } from './turnclock.js';
+import { armTurnClock, setBotNudge, stopTurnClock } from './turnclock.js';
 import {
   createLobby,
   quickPlay,
@@ -87,6 +87,9 @@ export function initSockets(io) {
   setProgressionNotifier((userId, summary) => {
     emitToUser(io, userId, 'progression:update', summary);
   });
+
+  // A turn that expires into a bot's turn should start the bot right away.
+  setBotNudge((roomId) => scheduleBotTurn(io, roomId));
 
   io.on('connection', (socket) => {
     const me = socket.user; // { id, username }

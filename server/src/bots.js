@@ -1,4 +1,4 @@
-const BOT_GAMES = new Set(['tictactoe', 'connect4', 'reversi', 'dotsboxes', 'microchess', 'uno', 'codenames', 'karts']);
+const BOT_GAMES = new Set(['tictactoe', 'connect4', 'reversi', 'dotsboxes', 'microchess', 'uno', 'codenames', 'karts', 'ludo']);
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const copy = (value) => structuredClone(value);
@@ -71,6 +71,11 @@ function candidatesFor(gameId, state, seat) {
   if (gameId === 'uno') {
     const hand = state.secret?.hands?.[seat] || [];
     return [...hand.map((card, index) => (card.color === 'wild' ? { index, color: state.top?.color || 'red' } : { index })), { type: 'draw' }];
+  }
+
+  if (gameId === 'ludo') {
+    if (state.phase === 'move') return (state.movable || []).map((token) => ({ action: 'move', token }));
+    return [{ action: 'roll' }];
   }
 
   if (gameId === 'codenames') {

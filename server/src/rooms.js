@@ -346,14 +346,14 @@ export function clearUndo(roomId) {
 export function isBotTurn(roomId) {
   const room = rooms.get(roomId);
   if (!room || room.status !== 'playing') return false;
-  const turn = room.state?.turn;
+  const turn = room.state?.turn ?? room.state?.current; // ludo names its active seat `current`
   return room.players.some((p) => p.index === turn && p.user.bot);
 }
 
 export function makeBotMove(roomId) {
   const room = rooms.get(roomId);
   if (!room || room.status !== 'playing') return null;
-  const bot = room.players.find((p) => p.index === room.state?.turn && p.user.bot);
+  const bot = room.players.find((p) => p.index === (room.state?.turn ?? room.state?.current) && p.user.bot);
   if (!bot) return null;
   const move = chooseBotMove(room.game, room.state, bot.index);
   if (!move) return null;

@@ -3305,6 +3305,18 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   }
   .skrib-chat-log { min-height: 220px; max-height: 320px; }
 }
+/* Skribble runs as a landscape game on mobile: keep players | canvas | chat in
+   three columns there (specificity beats the 980px stack rule) and cap the
+   canvas to the short viewport so the tools stay reachable. */
+.landscape-game-page .skrib { grid-template-columns: 140px minmax(0, 1fr) 240px; }
+.landscape-game-page .skrib-players { order: 0; }
+.landscape-game-page .skrib-board { order: 0; }
+.landscape-game-page .skrib-chat-panel { order: 0; }
+.landscape-game-page .skrib-canvas {
+  aspect-ratio: auto;
+  height: clamp(180px, 52vh, 460px);
+}
+.landscape-game-page .skrib-chat-log { min-height: 120px; max-height: 42vh; }
 
 /* ---- Word Duel ---- */
 .wd {

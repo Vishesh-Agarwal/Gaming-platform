@@ -27,3 +27,10 @@ test('skribble streams drawing while the pointer is still down', () => {
   assert.match(skribble, /lastFlushAt/);
   assert.doesNotMatch(skribble, /slice\(-160\)/);
 });
+
+test('skribble plays landscape on mobile with canvas and chat side by side', () => {
+  const meta = readFileSync(new URL('../src/games/gameMeta.js', import.meta.url), 'utf8');
+  assert.match(meta, /requiresLandscape\(gameId\)[\s\S]*'skribble'/);
+  assert.match(css, /\.landscape-game-page \.skrib \{/);
+  assert.match(css, /\.landscape-game-page \.skrib-chat-log/);
+});

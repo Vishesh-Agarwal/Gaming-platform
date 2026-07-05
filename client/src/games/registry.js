@@ -167,6 +167,10 @@ const registry = {
     thumbnail: BattleshipThumb,
     accent: '#4b9bd8',
     rules: 'Place your fleet, fire at the enemy grid, and sink every ship.',
+    modes: [
+      { id: 'classic', name: 'Classic', hint: 'One shot per turn.' },
+      { id: 'salvo', name: 'Salvo', hint: 'Fire one shot per surviving ship, resolved together.' },
+    ],
   },
   checkers: {
     name: 'Checkers',

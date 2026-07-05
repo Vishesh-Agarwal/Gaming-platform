@@ -9,14 +9,20 @@ export const FLEET = [
   { id: 'patrol', name: 'Patrol Boat', size: 2 },
 ];
 
+const MODES = [
+  { id: 'classic', name: 'Classic' },
+  { id: 'salvo', name: 'Salvo' },
+];
+
 const key = (x, y) => `${x},${y}`;
 
 function emptyBoard() {
   return { ready: false, ships: [], shots: [] };
 }
 
-export function createInitialState() {
+export function createInitialState(options) {
   return {
+    mode: options?.mode === 'salvo' ? 'salvo' : 'classic',
     size: SIZE,
     fleet: FLEET,
     boards: [emptyBoard(), emptyBoard()],
@@ -90,6 +96,25 @@ function allSunk(board) {
   return board.ships.length > 0 && board.ships.every((ship) => ship.hits.length >= ship.size);
 }
 
+function survivingShips(board) {
+  return board.ships.filter((ship) => ship.hits.length < ship.size).length;
+}
+
+function resolveShot(target, x, y) {
+  const ship = shipAt(target, x, y);
+  let result = 'miss';
+  let sunk = null;
+  if (ship) {
+    result = 'hit';
+    if (!ship.hits.some((h) => h.x === x && h.y === y)) ship.hits.push({ x, y });
+    if (ship.hits.length >= ship.size) {
+      result = 'sunk';
+      sunk = ship.id;
+    }
+  }
+  return { x, y, result, sunk };
+}
+
 function scanArea(board, x, y) {
   let ships = 0;
   for (let dy = -1; dy <= 1; dy += 1) {
@@ -125,9 +150,11 @@ export function applyMove(state, seat, move) {
   }
 
   if (state.turn !== seat) return { error: 'Not your turn.' };
+  const salvoMode = state.mode === 'salvo';
   const x = Number(move?.x);
   const y = Number(move?.y);
-  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= SIZE || y >= SIZE) {
+  if (move?.type !== 'salvo'
+    && (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= SIZE || y >= SIZE)) {
     return { error: 'Choose a target on the board.' };
   }
 
@@ -150,7 +177,8 @@ export function applyMove(state, seat, move) {
     };
   }
 
-  if (move?.type !== 'fire') return { error: 'Fire at a target.' };
+  if (salvoMode && move?.type !== 'salvo') return { error: 'Fire a salvo.' };
+  if (!salvoMode && move?.type !== 'fire') return { error: 'Fire at a target.' };
 
   const boards = state.boards.map((board) => ({
     ...board,
@@ -159,20 +187,34 @@ export function applyMove(state, seat, move) {
   }));
   const shooter = boards[seat];
   const target = boards[seat === 0 ? 1 : 0];
-  if (shooter.shots.some((shot) => shot.x === x && shot.y === y)) return { error: 'You already fired there.' };
 
-  const ship = shipAt(target, x, y);
-  let result = 'miss';
-  let sunk = null;
-  if (ship) {
-    result = 'hit';
-    if (!ship.hits.some((h) => h.x === x && h.y === y)) ship.hits.push({ x, y });
-    if (ship.hits.length >= ship.size) {
-      result = 'sunk';
-      sunk = ship.id;
+  let lastShot;
+  if (salvoMode) {
+    const expected = survivingShips(shooter);
+    const cells = normalizeCells(move.cells);
+    if (!cells || cells.length !== expected) {
+      return { error: `Pick ${expected} target${expected === 1 ? '' : 's'} — one per surviving ship.` };
     }
+    const seen = new Set();
+    for (const c of cells) {
+      const k = key(c.x, c.y);
+      if (seen.has(k)) return { error: 'Each salvo shot needs its own cell.' };
+      seen.add(k);
+      if (shooter.shots.some((shot) => shot.x === c.x && shot.y === c.y)) return { error: 'You already fired there.' };
+    }
+    const salvo = cells.map((c) => {
+      const shot = resolveShot(target, c.x, c.y);
+      shooter.shots.push(shot);
+      return shot;
+    });
+    lastShot = { by: seat, result: 'salvo', salvo };
+  } else {
+    if (shooter.shots.some((shot) => shot.x === x && shot.y === y)) return { error: 'You already fired there.' };
+    const shot = resolveShot(target, x, y);
+    shooter.shots.push(shot);
+    lastShot = { by: seat, ...shot };
   }
-  shooter.shots.push({ x, y, result, sunk });
+
   const won = allSunk(target);
   const scores = state.scores.slice();
   scores[seat] = target.ships.reduce((sum, s) => sum + s.hits.length, 0);
@@ -183,7 +225,7 @@ export function applyMove(state, seat, move) {
       boards,
       phase: won ? 'done' : 'playing',
       turn: won ? null : seat === 0 ? 1 : 0,
-      lastShot: { by: seat, x, y, result, sunk },
+      lastShot,
       scores,
       seq: state.seq + 1,
     },
@@ -201,6 +243,7 @@ export function publicState(state, seat) {
   const own = state.boards[seat] || emptyBoard();
   const enemy = state.boards[opponent] || emptyBoard();
   return {
+    mode: state.mode || 'classic',
     size: state.size,
     fleet: state.fleet,
     phase: state.phase,
@@ -224,6 +267,7 @@ export default {
   type: 'turn-based',
   minPlayers: 2,
   maxPlayers: 2,
+  modes: MODES,
   createInitialState,
   applyMove,
   getResult,

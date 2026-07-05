@@ -1,16 +1,10 @@
 // Boggle Race - shared 4x4 letter grid, simultaneous word submissions.
 
+import { BOGGLE_WORDS } from './boggleWords.js';
+
 const SIZE = 4;
 const ROUND_MS = 120000;
-const DICT = new Set([
-  'ART', 'BAR', 'BARS', 'BAT', 'BATS', 'CAR', 'CARS', 'CART', 'CAT', 'CATS',
-  'DOG', 'DOGS', 'DOOR', 'EAST', 'EAT', 'EATS', 'FIRE', 'FISH', 'GAME', 'GAMES',
-  'GATE', 'GATES', 'GOAT', 'HAT', 'HATS', 'HOME', 'HOMES', 'HOUSE', 'ICE',
-  'KING', 'LAKE', 'LAND', 'LIGHT', 'LINE', 'LINES', 'MOON', 'NOTE', 'NOTES',
-  'OCEAN', 'PLAY', 'PLAYS', 'RAIN', 'RING', 'ROAD', 'ROADS', 'ROSE', 'SHIP',
-  'STAR', 'STARS', 'STONE', 'SUN', 'TEAM', 'TEAMS', 'TIME', 'TRAIN', 'TREE',
-  'TREES', 'WATER', 'WORD', 'WORDS',
-]);
+const DICT = new Set(BOGGLE_WORDS);
 const DICE = 'AAEEGNABBJOOACHOPSDEILRXDELRVYEHRTVWEIOSSTELRTTYHIMNQUHLNNRZ';
 const MODES = [
   { id: 'random', name: 'Random Board' },

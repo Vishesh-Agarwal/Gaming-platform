@@ -87,6 +87,18 @@ export function lineOfSightClear(map, x0, z0, x1, z1) {
   return true;
 }
 
+// True when (x,z) is inside a cylinder obstacle's footprint. Pillars are
+// full-height, so shots at any altitude die there; boxes and plateaus already
+// stop projectiles through the surfaceHeight ground check.
+export function projectileHitsPillar(map, x, z) {
+  for (const o of (map.obstacles || [])) {
+    if (o.kind !== 'cyl') continue;
+    const dx = x - o.x, dz = z - o.z;
+    if (dx * dx + dz * dz < o.r * o.r) return true;
+  }
+  return false;
+}
+
 // Linear MG damage falloff: MG_DMG_NEAR at point-blank -> MG_DMG_FAR at MG_RANGE.
 export function mgDamage(dist) {
   const t = clamp(dist / MG_RANGE, 0, 1);
@@ -458,6 +470,7 @@ function step(sim, inputs, dt, now = Date.now()) {
       if (pr.life <= 0) dead = true;
       else if (Math.abs(pr.x) > map.arena.w / 2 || Math.abs(pr.z) > map.arena.d / 2) dead = true;
       else if (pr.y <= surfaceHeight(map, pr.x, pr.z)) dead = true; // hit the ground/mesa
+      else if (projectileHitsPillar(map, pr.x, pr.z)) dead = true; // hit a pillar
       else if (!pr.cosmetic) { // cosmetic MG bullets are visual-only
         for (let i = 0; i < sim.karts.length; i++) {
           if (i === pr.owner) continue;

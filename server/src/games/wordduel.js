@@ -1,13 +1,9 @@
 // Word Duel - 2-player race to solve the same 5-letter word.
 // The answer stays in state.secret and is revealed only when the match ends.
 
-const ANSWERS = [
-  'APPLE', 'BRAVE', 'CHAIR', 'DELTA', 'EAGLE', 'FLAME', 'GRAPE', 'HOUSE',
-  'INDEX', 'JELLY', 'KNIFE', 'LEMON', 'MANGO', 'NURSE', 'OCEAN', 'PIANO',
-  'QUILT', 'RIVER', 'SOLAR', 'TIGER', 'ULTRA', 'VIVID', 'WATER', 'YEAST',
-  'ZEBRA', 'BREAD', 'CLOUD', 'DREAM', 'EARTH', 'FROST', 'GIANT', 'HONEY',
-  'LASER', 'MAGIC', 'NIGHT', 'PEARL', 'ROBOT', 'STONE', 'TRAIN', 'WHALE',
-];
+import { ANSWERS, GUESS_WORDS } from './wordduelWords.js';
+
+const DICT = new Set([...GUESS_WORDS, ...ANSWERS]);
 
 const WORD_LEN = 5;
 const MAX_GUESSES = 6;
@@ -87,6 +83,7 @@ export function applyMove(state, seat, move) {
 
   const guess = cleanGuess(move?.guess);
   if (guess.length !== WORD_LEN) return { error: `Guess a ${WORD_LEN}-letter word.` };
+  if (!DICT.has(guess)) return { error: 'Not in the word list.' };
   if (state.guesses[seat].some((row) => row.guess === guess)) return { error: 'You already tried that word.' };
 
   const answer = state.secret.answer;

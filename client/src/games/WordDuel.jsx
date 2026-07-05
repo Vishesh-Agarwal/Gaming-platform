@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const KEY_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
 
@@ -79,12 +79,16 @@ export default function WordDuel({ room, youAreIndex, onMove }) {
   const hints = state.hints || [];
   const hintsLeft = Math.max(0, 2 - hints.length);
 
+  // Clear the typed word only once the server accepts it (a new row appears),
+  // so a rejected guess ("Not in the word list.") stays editable.
+  const acceptedRows = myRows.length;
+  useEffect(() => { setGuess(''); }, [acceptedRows]);
+
   const submit = (event) => {
     event.preventDefault();
     const clean = guess.toUpperCase().replace(/[^A-Z]/g, '').slice(0, state.wordLength);
     if (clean.length !== state.wordLength || locked) return;
     onMove({ guess: clean });
-    setGuess('');
   };
 
   const typeLetter = (letter) => {

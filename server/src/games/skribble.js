@@ -1,26 +1,82 @@
 // Skribble - multiplayer drawing and guessing. The drawer sees the secret word;
 // guessers see only its shape and submit guesses through game moves.
 
-const WORDS = [
-  'airplane', 'anchor', 'apple', 'backpack', 'balloon', 'banana', 'bicycle',
-  'birthday cake', 'book', 'bridge', 'camera', 'campfire', 'castle', 'clock',
-  'cloud', 'crown', 'diamond', 'dragon', 'drum', 'elephant', 'firetruck',
-  'flower', 'guitar', 'hamburger', 'helicopter', 'ice cream', 'island', 'jacket',
-  'key', 'kite', 'ladder', 'lighthouse', 'moon', 'mountain', 'mushroom',
-  'octopus', 'paint brush', 'pencil', 'penguin', 'pizza', 'planet', 'rainbow',
-  'robot', 'rocket', 'sailboat', 'sandcastle', 'snowman', 'soccer ball',
-  'spider', 'sunflower', 'telescope', 'toothbrush', 'train', 'tree', 'umbrella',
-  'volcano', 'watermelon', 'whale',
-  'hot air balloon', 'traffic light', 'ice cream cone', 'pirate treasure map',
-  'sleeping bag', 'basketball hoop', 'birthday party hat', 'rain forest',
-  'electric guitar', 'coffee cup', 'flying saucer', 'roller coaster',
-  'paper airplane', 'space station', 'rubber duck', 'garden hose',
-  'wooden spoon', 'magic wand', 'beach umbrella', 'baseball bat',
+export const WORDS = [
+  // single words — animals
+  'elephant', 'penguin', 'octopus', 'spider', 'whale', 'giraffe', 'kangaroo',
+  'butterfly', 'dolphin', 'flamingo', 'hedgehog', 'jellyfish', 'ladybug',
+  'lobster', 'ostrich', 'peacock', 'porcupine', 'raccoon', 'rhinoceros',
+  'scorpion', 'seahorse', 'squirrel', 'tortoise', 'walrus', 'woodpecker',
+  'crocodile', 'chameleon', 'bat', 'owl', 'shark', 'snail', 'crab', 'moose',
+  'panda', 'sloth', 'camel', 'gorilla', 'lion', 'tiger', 'zebra',
+  // single words — food
+  'apple', 'banana', 'hamburger', 'pizza', 'watermelon', 'pretzel', 'pancake',
+  'spaghetti', 'sandwich', 'cupcake', 'doughnut', 'croissant', 'pineapple',
+  'avocado', 'broccoli', 'mushroom', 'popcorn', 'taco', 'sushi', 'waffle',
+  'lollipop', 'cheese', 'carrot', 'strawberry', 'hotdog',
+  // single words — objects
+  'anchor', 'backpack', 'balloon', 'book', 'camera', 'clock', 'crown',
+  'diamond', 'drum', 'flower', 'guitar', 'jacket', 'key', 'kite', 'ladder',
+  'pencil', 'telescope', 'toothbrush', 'umbrella', 'binoculars', 'candle',
+  'compass', 'dumbbell', 'envelope', 'flashlight', 'hammock', 'harmonica',
+  'hourglass', 'joystick', 'kettle', 'lantern', 'microphone', 'microscope',
+  'padlock', 'perfume', 'scissors', 'stapler', 'stethoscope', 'suitcase',
+  'trophy', 'typewriter', 'wheelbarrow', 'whistle', 'wrench', 'zipper',
+  'accordion', 'saxophone', 'trumpet', 'violin', 'xylophone', 'boomerang',
+  'chandelier', 'fountain', 'hanger', 'magnet', 'mirror', 'pillow', 'shovel',
+  'skateboard', 'snorkel', 'sponge', 'swing', 'toaster', 'vacuum',
+  // single words — places & nature
+  'bridge', 'castle', 'campfire', 'cloud', 'island', 'lighthouse', 'moon',
+  'mountain', 'planet', 'rainbow', 'volcano', 'waterfall', 'desert', 'glacier',
+  'cave', 'canyon', 'iceberg', 'meteor', 'tornado', 'geyser', 'oasis',
+  'pyramid', 'windmill', 'skyscraper', 'stadium', 'igloo', 'barn', 'circus',
+  'harbor', 'jungle', 'orchard', 'palace', 'prison', 'subway', 'temple',
+  // single words — vehicles & characters
+  'airplane', 'bicycle', 'firetruck', 'helicopter', 'robot', 'rocket',
+  'sailboat', 'train', 'ambulance', 'bulldozer', 'canoe', 'gondola',
+  'motorcycle', 'submarine', 'tractor', 'astronaut', 'ballerina',
+  'cowboy', 'dragon', 'genie', 'juggler', 'knight', 'magician', 'mermaid',
+  'ninja', 'pirate', 'scarecrow', 'skeleton', 'snowman', 'unicorn', 'vampire',
+  'werewolf', 'wizard', 'zombie', 'cheerleader', 'firefighter', 'plumber',
+  // single words — misc drawables
+  'sandcastle', 'sunflower', 'tree', 'cactus', 'earthquake', 'fireworks',
+  'footprint', 'karate', 'lightning', 'moustache', 'shadow', 'sneeze',
+  'tattoo', 'yoga', 'dizzy', 'hiccup', 'applause', 'cannonball',
+  // two-word prompts
+  'birthday cake', 'ice cream', 'paint brush', 'soccer ball', 'traffic light',
+  'sleeping bag', 'basketball hoop', 'rain forest', 'electric guitar',
+  'coffee cup', 'flying saucer', 'roller coaster', 'paper airplane',
+  'space station', 'rubber duck', 'garden hose', 'wooden spoon', 'magic wand',
+  'beach umbrella', 'baseball bat', 'bunk bed', 'cable car', 'candy cane',
+  'cheese grater', 'disco ball', 'ferris wheel', 'fire hydrant',
+  'fishing rod', 'fortune cookie', 'jump rope', 'lawn mower', 'lava lamp',
+  'north pole', 'palm tree', 'phone booth', 'picnic basket',
+  'pillow fight', 'polar bear', 'pogo stick', 'post office', 'punching bag',
+  'sand dune', 'security camera', 'shooting star', 'shopping cart',
+  'smoke signal', 'snow globe', 'spider web', 'swimming pool', 'tea party',
+  'tennis racket', 'time machine', 'tow truck', 'treasure chest',
+  'vending machine', 'washing machine', 'water slide', 'wind chime',
+  'wrecking ball',
+  // three-word prompts
+  'hot air balloon', 'ice cream cone', 'birthday party hat',
+  'pirate treasure map', 'rock paper scissors', 'hide and seek',
+  'trick or treat', 'pot of gold', 'glass of milk', 'bowl of soup',
+  'stack of pancakes', 'hole in one', 'house of cards', 'man on moon',
+  'message in bottle', 'needle in haystack', 'rabbit in hat',
+  'ship in bottle', 'walk the plank', 'water balloon fight', 'cherry on top',
+  'three legged race', 'tip of iceberg', 'upside down cake',
+  'elephant in room', 'chocolate chip cookie', 'peanut butter sandwich',
 ];
-const PACKS = {
+export const PACKS = {
   mixed: WORDS,
   simple: WORDS.filter((word) => word.split(/\s+/).length === 1),
-  party: ['birthday cake', 'pizza', 'hamburger', 'coffee cup', 'soccer ball', 'basketball hoop', 'birthday party hat', 'baseball bat', 'rubber duck', 'magic wand', 'beach umbrella', 'watermelon', 'ice cream', 'guitar', 'drum'],
+  party: [
+    'birthday cake', 'pizza', 'hamburger', 'coffee cup', 'soccer ball',
+    'basketball hoop', 'birthday party hat', 'baseball bat', 'rubber duck',
+    'magic wand', 'beach umbrella', 'watermelon', 'ice cream', 'guitar',
+    'drum', 'disco ball', 'pillow fight', 'fireworks', 'candy cane',
+    'popcorn', 'cupcake', 'ferris wheel', 'tea party', 'lollipop',
+  ],
 };
 const MODES = [
   { id: 'mixed', name: 'Mixed Pack' },

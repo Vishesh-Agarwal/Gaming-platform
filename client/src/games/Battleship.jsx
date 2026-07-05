@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import carrierImg from '../assets/battleship/carrier.png';
 import battleshipImg from '../assets/battleship/battleship.png';
 import destroyerImg from '../assets/battleship/destroyer.png';
@@ -120,11 +120,18 @@ export function Thumbnail() {
   );
 }
 
-function Grid({ size, ships = [], shots = [], scans = [], lastShot = null, onCell, disabled, label, scanMode }) {
+function Grid({ size, ships = [], shots = [], scans = [], lastShot = null, pending = [], onCell, disabled, label, scanMode }) {
   const shipsByCell = useMemo(() => shipMap(ships), [ships]);
   const models = useMemo(() => shipModels(ships), [ships]);
   const shotsByCell = useMemo(() => shotMap(shots), [shots]);
   const scansByCell = useMemo(() => new Map((scans || []).map((scan) => [cellKey(scan.x, scan.y), scan])), [scans]);
+  // In salvo mode the last shot is a whole volley; highlight every cell of it.
+  const lastShotKeys = useMemo(() => {
+    if (!lastShot) return new Set();
+    if (Array.isArray(lastShot.salvo)) return new Set(lastShot.salvo.map((s) => cellKey(s.x, s.y)));
+    return new Set([cellKey(lastShot.x, lastShot.y)]);
+  }, [lastShot]);
+  const pendingByCell = useMemo(() => new Map(pending.map((c, i) => [cellKey(c.x, c.y), i + 1])), [pending]);
   return (
     <div className="bs-grid-wrap">
       <span className="bs-grid-label">{label}</span>
@@ -151,11 +158,13 @@ function Grid({ size, ships = [], shots = [], scans = [], lastShot = null, onCel
           const shipMeta = shipsByCell.get(cellKey(x, y));
           const shot = shotsByCell.get(cellKey(x, y));
           const scan = scansByCell.get(cellKey(x, y));
+          const pendingNo = pendingByCell.get(cellKey(x, y));
           const cls = ['bs-cell'];
           if (shipMeta) cls.push('ship', `ship-${shipMeta.dir}`, `ship-${shipMeta.part}`);
           if (scan) cls.push('scan');
           if (scanMode) cls.push('scan-mode');
-          if (lastShot && lastShot.x === x && lastShot.y === y) cls.push('last-shot');
+          if (pendingNo) cls.push('pending');
+          if (lastShotKeys.has(cellKey(x, y))) cls.push('last-shot');
           if (shot) {
             cls.push('targeted');
             cls.push(shot.result === 'miss' ? 'miss' : shot.result === 'sunk' ? 'sunk' : 'hit');
@@ -176,6 +185,7 @@ function Grid({ size, ships = [], shots = [], scans = [], lastShot = null, onCel
               aria-label={`${label} ${x + 1},${y + 1}`}
             >
               <span className="bs-water" aria-hidden />
+              {pendingNo && <span className="bs-pending-mark">{pendingNo}</span>}
               {scan && <span className="bs-scan-count">{scan.ships}</span>}
               {shot?.result === 'miss' && <span className="bs-shot-mark miss-mark">•</span>}
               {shot && shot.result !== 'miss' && <span className="bs-shot-mark hit-mark">×</span>}
@@ -193,9 +203,24 @@ export default function Battleship({ room, youAreIndex, onMove }) {
   const [selected, setSelected] = useState(state.fleet[0]?.id || null);
   const [dir, setDir] = useState('h');
   const [scanMode, setScanMode] = useState(false);
+  const [pending, setPending] = useState([]);
   const opponent = youAreIndex === 0 ? 1 : 0;
   const myReady = !!state.ready?.[youAreIndex];
   const myTurn = state.phase === 'playing' && state.turn === youAreIndex && room.status === 'playing';
+  const salvoMode = state.mode === 'salvo';
+  const salvoSize = (state.ownBoard?.ships || [])
+    .filter((ship) => (ship.hits?.length || 0) < (ship.cells?.length || 0)).length;
+
+  // A new server state means the volley resolved (or the turn changed) — reset picks.
+  useEffect(() => { setPending([]); }, [state.seq]);
+
+  const togglePending = (x, y) => {
+    setPending((prev) => {
+      const without = prev.filter((c) => !(c.x === x && c.y === y));
+      if (without.length !== prev.length) return without;
+      return prev.length >= salvoSize ? prev : [...prev, { x, y }];
+    });
+  };
 
   const setupShips = placements.map((place) => ({
     id: place.id,
@@ -219,7 +244,8 @@ export default function Battleship({ room, youAreIndex, onMove }) {
   const status = () => {
     if (room.status === 'over') return 'Battle complete';
     if (state.phase === 'setup') return myReady ? 'Waiting for opponent fleet' : 'Place your fleet';
-    return myTurn ? 'Your salvo' : `${playerName(room, opponent, youAreIndex)} is targeting`;
+    if (myTurn) return salvoMode ? `Pick ${salvoSize} salvo targets` : 'Your shot';
+    return `${playerName(room, opponent, youAreIndex)} is targeting`;
   };
 
   return (
@@ -275,11 +301,18 @@ export default function Battleship({ room, youAreIndex, onMove }) {
             shots={state.targetShots || []}
             scans={state.targetScans || []}
             lastShot={state.lastShot?.by === youAreIndex ? state.lastShot : null}
+            pending={pending}
             disabled={!myTurn}
             scanMode={scanMode}
             onCell={(x, y) => {
-              onMove(scanMode ? { type: 'scan', x, y } : { type: 'fire', x, y });
-              setScanMode(false);
+              if (scanMode) {
+                onMove({ type: 'scan', x, y });
+                setScanMode(false);
+              } else if (salvoMode) {
+                togglePending(x, y);
+              } else {
+                onMove({ type: 'fire', x, y });
+              }
             }}
             label="Target grid"
           />
@@ -287,6 +320,15 @@ export default function Battleship({ room, youAreIndex, onMove }) {
             <button className={scanMode ? '' : 'ghost'} disabled={!myTurn || (state.scans?.[youAreIndex] || 0) <= 0} onClick={() => setScanMode((v) => !v)}>
               Radar {state.scans?.[youAreIndex] || 0}
             </button>
+            {salvoMode && (
+              <button
+                className="bs-salvo-fire"
+                disabled={!myTurn || pending.length !== salvoSize}
+                onClick={() => onMove({ type: 'salvo', cells: pending })}
+              >
+                Fire salvo {pending.length}/{salvoSize}
+              </button>
+            )}
           </div>
         </div>
       )}

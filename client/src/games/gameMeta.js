@@ -30,5 +30,5 @@ export function rulesForGame(game = {}) {
 }
 
 export function requiresLandscape(gameId) {
-  return ['karts', 'ghostrider', 'artillery', 'pool'].includes(gameId);
+  return ['karts', 'ghostrider', 'artillery', 'pool', 'battleship'].includes(gameId);
 }

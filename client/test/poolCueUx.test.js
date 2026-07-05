@@ -8,7 +8,7 @@ const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('pool requires landscape on mobile like other full-table action games', () => {
   assert.match(meta, /'pool'/);
-  assert.match(meta, /requiresLandscape\(gameId\)[\s\S]*\['karts', 'ghostrider', 'artillery', 'pool'\]/);
+  assert.match(meta, /requiresLandscape\(gameId\)[\s\S]*'pool'/);
 });
 
 test('pool shots use a side power stick instead of a shoot button or generic power bar', () => {

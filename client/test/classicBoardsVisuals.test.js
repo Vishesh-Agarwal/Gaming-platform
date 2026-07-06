@@ -27,3 +27,11 @@ test('connect four: lacquer cabinet with sheen and deep punched wells', () => {
   const board = sec.slice(sec.indexOf('.c4-board {'), sec.indexOf('.c4-col {'));
   assert.ok((board.match(/gradient/g) || []).length >= 3, 'board should layer several gradients');
 });
+
+test('checkers: wood board with lacquered ridged pieces and crowned kings', () => {
+  const sec = section('Checkers');
+  assert.match(sec, /repeating-linear-gradient/); // wood grain on the squares
+  assert.match(sec, /repeating-conic-gradient/); // ridged piece rims
+  assert.match(sec, /@keyframes chk-settle/); // pieces settle in when placed
+  assert.match(sec, /\.chk-piece\.king|\.chk-piece b/); // crowned king styling
+});

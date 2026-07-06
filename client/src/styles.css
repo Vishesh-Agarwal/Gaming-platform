@@ -4182,22 +4182,33 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   aspect-ratio: 1;
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 3px;
-  padding: 10px;
+  gap: 2px;
+  padding: clamp(10px, 1.8vw, 16px);
   border-radius: 18px;
-  background: linear-gradient(145deg, #153421, #0e2116);
-  border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: var(--shadow-3);
+  /* club table: lamp pool on deep green felt inside a dark frame */
+  background:
+    radial-gradient(110% 85% at 50% 0%, rgba(210, 255, 220, 0.10), transparent 52%),
+    linear-gradient(150deg, #123524, #0a2015 72%);
+  border: 1px solid rgba(160, 220, 180, 0.16);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.08),
+    inset 0 0 34px rgba(0,0,0,0.5),
+    0 24px 52px rgba(0,0,0,0.55);
 }
 .rev-cell {
   position: relative;
   display: grid;
   place-items: center;
   padding: 0;
-  border-radius: 6px;
-  background: #2c8a57;
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: none;
+  border-radius: 3px;
+  /* felt square: green nap with a faint weave, darker inlay edges */
+  background:
+    repeating-linear-gradient(52deg, rgba(255,255,255,0.028) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-52deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 5px),
+    linear-gradient(160deg, #2f8f58, #227245);
+  border: 1px solid rgba(6, 26, 16, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  perspective: 620px; /* gives the disc flip real depth */
 }
 .rev-cell.legal::after {
   content: '';
@@ -4205,17 +4216,50 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   height: 26%;
   border-radius: 50%;
   background: rgba(242,176,73,0.78);
+  box-shadow: 0 0 10px rgba(242,176,73,0.4);
 }
-.rev-cell.last { outline: 3px solid var(--amber); outline-offset: -4px; }
+.rev-cell.last { outline: 3px solid var(--amber); outline-offset: -3px; }
 .rev-cell:disabled { opacity: 1; cursor: default; }
+/* the disc is a two-faced 3D flipper: ivory front, charcoal back. Changing the
+   owner class rotates it, so captures visibly flip across the board. */
 .rev-disc {
-  width: 74%;
-  height: 74%;
-  border-radius: 50%;
-  box-shadow: inset 0 8px 10px rgba(255,255,255,0.18), inset 0 -8px 12px rgba(0,0,0,0.28), 0 5px 10px rgba(0,0,0,0.34);
+  position: relative;
+  width: 76%;
+  height: 76%;
+  transform-style: preserve-3d;
+  transition: transform 0.55s var(--ease);
+  animation: rev-place 0.3s var(--ease-spring, ease-out) backwards;
+  filter: drop-shadow(0 5px 7px rgba(0,0,0,0.4));
 }
-.rev-disc.mine { background: #f1ece5; }
-.rev-disc.theirs { background: #18151c; }
+.rev-disc::before,
+.rev-disc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  backface-visibility: hidden;
+}
+.rev-disc::before {
+  background:
+    radial-gradient(circle at 34% 28%, #ffffff, transparent 42%),
+    radial-gradient(circle at 50% 110%, rgba(0,0,0,0.22), transparent 55%),
+    #ece5d8;
+  box-shadow: inset 0 2px 3px rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.22);
+}
+.rev-disc::after {
+  transform: rotateY(180deg);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255,255,255,0.30), transparent 40%),
+    radial-gradient(circle at 50% 110%, rgba(0,0,0,0.5), transparent 55%),
+    #1c1a22;
+  box-shadow: inset 0 2px 3px rgba(255,255,255,0.14), inset 0 -3px 6px rgba(0,0,0,0.5);
+}
+.rev-disc.mine { transform: rotateY(0deg); }
+.rev-disc.theirs { transform: rotateY(180deg); }
+@keyframes rev-place {
+  from { scale: 0.55; opacity: 0; }
+  to { scale: 1; opacity: 1; }
+}
 
 /* ---- Dots and Boxes ---- */
 .dbx {

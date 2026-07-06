@@ -35,3 +35,13 @@ test('checkers: wood board with lacquered ridged pieces and crowned kings', () =
   assert.match(sec, /@keyframes chk-settle/); // pieces settle in when placed
   assert.match(sec, /\.chk-piece\.king|\.chk-piece b/); // crowned king styling
 });
+
+test('reversi: felt table with truly 3D flipping discs', () => {
+  const sec = section('Reversi');
+  assert.match(sec, /preserve-3d/);
+  assert.match(sec, /backface-visibility: hidden/);
+  assert.match(sec, /rotateY\(180deg\)/); // owner change flips the disc
+  assert.match(sec, /perspective/);
+  assert.match(sec, /repeating-linear-gradient/); // felt nap texture
+  assert.match(sec, /@keyframes rev-place/); // new discs pop in instead of flipping
+});

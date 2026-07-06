@@ -39,3 +39,12 @@ test('codenames: card-table felt, paper agent cards that flip on reveal', () => 
   assert.match(sec, /@keyframes code-flip/);
   assert.match(sec, /rotateY/);
 });
+
+test('hangman: chalkboard slate stage with chalk tiles and slate keys', () => {
+  const sec = section('Hangman');
+  const stage = sec.slice(sec.indexOf('.hm-stage {'), sec.indexOf('.hm-stage {') + 600);
+  assert.match(stage, /repeating-radial-gradient|repeating-linear-gradient|radial-gradient/); // slate + chalk dust
+  const tile = sec.slice(sec.indexOf('.hm-tile {'));
+  assert.match(tile, /text-shadow/); // chalky letter bloom
+  assert.match(sec, /--chalk|#e8f0e8|#eef4ee/i); // chalk colour token/value
+});

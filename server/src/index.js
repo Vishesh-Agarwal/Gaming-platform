@@ -19,6 +19,7 @@ import {
 import { levelForXp } from './progression.js';
 import { getDailyChallenges, utcDay } from './challenges.js';
 import { unlocksForLevel } from './unlocks.js';
+import { closeDb } from './db.js';
 import config from './config.js';
 import rateLimit from 'express-rate-limit';
 
@@ -114,5 +115,29 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   server.listen(PORT, () => {
     console.log(`[server] listening on http://localhost:${PORT}`);
     console.log(`[server] env=${config.nodeEnv} cors=${config.isProd ? config.corsOrigin.join(',') : '(any — dev)'}`);
+  });
+
+  const shutdown = (signal) => {
+    console.log(`[server] ${signal} received — shutting down`);
+    server.close(() => {
+      try { closeDb(); } catch { /* already closed */ }
+      process.exit(0);
+    });
+    // hard-stop if connections don't drain in 10s
+    setTimeout(() => process.exit(0), 10_000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  process.on('unhandledRejection', (reason) => {
+    console.error('[server] unhandledRejection:', reason);
+    // recoverable (a failed emit, a rejected query) — do not crash the box
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('[server] uncaughtException:', err);
+    // With all room/lobby state in RAM, exiting drops every live game. Default
+    // is to stay up; flip EXIT_ON_UNCAUGHT=1 once state is durable + a manager
+    // restarts the process.
+    if (config.exitOnUncaught) shutdown('uncaughtException');
   });
 }

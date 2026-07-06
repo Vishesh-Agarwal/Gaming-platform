@@ -13,6 +13,15 @@ const db = new Database(join(dataDir, 'platform.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Close the shared DB handle on graceful shutdown. Idempotent — a second call
+// (e.g. SIGTERM racing SIGINT) is a no-op.
+let dbClosed = false;
+export function closeDb() {
+  if (dbClosed) return;
+  dbClosed = true;
+  db.close();
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

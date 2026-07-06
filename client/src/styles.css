@@ -4229,7 +4229,7 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   transform-style: preserve-3d;
   transition: transform 0.55s var(--ease);
   animation: rev-place 0.3s var(--ease-spring, ease-out) backwards;
-  filter: drop-shadow(0 5px 7px rgba(0,0,0,0.4));
+  /* NOTE: no filter here — filter flattens transform-style and breaks the flip */
 }
 .rev-disc::before,
 .rev-disc::after {
@@ -4244,7 +4244,7 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
     radial-gradient(circle at 34% 28%, #ffffff, transparent 42%),
     radial-gradient(circle at 50% 110%, rgba(0,0,0,0.22), transparent 55%),
     #ece5d8;
-  box-shadow: inset 0 2px 3px rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.22);
+  box-shadow: inset 0 2px 3px rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.22), 0 5px 8px rgba(0,0,0,0.38);
 }
 .rev-disc::after {
   transform: rotateY(180deg);
@@ -4252,7 +4252,7 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
     radial-gradient(circle at 34% 28%, rgba(255,255,255,0.30), transparent 40%),
     radial-gradient(circle at 50% 110%, rgba(0,0,0,0.5), transparent 55%),
     #1c1a22;
-  box-shadow: inset 0 2px 3px rgba(255,255,255,0.14), inset 0 -3px 6px rgba(0,0,0,0.5);
+  box-shadow: inset 0 2px 3px rgba(255,255,255,0.14), inset 0 -3px 6px rgba(0,0,0,0.5), 0 5px 8px rgba(0,0,0,0.38);
 }
 .rev-disc.mine { transform: rotateY(0deg); }
 .rev-disc.theirs { transform: rotateY(180deg); }

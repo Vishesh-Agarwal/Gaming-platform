@@ -4507,28 +4507,72 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  padding: 16px;
-  border-radius: 18px;
-  background: linear-gradient(145deg, #17141b, #2b2633);
-  border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: var(--shadow-3);
+  padding: 18px;
+  border-radius: 16px;
+  /* felt-lined wooden dice tray: warm lamp glow, ring grain, recessed felt bed */
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255, 214, 150, 0.14), transparent 46%),
+    repeating-linear-gradient(4deg, rgba(0,0,0,0.14) 0 2px, transparent 2px 11px),
+    linear-gradient(150deg, #4a3120, #2c1d12 72%);
+  border: 1px solid rgba(122, 84, 46, 0.72);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 226, 178, 0.16),
+    inset 0 0 34px rgba(0,0,0,0.5),
+    0 24px 52px rgba(0,0,0,0.55),
+    0 0 0 1px rgba(20, 12, 6, 0.8);
+  animation: bog-shake 0.55s var(--ease) both;
+}
+/* the tray shakes once when a fresh board is dealt */
+@keyframes bog-shake {
+  0% { transform: translate(0,0) rotate(0); }
+  15% { transform: translate(-5px, 2px) rotate(-1.1deg); }
+  30% { transform: translate(6px, -2px) rotate(1.2deg); }
+  45% { transform: translate(-5px, 1px) rotate(-0.9deg); }
+  60% { transform: translate(4px, -1px) rotate(0.7deg); }
+  75% { transform: translate(-2px, 1px) rotate(-0.4deg); }
+  100% { transform: translate(0,0) rotate(0); }
 }
 .bog-tile {
   aspect-ratio: 1;
   display: grid;
   place-items: center;
-  border-radius: 14px;
-  background: #f1ece5;
-  color: #18151c;
+  border-radius: 16%;
+  /* ivory die cube: domed top light, bevelled edges, dropped south face */
+  background:
+    radial-gradient(120% 120% at 50% 22%, #fbf6ea, #ded2ba 82%, #c9bca0 100%);
+  color: #23201a;
   font-family: var(--display);
   font-size: clamp(32px, 8vw, 72px);
   font-weight: 900;
-  box-shadow: inset 0 8px 12px rgba(255,255,255,0.45), inset 0 -8px 14px rgba(0,0,0,0.18), 0 10px 20px rgba(0,0,0,0.32);
+  /* engraved letter: dark top lip + light lower catch reads as carved-in */
+  text-shadow: 0 -1px 0 rgba(0,0,0,0.32), 0 1px 0 rgba(255,255,255,0.85);
+  box-shadow:
+    inset 0 3px 3px rgba(255,255,255,0.85),
+    inset 0 -6px 8px rgba(110, 88, 54, 0.4),
+    0 5px 0 #b3a488,
+    0 8px 4px rgba(0,0,0,0.28),
+    0 12px 20px rgba(0,0,0,0.42);
+  transition: transform 0.12s var(--ease), box-shadow 0.12s var(--ease), background 0.12s var(--ease);
 }
 .bog-tile.traced {
-  background: var(--teal);
-  color: #08231e;
-  transform: translateY(-2px);
+  background: radial-gradient(120% 120% at 50% 22%, #8ff0d6, var(--teal) 78%, #229d84 100%);
+  color: #062a22;
+  text-shadow: 0 -1px 0 rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.4);
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 3px 3px rgba(255,255,255,0.55),
+    inset 0 -5px 8px rgba(6, 60, 48, 0.5),
+    0 2px 0 #1c8067,
+    0 5px 12px rgba(0,0,0,0.4);
+}
+/* the newest found word (list is prepended) pops in */
+.bog-found span:first-child {
+  animation: bog-found-pop 0.34s var(--ease-spring, ease-out) backwards;
+}
+@keyframes bog-found-pop {
+  0% { transform: translateX(-8px) scale(0.9); opacity: 0; }
+  60% { transform: translateX(0) scale(1.04); }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
 }
 .bog-side {
   display: grid;

@@ -33,3 +33,13 @@ test('word duel: scored rows flip like tile reveals and keys press down', () => 
   assert.match(css, /\.wd-tile[^{]*nth-child\(2\)/); // staggered cascade across the row
   assert.match(css, /\.wd-key:active/);
 });
+
+test('boggle: wooden tray shakes on deal, dice are engraved cubes, finds pop', () => {
+  const start = css.indexOf('/* ---- Boggle Race ----');
+  const sec = css.slice(start, css.indexOf('/* ---- ', start + 10));
+  assert.match(sec, /@keyframes bog-shake/); // tray shake when the board appears
+  assert.match(sec, /@keyframes bog-found-pop/);
+  const tile = sec.slice(sec.indexOf('.bog-tile {'));
+  assert.match(tile, /text-shadow/); // engraved letters
+  assert.match(sec, /repeating-linear-gradient/); // wood tray grain
+});

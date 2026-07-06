@@ -3489,6 +3489,20 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .wd-tile.correct { background: #5fbf86; color: #102016; border-color: transparent; }
 .wd-tile.present { background: #f2b049; color: #211605; border-color: transparent; }
 .wd-tile.absent { background: #4d4855; color: #d7d2da; border-color: transparent; }
+/* scored tiles reveal with a cascading card flip across the row */
+.wd-tile.correct,
+.wd-tile.present,
+.wd-tile.absent {
+  animation: wd-flip 0.42s ease backwards;
+}
+.wd-tile.correct:nth-child(2), .wd-tile.present:nth-child(2), .wd-tile.absent:nth-child(2) { animation-delay: 0.09s; }
+.wd-tile.correct:nth-child(3), .wd-tile.present:nth-child(3), .wd-tile.absent:nth-child(3) { animation-delay: 0.18s; }
+.wd-tile.correct:nth-child(4), .wd-tile.present:nth-child(4), .wd-tile.absent:nth-child(4) { animation-delay: 0.27s; }
+.wd-tile.correct:nth-child(5), .wd-tile.present:nth-child(5), .wd-tile.absent:nth-child(5) { animation-delay: 0.36s; }
+@keyframes wd-flip {
+  0% { transform: rotateX(-90deg); filter: brightness(0.5); }
+  100% { transform: rotateX(0deg); filter: brightness(1); }
+}
 .wd-row-notes {
   min-height: 25px;
   justify-content: center;
@@ -3538,6 +3552,7 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   background: rgba(255,255,255,0.08);
   border: 1px solid var(--border);
   color: var(--text);
+  transition: transform 0.08s ease, filter 0.08s ease;
   box-shadow: none;
 }
 .wd-key.correct { background: #5fbf86; color: #102016; }
@@ -3550,6 +3565,8 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   .wd-board { padding: 10px; }
   .wd-key { flex-basis: 31px; height: 38px; font-size: 12px; border-radius: 7px; }
 }
+/* physical key press */
+.wd-key:active { transform: translateY(2px) scale(0.94); filter: brightness(1.25); }
 
 /* ---- Battleship ---- */
 .bs {

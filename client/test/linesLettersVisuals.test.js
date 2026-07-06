@@ -26,3 +26,10 @@ test('dots & boxes: blueprint sheet with drawn lines and hatched claims', () => 
   assert.match(sec, /transform-origin/); // lines grow from their start
   assert.match(sec, /@keyframes dbx-claim/); // boxes pop when claimed
 });
+
+test('word duel: scored rows flip like tile reveals and keys press down', () => {
+  assert.match(css, /@keyframes wd-flip/);
+  assert.match(css, /rotateX/);
+  assert.match(css, /\.wd-tile[^{]*nth-child\(2\)/); // staggered cascade across the row
+  assert.match(css, /\.wd-key:active/);
+});

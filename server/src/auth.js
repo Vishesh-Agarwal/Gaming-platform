@@ -5,8 +5,9 @@ import jwt from 'jsonwebtoken';
 import { createUser, getUserByUsername, getUserById, publicUser, updateUserProfile, getXp } from './db.js';
 import { canUseAvatar, canUseFrame } from './unlocks.js';
 import { levelForXp } from './progression.js';
+import config from './config.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const JWT_SECRET = config.jwtSecret;
 const TOKEN_TTL = '30d';
 
 export function signToken(user) {

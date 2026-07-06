@@ -29,3 +29,13 @@ test('uno: freshly played card flies onto the discard pile', () => {
   assert.match(sec, /@keyframes uno-play/);
   assert.match(sec, /\.uno-pile \.uno-card/);
 });
+
+test('codenames: card-table felt, paper agent cards that flip on reveal', () => {
+  const sec = section('Codenames Lite');
+  const grid = sec.slice(sec.indexOf('.code-grid {'), sec.indexOf('.code-card {'));
+  assert.match(grid, /perspective/); // gives the flip depth
+  const card = sec.slice(sec.indexOf('.code-card {'));
+  assert.match(card, /repeating-linear-gradient|repeating-radial-gradient/); // paper stock grain
+  assert.match(sec, /@keyframes code-flip/);
+  assert.match(sec, /rotateY/);
+});

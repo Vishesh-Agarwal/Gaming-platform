@@ -4660,20 +4660,44 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .code-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  perspective: 1400px; /* depth for the card flips */
+  /* card-table felt: warm centre light, cross-weave nap, dark rail */
+  background:
+    radial-gradient(ellipse 62% 60% at 50% 42%, rgba(255,255,255,0.09), transparent 62%),
+    repeating-linear-gradient(48deg, rgba(255,255,255,0.02) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(-48deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 6px),
+    radial-gradient(circle at 50% 42%, #5a3a24, #34210f 80%);
+  border: 1px solid rgba(90, 60, 34, 0.9);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 226, 178, 0.1),
+    inset 0 0 50px rgba(0,0,0,0.4),
+    0 24px 52px rgba(0,0,0,0.55);
 }
 .code-card {
+  position: relative;
   min-height: 86px;
   display: grid;
   place-items: center;
   gap: 4px;
   padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: #d7c6a8;
-  color: #20170d;
-  box-shadow: var(--shadow-1);
+  border-radius: 10px;
+  border: 1px solid rgba(120, 92, 52, 0.5);
+  color: #241a10;
+  /* aged agent card stock: cream paper with a faint fibre grain */
+  background:
+    repeating-linear-gradient(94deg, rgba(140, 110, 66, 0.05) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(2deg, rgba(120, 92, 52, 0.045) 0 2px, transparent 2px 7px),
+    linear-gradient(160deg, #efe2c6, #dcc9a4);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.5),
+    inset 0 -3px 6px rgba(120, 92, 52, 0.25),
+    0 4px 8px rgba(0,0,0,0.3);
+  transition: transform 0.12s var(--ease);
 }
+.code-card:not(:disabled):hover { transform: translateY(-3px); }
 .code-card span {
   font-family: var(--display);
   font-size: clamp(12px, 2vw, 19px);
@@ -4693,12 +4717,38 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   font-size: 12px;
   font-weight: 900;
 }
-.code-card.role-red { background: #e85f70; color: #fff; }
-.code-card.role-blue { background: #5b8cff; color: #fff; }
-.code-card.role-neutral { background: #caa46a; color: #211605; }
-.code-card.role-assassin { background: #18151c; color: #fff; }
-.code-card.revealed { filter: saturate(0.85); }
-.code-card:disabled { opacity: 0.9; cursor: default; }
+/* team-tinted agent cards: emblem spotlight over the flat colour */
+.code-card.role-red {
+  background: radial-gradient(circle at 50% 34%, #f27c8a, #d8414f 76%);
+  color: #fff; border-color: #a52833;
+}
+.code-card.role-blue {
+  background: radial-gradient(circle at 50% 34%, #85a8ff, #3f6fe6 76%);
+  color: #fff; border-color: #2b4fb0;
+}
+.code-card.role-neutral {
+  background: radial-gradient(circle at 50% 34%, #e0c082, #c19a52 76%);
+  color: #241a10; border-color: #8f6f3c;
+}
+.code-card.role-assassin {
+  background: radial-gradient(circle at 50% 30%, #34313c, #100e15 78%);
+  color: #fff; border-color: #000;
+}
+.code-card.role-red > span,
+.code-card.role-blue > span,
+.code-card.role-assassin > span { text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+/* revealed cards flip over to show their agent colour */
+.code-card.revealed {
+  animation: code-flip 0.5s var(--ease) backwards;
+  box-shadow: inset 0 2px 4px rgba(255,255,255,0.2), inset 0 0 18px rgba(0,0,0,0.3), 0 6px 14px rgba(0,0,0,0.4);
+}
+@keyframes code-flip {
+  0% { transform: rotateY(0deg); }
+  50% { transform: rotateY(90deg); }
+  100% { transform: rotateY(0deg); }
+}
+.code-card:disabled { cursor: default; }
+.code-card:disabled:not(.revealed):not(.role-red):not(.role-blue):not(.role-neutral):not(.role-assassin) { opacity: 0.94; }
 .code-clue { display: flex; gap: 8px; }
 .code-clue input:first-child { min-width: 180px; }
 .code-clue input[type='number'] { width: 78px; }

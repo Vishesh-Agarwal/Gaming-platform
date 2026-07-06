@@ -4900,11 +4900,18 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-template-rows: repeat(5, minmax(0, 1fr));
-  padding: 14px;
+  padding: clamp(12px, 2vw, 16px);
   border-radius: 18px;
-  background: linear-gradient(145deg, #17141b, #2b2633);
-  border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: var(--shadow-3);
+  /* walnut frame under a warm lamp */
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255, 214, 150, 0.13), transparent 46%),
+    repeating-linear-gradient(3deg, rgba(0,0,0,0.13) 0 2px, transparent 2px 12px),
+    linear-gradient(150deg, #46311f, #2a1c11 70%);
+  border: 1px solid rgba(122, 84, 46, 0.7);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 226, 178, 0.15),
+    inset 0 0 28px rgba(0,0,0,0.45),
+    0 24px 52px rgba(0,0,0,0.55);
 }
 .mc .move-tray {
   min-height: 40px;
@@ -4929,8 +4936,19 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   border: 0;
   box-shadow: none;
 }
-.mc-cell.light { background: #e7dfd2; }
-.mc-cell.dark { background: #56756e; }
+.mc-cell.light {
+  background:
+    repeating-linear-gradient(94deg, rgba(150, 110, 60, 0.07) 0 3px, transparent 3px 15px),
+    linear-gradient(160deg, #efe3c8, #ddc9a4);
+}
+.mc-cell.dark {
+  background:
+    repeating-linear-gradient(88deg, rgba(0, 0, 0, 0.14) 0 2px, transparent 2px 11px),
+    linear-gradient(160deg, #7e5733, #5d3d1e);
+}
+.mc-cell.last {
+  box-shadow: inset 0 0 0 100vmax rgba(242, 176, 73, 0.22);
+}
 .mc-cell.selected {
   box-shadow: inset 0 0 0 4px var(--amber);
   z-index: 1;
@@ -4950,15 +4968,15 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   border: 3px solid rgba(232,95,112,0.72);
   background: transparent;
 }
+/* pieces are carved glyphs standing on the wood — no puck circles */
 .mc-piece {
-  width: 66%;
+  width: 92%;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  font-size: clamp(22px, 6vw, 46px);
+  font-size: clamp(30px, 8.4vw, 62px);
   font-weight: 900;
-  box-shadow: inset 0 8px 10px rgba(255,255,255,0.2), inset 0 -8px 12px rgba(0,0,0,0.26), 0 8px 14px rgba(0,0,0,0.3);
+  animation: mc-settle 0.26s var(--ease-spring, ease-out) backwards;
 }
 .mc-piece-glyph {
   display: block;
@@ -4966,15 +4984,31 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   font-size: 1.08em;
   font-weight: 900;
   line-height: 1;
-  transform: translateY(-0.04em);
+  transform: translateY(-0.05em);
 }
-.mc-piece.mine {
-  background: #f1ece5;
-  color: #18151c;
+.mc-piece-glyph.white {
+  color: #f5efe1;
+  text-shadow:
+    0 1px 0 #fffdf6,
+    0 -1px 1px rgba(120, 90, 40, 0.5),
+    0 4px 3px rgba(0, 0, 0, 0.45),
+    0 8px 10px rgba(0, 0, 0, 0.3);
 }
-.mc-piece.theirs {
-  background: #e85f70;
-  color: #fff;
+.mc-piece-glyph.black {
+  color: #26222e;
+  text-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.30),
+    0 -1px 1px rgba(0, 0, 0, 0.6),
+    0 4px 3px rgba(0, 0, 0, 0.5),
+    0 8px 10px rgba(0, 0, 0, 0.32);
+}
+@keyframes mc-settle {
+  from { transform: translateY(-18%) scale(1.12); opacity: 0.6; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+/* your pieces get a soft underglow so ownership stays readable without pucks */
+.mc-piece.mine .mc-piece-glyph {
+  filter: drop-shadow(0 0 8px rgba(108, 140, 255, 0.35));
 }
 .mc-cell:disabled {
   cursor: default;

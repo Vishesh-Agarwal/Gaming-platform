@@ -142,6 +142,7 @@ export default function MicroChess({ room, youAreIndex, onMove }) {
           const cls = ['mc-cell', (r + c) % 2 ? 'dark' : 'light'];
           if (selected === i) cls.push('selected');
           if (targets.includes(i)) cls.push('target');
+          if (state.lastMove && (state.lastMove.from === i || state.lastMove.to === i)) cls.push('last');
           return (
             <button key={i} type="button" className={cls.join(' ')} onClick={() => clickCell(i)} disabled={!myTurn && !piece}>
               {piece && (

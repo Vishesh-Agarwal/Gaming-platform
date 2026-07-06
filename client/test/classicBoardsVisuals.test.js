@@ -45,3 +45,13 @@ test('reversi: felt table with truly 3D flipping discs', () => {
   assert.match(sec, /repeating-linear-gradient/); // felt nap texture
   assert.match(sec, /@keyframes rev-place/); // new discs pop in instead of flipping
 });
+
+test('micro chess: wood board, carved glyph pieces, last-move trail', () => {
+  const sec = section('Micro Chess');
+  assert.match(sec, /repeating-linear-gradient/); // wood grain squares
+  assert.match(sec, /text-shadow/); // carved glyph depth
+  assert.match(sec, /\.mc-cell\.last/); // last-move from/to trail
+  assert.match(sec, /@keyframes mc-settle/);
+  const mc = readFileSync(new URL('../src/games/MicroChess.jsx', import.meta.url), 'utf8');
+  assert.match(mc, /lastMove[\s\S]{0,80}'last'|'last'[\s\S]{0,80}lastMove/); // cells get the class
+});

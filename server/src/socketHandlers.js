@@ -10,6 +10,7 @@ import {
   broadcastPresence,
 } from './presence.js';
 import { areFriends, saveMessage } from './db.js';
+import { allowSocketEvent } from './security.js';
 import {
   createInvite,
   acceptInvite,
@@ -105,6 +106,7 @@ export function initSockets(io) {
 
     // ---- Chat ----
     socket.on('chat:send', (payload, ack) => {
+      if (!allowSocketEvent(me.id, 'chat:send')) return ack?.({ error: 'Slow down.' });
       const to = Number(payload?.to);
       const body = String(payload?.body || '').trim().slice(0, 2000);
       if (!body) return ack?.({ error: 'Empty message.' });
@@ -124,6 +126,7 @@ export function initSockets(io) {
 
     // ---- Game invites ----
     socket.on('game:invite', (payload, ack) => {
+      if (!allowSocketEvent(me.id, 'game:invite')) return ack?.({ error: 'Slow down.' });
       const toUserId = Number(payload?.toUserId);
       const gameId = String(payload?.gameId || '');
       if (!isOnline(toUserId)) return ack?.({ error: 'That friend is offline.' });
@@ -176,6 +179,7 @@ export function initSockets(io) {
     };
 
     socket.on('lobby:create', (payload, ack) => {
+      if (!allowSocketEvent(me.id, 'lobby:create')) return ack?.({ error: 'Slow down.' });
       if (getRoomIdForUser(me.id)) return ack?.({ error: 'Finish your current game first.' });
       const { lobby, error } = createLobby(me, String(payload?.gameId || ''), payload?.options);
       if (error) return ack?.({ error });
@@ -259,6 +263,7 @@ export function initSockets(io) {
 
     // ---- Gameplay ----
     socket.on('game:move', (payload, ack) => {
+      if (!allowSocketEvent(me.id, 'game:move')) return ack?.({ error: 'Slow down.' });
       const roomId = String(payload?.roomId || '');
       const result = makeMove(roomId, me.id, payload?.move);
       if (result.error) return ack?.({ error: result.error });
@@ -295,6 +300,7 @@ export function initSockets(io) {
 
     // Server-authoritative realtime (Smash Karts): buffer the player's input.
     socket.on('game:rt:input', (payload) => {
+      if (!allowSocketEvent(me.id, 'game:rt:input')) return;
       const roomId = payload?.roomId || getRoomIdForUser(me.id);
       if (roomId) setInput(roomId, me.id, payload?.input);
     });

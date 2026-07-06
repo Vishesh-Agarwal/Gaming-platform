@@ -85,6 +85,7 @@ export default function ConnectFour({ room, youAreIndex, onMove }) {
                     <span
                       key={row}
                       className={`c4-cell ${ownerClass(owner, youAreIndex)}${last ? ' last' : ''}${win ? ' win' : ''}`}
+                      style={last ? { '--fall-cells': topRow + 1 } : undefined}
                     >
                       {owner !== null ? <span className="c4-disc" /> : null}
                     </span>

@@ -101,6 +101,7 @@ ensureColumn('users', 'avatar', "TEXT NOT NULL DEFAULT 'pilot'");
 ensureColumn('users', 'updated_at', 'TEXT');
 ensureColumn('users', 'xp', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('users', 'frame', "TEXT NOT NULL DEFAULT 'none'");
+ensureColumn('users', 'token_version', 'INTEGER NOT NULL DEFAULT 0');
 
 // Progression tables: XP audit trail, achievement unlocks, daily challenge progress.
 db.exec(`
@@ -159,6 +160,18 @@ export function getUserByUsername(username) {
 
 export function getUserById(id) {
   return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+}
+
+// Token revocation: a monotonically-increasing per-user counter embedded in
+// every JWT. Bumping it (logout, password change) invalidates all prior tokens.
+export function getTokenVersion(userId) {
+  const row = db.prepare('SELECT token_version FROM users WHERE id = ?').get(userId);
+  return row ? row.token_version : 0;
+}
+
+export function bumpTokenVersion(userId) {
+  db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').run(userId);
+  return getTokenVersion(userId);
 }
 
 // Public-safe shape (never expose password_hash)

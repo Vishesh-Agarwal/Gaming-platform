@@ -2,7 +2,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { createUser, getUserByUsername, getUserById, publicUser, updateUserProfile, getXp } from './db.js';
+import { createUser, getUserByUsername, getUserById, publicUser, updateUserProfile, getXp, getTokenVersion, bumpTokenVersion } from './db.js';
 import { canUseAvatar, canUseFrame } from './unlocks.js';
 import { levelForXp } from './progression.js';
 import config from './config.js';
@@ -11,9 +11,11 @@ const JWT_SECRET = config.jwtSecret;
 const TOKEN_TTL = '30d';
 
 export function signToken(user) {
-  return jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, {
-    expiresIn: TOKEN_TTL,
-  });
+  return jwt.sign(
+    { id: user.id, username: user.username, tv: getTokenVersion(user.id) },
+    JWT_SECRET,
+    { expiresIn: TOKEN_TTL },
+  );
 }
 
 // Returns the decoded user payload, or null if invalid/expired.
@@ -33,6 +35,9 @@ export function authMiddleware(req, res, next) {
   if (!payload) return res.status(401).json({ error: 'Unauthorized' });
   const user = getUserById(payload.id);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  if ((payload.tv ?? 0) !== (user.token_version ?? 0)) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
   req.user = publicUser(user);
   next();
 }
@@ -44,6 +49,9 @@ export function socketAuth(socket, next) {
   if (!payload) return next(new Error('Unauthorized'));
   const user = getUserById(payload.id);
   if (!user) return next(new Error('Unauthorized'));
+  if ((payload.tv ?? 0) !== (user.token_version ?? 0)) {
+    return next(new Error('Unauthorized'));
+  }
   socket.user = publicUser(user);
   next();
 }
@@ -128,6 +136,13 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', authMiddleware, (req, res) => {
   res.json({ user: req.user });
+});
+
+// Logout invalidates every existing token for this user by bumping their
+// token_version (there is no per-device revocation — this is all-sessions).
+router.post('/logout', authMiddleware, (req, res) => {
+  bumpTokenVersion(req.user.id);
+  res.json({ ok: true });
 });
 
 router.patch('/me/profile', authMiddleware, (req, res) => {

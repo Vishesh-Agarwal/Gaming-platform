@@ -253,7 +253,10 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
   };
 
   return (
-    <div className={`game-page${landscapeRequired ? ' landscape-game-page' : ''}`}>
+    <div
+      className={`game-page${landscapeRequired ? ' landscape-game-page' : ''}`}
+      style={{ '--game-accent': def.accent || 'var(--blue)' }}
+    >
       <header className="game-header">
         <div className="game-title-block">
           <span className="game-label">Playing now</span>

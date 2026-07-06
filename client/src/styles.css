@@ -1305,6 +1305,7 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 }
 .ttt-clock.low .ttt-clock-num { color: var(--coral); }
 .ttt-board {
+  position: relative; /* hosts the win-line laser overlay */
   width: min(92vw, 330px);
   aspect-ratio: 1;
   display: grid;
@@ -1330,8 +1331,39 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .ttt-cell:disabled { cursor: default; }
 .ttt-cell.mark-x { color: var(--cyan); }
 .ttt-cell.mark-o { color: var(--pink); }
-.ttt-mark { display: inline-block; animation: ttt-pop 0.22s var(--ease) both; text-shadow: 0 0 18px currentColor; }
-@keyframes ttt-pop { from { transform: scale(0.3) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+/* marks are SVGs whose strokes draw themselves in like pen strokes */
+.ttt-mark { width: 64%; height: 64%; overflow: visible; }
+.ttt-stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 6.5;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: ttt-draw 0.26s ease-out forwards;
+  filter: drop-shadow(0 0 7px currentColor);
+}
+.ttt-stroke.s2 { animation-delay: 0.13s; }
+.ttt-stroke.o { animation-duration: 0.38s; }
+@keyframes ttt-draw { to { stroke-dashoffset: 0; } }
+/* laser sweep over the winning three cells */
+.ttt-winline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.ttt-winline line {
+  stroke: var(--amber);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  filter: drop-shadow(0 0 8px var(--amber));
+  animation: ttt-laser 0.45s 0.15s ease-out forwards;
+}
+@keyframes ttt-laser { to { stroke-dashoffset: 0; } }
 .ttt-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cyan); opacity: 0.7; box-shadow: 0 0 14px var(--cyan); animation: ttt-pulse 1.1s ease-in-out infinite; }
 @keyframes ttt-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 0.85; transform: scale(1.1); } }
 .ttt-cell.win { border-color: var(--amber); box-shadow: 0 0 26px rgba(255, 210, 74, 0.55), inset 0 0 18px rgba(255, 210, 74, 0.18); animation: ttt-winpulse 1s var(--ease) infinite alternate; }

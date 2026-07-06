@@ -4,6 +4,33 @@
 import { useState, useEffect, useMemo } from 'react';
 
 const SYMBOLS = ['X', 'O'];
+
+// Marks draw themselves in as pen strokes (pathLength normalizes the dash).
+function Mark({ owner }) {
+  return owner === 0 ? (
+    <svg className="ttt-mark" viewBox="0 0 40 40" aria-hidden>
+      <path className="ttt-stroke s1" d="M9 9 L31 31" pathLength="100" />
+      <path className="ttt-stroke s2" d="M31 9 L9 31" pathLength="100" />
+    </svg>
+  ) : (
+    <svg className="ttt-mark" viewBox="0 0 40 40" aria-hidden>
+      <circle className="ttt-stroke o" cx="20" cy="20" r="12" pathLength="100" />
+    </svg>
+  );
+}
+
+// Laser sweep across the centers of the winning cells (3x3 board only).
+function WinLine({ cells }) {
+  if (!cells || cells.length < 2) return null;
+  const at = (i) => ({ x: (i % 3) * 33.33 + 16.67, y: Math.floor(i / 3) * 33.33 + 16.67 });
+  const a = at(cells[0]);
+  const b = at(cells[cells.length - 1]);
+  return (
+    <svg className="ttt-winline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} pathLength="100" />
+    </svg>
+  );
+}
 const PIECES_PER_PLAYER = 3;
 
 // Mirror of the server adjacency map (for highlighting valid slide targets).
@@ -174,9 +201,10 @@ function ClassicTTT({ room, youAreIndex, onMove }) {
           >
             {v === null
               ? (targets.includes(i) ? <span className="ttt-dot" /> : null)
-              : <span className="ttt-mark" key={`${i}-${v}`}>{SYMBOLS[v]}</span>}
+              : <Mark key={`${i}-${v}`} owner={v} />}
           </button>
         ))}
+        <WinLine cells={winCells} />
       </div>
     </div>
   );
@@ -228,7 +256,7 @@ function UltimateTTT({ room, youAreIndex, onMove }) {
                   disabled={!canPlay(b, ci)}
                   onClick={() => canPlay(b, ci) && onMove({ board: b, cell: ci })}
                 >
-                  {v !== null ? <span className="ttt-mark" key={`${ci}-${v}`}>{SYMBOLS[v]}</span> : null}
+                  {v !== null ? <Mark key={`${ci}-${v}`} owner={v} /> : null}
                 </button>
               ))}
               {owner === 0 || owner === 1 ? (

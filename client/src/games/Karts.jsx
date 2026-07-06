@@ -7,6 +7,7 @@ import { getSocket } from '../socket.js';
 import { createScene } from './karts/scene.js';
 import { makeKart, updateKart } from './karts/kartModel.js';
 import { createFx } from './karts/fx.js';
+import { createSkidMarks } from './karts/skidMarks.js';
 import { createAudio } from './karts/audio.js';
 import { integrateKart, SIM_DT, surfaceHeight } from './karts/kartPhysics.js';
 import { getMap } from './karts/kartMaps.js';
@@ -63,6 +64,7 @@ export default function Karts({ room, youAreIndex }) {
     const arena = map.arena;
     const { scene, camera, renderer, resize: resizeView, render, dispose: disposeView } = createScene(mount, map);
     const fx = createFx(scene);
+    const skidMarks = createSkidMarks(scene);
     const audio = createAudio();
     audioRef.current = audio;
     setMuted(audio.isMuted());
@@ -242,6 +244,9 @@ export default function Karts({ room, youAreIndex }) {
     let lastT = performance.now();
     const loop = () => {
       raf = requestAnimationFrame(loop);
+      const nowT = performance.now();
+      const dt = Math.min(0.05, (nowT - lastT) / 1000); // clamp so a tab stall doesn't fast-forward
+      lastT = nowT;
       const sample = sampleAt(performance.now() - INTERP_MS);
       const snap = latest.snap;
       if (sample && snap) {
@@ -291,6 +296,19 @@ export default function Karts({ room, youAreIndex }) {
           if (ks.i === youAreIndex) localSpeed = speed;
           updateKart(g, { speed, turn, hp: meta?.hp ?? 100, shield: visible && meta?.shield, weapon: meta?.weapon, now: performance.now() });
           if (visible && speed > 0.15 && Math.random() < 0.4) fx.dust(rx - Math.sin(rh) * 1.8, rz - Math.cos(rh) * 1.8);
+          // skid marks: cornering hard at speed while on the ground stamps a
+          // rubber mark under each rear wheel (distance-throttled per kart;
+          // rates are per second so the effect is frame-rate independent)
+          const ground = surfaceHeight(map, rx, rz);
+          if (visible && dt > 0 && speed / dt > 9 && Math.abs(turn) / dt > 1.1 && ry - ground < 0.2) {
+            if (!pt.markInit || Math.hypot(rx - pt.mx, rz - pt.mz) > 0.3) {
+              const fwdX = Math.sin(rh), fwdZ = Math.cos(rh);
+              const rightX = Math.cos(rh), rightZ = -Math.sin(rh);
+              skidMarks.markAt(rx - fwdX * 1.1 - rightX * 0.65, ground, rz - fwdZ * 1.1 - rightZ * 0.65, rh);
+              skidMarks.markAt(rx - fwdX * 1.1 + rightX * 0.65, ground, rz - fwdZ * 1.1 + rightZ * 0.65, rh);
+              pt.mx = rx; pt.mz = rz; pt.markInit = true;
+            }
+          }
           if (visible && (meta?.hp ?? 100) < 30 && Math.random() < 0.25) fx.smoke(rx, 1.0, rz);
           // death explosion on alive->dead transition
           if (meta && prevAlive[ks.i] && !meta.alive && !meta.gone) { fx.explode(ks.x, ks.z, colors[ks.i % colors.length]); audio.explosion(panFor(ks.x)); }
@@ -369,10 +387,8 @@ export default function Karts({ room, youAreIndex }) {
         }
       }
 
-      const nowT = performance.now();
-      const dt = Math.min(0.05, (nowT - lastT) / 1000); // clamp so a tab stall doesn't fast-forward
-      lastT = nowT;
       fx.update(dt);
+      skidMarks.update(dt);
       render();
     };
     raf = requestAnimationFrame(loop);
@@ -391,6 +407,7 @@ export default function Karts({ room, youAreIndex }) {
       socket?.off('game:rt:snap', onSnap);
       audio.dispose();
       fx.dispose();
+      skidMarks.dispose();
       disposeView();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

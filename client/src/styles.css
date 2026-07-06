@@ -4877,11 +4877,17 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   gap: 18px;
   padding: 22px;
   border-radius: 20px;
+  /* casino felt: warm centre spotlight, fine cross-weave nap, dark rail vignette */
   background:
-    radial-gradient(circle at 50% 40%, rgba(63,199,173,0.18), transparent 34%),
-    linear-gradient(145deg, #17141b, #2b2633);
-  border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: var(--shadow-3);
+    radial-gradient(ellipse 60% 55% at 50% 42%, rgba(255,255,255,0.10), transparent 60%),
+    repeating-linear-gradient(48deg, rgba(255,255,255,0.022) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(-48deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 6px),
+    radial-gradient(circle at 50% 42%, #1c6b4e, #0e3b2a 78%);
+  border: 1px solid rgba(30, 90, 66, 0.9);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,0.07),
+    inset 0 0 60px rgba(0,0,0,0.4),
+    0 24px 52px rgba(0,0,0,0.55);
 }
 .uno-pile {
   display: grid;
@@ -4895,6 +4901,7 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   font-size: 12px;
 }
 .uno-card {
+  position: relative;
   width: clamp(74px, 12vw, 116px);
   aspect-ratio: 0.66;
   display: flex;
@@ -4904,9 +4911,42 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   gap: 6px;
   padding: 10px;
   border-radius: 14px;
-  border: 2px solid rgba(255,255,255,0.54);
+  border: 3px solid #fbfbf7;
   color: #fff;
-  box-shadow: inset 0 10px 16px rgba(255,255,255,0.18), inset 0 -12px 18px rgba(0,0,0,0.22), 0 14px 24px rgba(0,0,0,0.32);
+  overflow: hidden;
+  /* glossy plastic sheen across the top-left */
+  background-image: linear-gradient(135deg, rgba(255,255,255,0.28) 0%, transparent 42%);
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,0.4),
+    inset 0 -10px 16px rgba(0,0,0,0.28),
+    0 12px 22px rgba(0,0,0,0.42);
+  transition: transform 0.16s var(--ease-spring, ease-out), box-shadow 0.16s ease;
+}
+/* the white oval badge every UNO number/symbol sits on */
+.uno-card::before {
+  content: '';
+  position: absolute;
+  inset: 16% 14%;
+  border-radius: 50% / 42%;
+  background: rgba(255,255,255,0.92);
+  transform: rotate(-32deg);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.12);
+  z-index: 0;
+}
+.uno-card > span,
+.uno-card > small { position: relative; z-index: 1; }
+.uno-card > span {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(20px, 4vw, 34px);
+  color: var(--uno-ink, #19171f);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+}
+.uno-card > small {
+  color: rgba(25, 23, 31, 0.68);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .uno-card span {
   width: 74%;
@@ -4930,13 +4970,48 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
 .uno-card.green { background: var(--uno-green); }
 .uno-card.yellow { background: var(--uno-yellow); color: #211605; }
 .uno-card.back {
-  background:
-    repeating-linear-gradient(45deg, rgba(255,255,255,0.12) 0 8px, transparent 8px 16px),
-    #221f2a;
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.16) 0%, transparent 42%),
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.10) 0 8px, transparent 8px 16px);
+  background-color: #221f2a;
 }
+/* wild cards: the four-colour quarter wheel */
+.uno-card.wild {
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.24) 0%, transparent 42%),
+    conic-gradient(var(--uno-red) 0 90deg, var(--uno-blue) 90deg 180deg, var(--uno-yellow) 180deg 270deg, var(--uno-green) 270deg 360deg);
+}
+/* the back and wild have no printed white oval; their labels stay light */
+.uno-card.back::before,
+.uno-card.wild::before { display: none; }
+.uno-card.back > span,
+.uno-card.wild > span { color: #fbfbf7; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.uno-card.back > small,
+.uno-card.wild > small { color: rgba(255,255,255,0.72); }
 .uno-card.playable:not(:disabled) {
   outline: 3px solid var(--teal);
   outline-offset: 3px;
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,0.4),
+    inset 0 -10px 16px rgba(0,0,0,0.28),
+    0 12px 22px rgba(0,0,0,0.42),
+    0 0 18px rgba(63,199,173,0.5);
+}
+/* cards in your hand rise toward you on hover */
+.uno-hand .uno-card:hover:not(:disabled) {
+  transform: translateY(-14px) scale(1.04);
+  z-index: 3;
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,0.45),
+    inset 0 -10px 16px rgba(0,0,0,0.28),
+    0 22px 34px rgba(0,0,0,0.5);
+}
+/* the freshly played card flies onto the discard pile */
+.uno-pile .uno-card { animation: uno-play 0.34s var(--ease-spring, cubic-bezier(0.34,1.4,0.5,1)) backwards; }
+@keyframes uno-play {
+  0% { transform: translate(-18px, -46px) rotate(-14deg) scale(1.08); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translate(0,0) rotate(0) scale(1); opacity: 1; }
 }
 .uno-card:disabled {
   cursor: default;

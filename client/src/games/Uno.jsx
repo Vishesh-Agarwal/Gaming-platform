@@ -94,7 +94,9 @@ export default function Uno({ room, youAreIndex, onMove }) {
       <div className="uno-table">
         <div className="uno-pile">
           <span>Discard</span>
-          <Card card={state.top} disabled />
+          {/* keying by the move sequence remounts the top card each play, so
+              the fresh card flies in onto the pile */}
+          <Card key={`discard-${state.seq}`} card={state.top} disabled />
         </div>
         <button type="button" className="uno-draw" disabled={!myTurn} onClick={() => onMove({ type: 'draw' })}>
           {state.pendingDraw ? `Draw ${state.pendingDraw}` : 'Draw Card'}

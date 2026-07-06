@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+function section(name) {
+  const start = css.indexOf(`/* ---- ${name} ----`);
+  assert.ok(start >= 0, `missing CSS section ${name}`);
+  const end = css.indexOf('/* ---- ', start + 10);
+  return css.slice(start, end === -1 ? css.length : end);
+}
+
+test('uno: casino felt table, glossy oval-badge cards, hand hover-lift', () => {
+  const sec = section('Color Cards');
+  // felt: radial lamp + repeating weave on the table
+  const table = sec.slice(sec.indexOf('.uno-table {'), sec.indexOf('.uno-card {'));
+  assert.match(table, /repeating-linear-gradient/);
+  // card face: the classic white oval + corner index depth
+  const card = sec.slice(sec.indexOf('.uno-card {'));
+  assert.match(sec, /\.uno-card::before/); // white oval badge
+  assert.match(card, /transition/); // smooth hover
+  assert.match(sec, /\.uno-hand \.uno-card:hover/); // hand cards lift on hover
+  assert.match(sec, /translateY\(-/);
+});
+
+test('uno: freshly played card flies onto the discard pile', () => {
+  const sec = section('Color Cards');
+  assert.match(sec, /@keyframes uno-play/);
+  assert.match(sec, /\.uno-pile \.uno-card/);
+});

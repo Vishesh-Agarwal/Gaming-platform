@@ -20,12 +20,33 @@ import { levelForXp } from './progression.js';
 import { getDailyChallenges, utcDay } from './challenges.js';
 import { unlocksForLevel } from './unlocks.js';
 import config from './config.js';
+import rateLimit from 'express-rate-limit';
 
 const PORT = config.port;
 
 // Registers every REST route on an app. Kept separate so createApp can assemble
 // the middleware stack (helmet → CORS → json) before the routes.
 function registerRoutes(app) {
+  // Rate limits: a lenient blanket cap on all API traffic, plus a strict cap on
+  // the auth endpoints to blunt credential brute-forcing. Fresh instances per
+  // createApp() so test apps don't share limiter state.
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many requests. Please slow down.' },
+  });
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many attempts. Try again later.' },
+  });
+  app.use('/api', apiLimiter);
+  app.use('/api/auth', authLimiter);
+
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/games', (_req, res) => res.json({ games: listGames() }));
   app.get('/api/stats/me', authMiddleware, (req, res) => res.json(getUserStats(req.user.id)));

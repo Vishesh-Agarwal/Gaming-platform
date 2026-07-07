@@ -59,7 +59,7 @@ function moveLabel(room, move, youAreIndex) {
   return '';
 }
 
-export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, rematch, onEmote, onUndoRequest, onUndoAccept, emotes = [], error, progression = null }) {
+export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, rematch, onEmote, onUndoRequest, onUndoAccept, emotes = [], error, progression = null, peer = null }) {
   const def = getGame(room.gameId);
   const opponent = room.players.find((p) => p.index !== youAreIndex);
   const myId = room.players.find((p) => p.index === youAreIndex)?.id;
@@ -363,6 +363,11 @@ export default function Game({ room, youAreIndex, onMove, onLeave, onRematch, re
         })}
       </div>
 
+      {peer && peer.status === 'left' && (
+        <div className="game-peer-banner">
+          {peer.username || 'Opponent'} disconnected — reconnecting…
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
 
       <main className={`game-stage${stagePulse ? ' pulse' : ''}`}>

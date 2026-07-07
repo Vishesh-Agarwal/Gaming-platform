@@ -31,6 +31,7 @@ export default function Home() {
   const [unread, setUnread] = useState({});
 
   const [activeRoom, setActiveRoom] = useState(null);
+  const [peer, setPeer] = useState(null); // opponent disconnect info, or null
   const [youAreIndex, setYouAreIndex] = useState(null);
   const [gameError, setGameError] = useState('');
   const [rematch, setRematch] = useState(null); // { accepted:[], waitingOn:[] } post-game
@@ -124,11 +125,14 @@ export default function Home() {
       setGameError('');
       setRematch(null);
       setLastMatchProgression(null);
+      setPeer(null);
       setYouAreIndex(youAreIndex);
       setActiveRoom(room);
     });
     socket.on('game:state', ({ room }) => setActiveRoom(room));
-    socket.on('game:over', ({ room }) => setActiveRoom(room));
+    socket.on('game:over', ({ room }) => { setActiveRoom(room); setPeer(null); });
+    // A player left/returned mid-game — drive the reconnecting-opponent banner.
+    socket.on('game:peer', (info) => setPeer(info.status === 'left' ? info : null));
     socket.on('game:rematch:status', (s) => setRematch(s));
     socket.on('game:rematch:cancelled', () => {
       setRematch(null);
@@ -164,6 +168,7 @@ export default function Home() {
       socket.off('connect_error', setOffline);
       socket.io.off('reconnect_attempt', setReconnecting);
       socket.io.off('reconnect', setOnline);
+      socket.off('game:peer');
       disconnectSocket();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -379,6 +384,7 @@ export default function Home() {
           emotes={emotes}
           error={gameError}
           progression={lastMatchProgression}
+          peer={peer}
         />
       </>
     );

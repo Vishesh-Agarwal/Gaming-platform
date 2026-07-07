@@ -196,6 +196,17 @@ input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srg
   border-radius: 10px;
   font-size: 14px;
 }
+.game-peer-banner {
+  width: min(1080px, 100%);
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(242, 176, 73, 0.4);
+  background: rgba(242, 176, 73, 0.12);
+  color: var(--text);
+  font-weight: 700;
+  text-align: center;
+}
 
 /* ---- Auth ---- */
 .auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 20px; }

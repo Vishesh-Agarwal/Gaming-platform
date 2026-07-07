@@ -34,6 +34,8 @@ export function loadConfig(env = process.env) {
     exitOnUncaught: env.EXIT_ON_UNCAUGHT === '1',
     // Number of proxy hops to trust for client IP (rate limiting). 0 = none.
     trustProxy: Number(env.TRUST_PROXY) || 0,
+    // Grace window (ms) before a disconnected turn-based player forfeits.
+    reconnectGraceMs: Number(env.RECONNECT_GRACE_MS) || 45000,
   };
 }
 

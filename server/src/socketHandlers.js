@@ -11,6 +11,8 @@ import {
 } from './presence.js';
 import { areFriends, saveMessage } from './db.js';
 import { allowSocketEvent } from './security.js';
+import { scheduleForfeit, cancelForfeit } from './reconnect.js';
+import config from './config.js';
 import {
   createInvite,
   acceptInvite,
@@ -56,6 +58,13 @@ import {
 const GAME_EMOTES = ['👍', '😂', '😮', '😢', '🔥', '🎉', '😎', '💀', '❤️', '🤝'];
 const botTimers = new Set();
 
+// Human user ids in a (public) room other than `meId` — the opponents to notify
+// about a disconnect/reconnect. Bots and the player themself are excluded.
+function otherHumans(room, meId) {
+  if (!room) return [];
+  return room.players.filter((p) => !p.bot && p.id !== meId).map((p) => p.id);
+}
+
 function emitRoomState(io, result, roomId) {
   for (const pid of result.players) {
     emitToUser(io, pid, 'game:state', { room: result.rooms?.get(pid) || result.room });
@@ -100,6 +109,26 @@ export function initSockets(io) {
     const firstConnection = online(me.id);
     if (firstConnection) broadcastPresence(io, me.id, 'online');
     socket.emit('presence:init', { online: onlineFriendIds(me.id) });
+
+    // Reconnection: cancel a pending grace-forfeit, tell opponents the player is
+    // back, and resume them straight into their active game.
+    if (cancelForfeit(me.id)) {
+      const backRid = getRoomIdForUser(me.id);
+      const backRoom = backRid ? getRoomForUser(backRid, me.id) : null;
+      for (const pid of otherHumans(backRoom, me.id)) {
+        emitToUser(io, pid, 'game:peer', { roomId: backRid, userId: me.id, username: me.username, status: 'back' });
+      }
+    }
+    const resumeRid = getRoomIdForUser(me.id);
+    if (resumeRid) {
+      const resumeRoom = getRoomForUser(resumeRid, me.id);
+      if (resumeRoom?.status === 'playing') {
+        const seat = resumeRoom.players.find((p) => p.id === me.id)?.index;
+        socket.emit('game:start', { room: resumeRoom, youAreIndex: seat });
+      } else if (resumeRoom?.status === 'over') {
+        socket.emit('game:over', { room: resumeRoom });
+      }
+    }
 
     // Client can re-pull online friends (e.g. right after a new friendship forms).
     socket.on('presence:sync', (_payload, ack) => ack?.(onlineFriendIds(me.id)));
@@ -371,9 +400,24 @@ export function initSockets(io) {
       const lob = leaveLobby(me.id);
       if (!lob.closed && lob.lobby) broadcastLobby(lob.lobby);
       const nowOffline = offline(me.id);
-      if (nowOffline) {
+      if (!nowOffline) return; // other tabs still connected — nothing to do
+      broadcastPresence(io, me.id, 'offline');
+
+      const rid = getRoomIdForUser(me.id);
+      if (rid && !isRealtimeRoom(rid)) {
+        // Turn-based game: hold a grace window instead of forfeiting now.
+        const room = getRoomForUser(rid, me.id);
+        for (const pid of otherHumans(room, me.id)) {
+          emitToUser(io, pid, 'game:peer', {
+            roomId: rid, userId: me.id, username: me.username,
+            status: 'left', graceMs: config.reconnectGraceMs,
+          });
+        }
+        scheduleForfeit(me.id, config.reconnectGraceMs, () => handleLeave(io, me.id));
+      } else {
+        // Realtime room (immediate drop) or no active game (e.g. a lingering
+        // rematch offer) — today's behavior.
         handleLeave(io, me.id);
-        broadcastPresence(io, me.id, 'offline');
       }
     });
   });

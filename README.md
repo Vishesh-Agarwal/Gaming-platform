@@ -41,6 +41,27 @@ The platform (auth, friends, chat, invites, rooms) needs no changes. The registr
 also carries a `type` field (`turn-based` now, `realtime` later) for future
 real-time/action games.
 
+## Production security
+
+Before exposing this server to the internet, set these env vars (see
+`server/.env.example`):
+
+- `NODE_ENV=production` — turns on fail-fast config checks.
+- `JWT_SECRET` — REQUIRED; the server refuses to boot in production without a
+  strong, unique value. Generate one:
+  `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`
+- `CLIENT_ORIGIN` — REQUIRED; comma-separated allow-list of web origins (CORS).
+- `TRUST_PROXY=1` — if behind nginx/Cloudflare, so rate limiting sees real IPs.
+
+Hardening in place: helmet security headers, 64 kb JSON body cap, REST rate
+limiting (300/15 min API, 10/15 min auth), per-user token-bucket limits on hot
+socket events, process crash guards + graceful shutdown, and token revocation
+via `POST /api/auth/logout`.
+
+Still open (see ROADMAP): a disconnect currently forfeits (no reconnection
+grace), all room/lobby state is in RAM (no durability, single-instance only),
+and there is no structured logging/metrics yet.
+
 ## Scope (v1)
 
 Included: minimal auth (hashed passwords + JWT), friends, presence, 1:1 chat

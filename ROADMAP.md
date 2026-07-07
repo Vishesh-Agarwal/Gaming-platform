@@ -1,8 +1,32 @@
 # Playverse — Roadmap & Architecture Notes
 
-Forward-looking notes for future versions. Nothing here is implemented yet — it
-records *what to change, why, and when*. See [`DOMAINS.md`](./DOMAINS.md) for the
+Forward-looking notes for future versions. See [`DOMAINS.md`](./DOMAINS.md) for the
 current architecture.
+
+## Done
+
+- **Per-game code-splitting** — Karts (Three.js) is lazy-loaded; other game UIs are
+  light enough to stay in the main bundle. (Roadmap item 1 below, superseded.)
+- **N-player rooms / party lobby** — `lobbies.js` + generic `rooms.createRoom`; shared
+  join codes, ready states, host start. (Roadmap item 2 below, superseded.)
+- **Security hardening (2026-07-06)** — see [`docs/superpowers/plans/2026-07-06-security-hardening.md`].
+  Central `config.js` with production fail-fast (JWT secret + CORS), helmet + 64 kb
+  body cap, REST rate limiting, per-user socket token buckets, crash guards +
+  graceful shutdown, and `token_version` revocation (`POST /api/auth/logout`).
+
+## Still open (highest-value next)
+
+- **Reconnection grace** — a disconnect currently forfeits (`socketHandlers.js`
+  `handleLeave`). Add a short grace window + session rejoin so a dropped Wi-Fi
+  connection doesn't lose the game. This is the biggest player-felt gap and the
+  natural first step toward externalizing room state.
+- **State durability + multi-instance** — all room/lobby/presence/timer state lives
+  in module-level `Map`s in one Node process, and `better-sqlite3` is synchronous +
+  single-file. To run more than one instance you must move ephemeral state to Redis
+  and add the Socket.IO Redis adapter (cross-process fan-out), then move the realtime
+  game loops off the request process, then migrate SQLite → Postgres. Until then the
+  platform is capped at one box.
+- **Observability** — no structured logging, metrics, or error tracking yet.
 
 ## What's already solid (reused by everything, no rework expected)
 - **Auth, friends, presence, chat** — game-agnostic.

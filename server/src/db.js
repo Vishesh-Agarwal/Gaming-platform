@@ -131,6 +131,17 @@ db.exec(`
     PRIMARY KEY (user_id, day, challenge_id)
   );
 `);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS durable_state (
+    kind TEXT NOT NULL,
+    id   TEXT NOT NULL,
+    v    INTEGER NOT NULL,
+    json TEXT NOT NULL,
+    PRIMARY KEY (kind, id)
+  );
+`);
+
 db.prepare(
   `UPDATE users
    SET display_name = username
@@ -515,6 +526,23 @@ export function getUserStats(userId) {
     scoresJson: undefined,
   }));
   return { stats, recent };
+}
+
+// ---- Durable state (game/lobby snapshots for restart survival) ----
+const _clearDurable = db.prepare('DELETE FROM durable_state');
+const _insertDurable = db.prepare('INSERT INTO durable_state (kind, id, v, json) VALUES (?, ?, ?, ?)');
+const _replaceDurable = db.transaction((rows) => {
+  _clearDurable.run();
+  for (const r of rows) _insertDurable.run(r.kind, r.id, r.v, r.json);
+});
+
+// Atomically replace the whole durable_state snapshot.
+export function replaceDurableState(rows) {
+  _replaceDurable(rows || []);
+}
+
+export function readDurableState() {
+  return db.prepare('SELECT kind, id, v, json FROM durable_state').all();
 }
 
 export default db;

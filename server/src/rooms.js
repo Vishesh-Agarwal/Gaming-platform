@@ -217,6 +217,65 @@ export function getRoomIdForUser(userId) {
   return userRooms.get(userId);
 }
 
+// ---- Durability: serialize/rehydrate turn-based rooms ----
+
+// Plain, JSON-safe snapshot of every live turn-based room. Skips realtime rooms
+// (their sim can't be cheaply serialized) and anything not currently playing.
+export function exportRooms() {
+  const out = [];
+  for (const room of rooms.values()) {
+    if (room.status !== 'playing') continue;
+    if (typeof room.game.step === 'function') continue; // realtime — skip
+    out.push({
+      id: room.id,
+      gameId: room.gameId,
+      status: 'playing',
+      options: room.options || null,
+      result: room.result || null,
+      turnEndsAt: room.turnEndsAt || null,
+      state: room.state,
+      players: room.players.map((p) => (p.user.bot
+        ? { index: p.index, bot: true, botUser: p.user }
+        : { index: p.index, bot: false, userId: p.user.id })),
+    });
+  }
+  return out;
+}
+
+// Rebuild rooms from exported snapshots. Re-attaches the game module by id and
+// rebuilds player user objects (bots from the stored object, humans re-fetched).
+// Returns the ids actually imported. A bad entry is skipped, never thrown.
+export function importRooms(arr) {
+  const ids = [];
+  for (const entry of arr || []) {
+    try {
+      if (!entry || entry.status !== 'playing') continue;
+      const game = getGame(entry.gameId);
+      if (!game) continue;
+      const players = (entry.players || [])
+        .slice()
+        .sort((p1, p2) => p1.index - p2.index)
+        .map((p) => ({ index: p.index, user: p.bot ? p.botUser : getUserById(p.userId) }));
+      if (players.some((p) => !p.user)) continue; // a user vanished — drop the room
+      const room = {
+        id: entry.id,
+        gameId: entry.gameId,
+        game,
+        players,
+        state: entry.state,
+        options: entry.options || null,
+        status: 'playing',
+        result: entry.result || null,
+        turnEndsAt: entry.turnEndsAt || null,
+      };
+      rooms.set(room.id, room);
+      for (const p of room.players) if (!p.user.bot) userRooms.set(p.user.id, room.id);
+      ids.push(room.id);
+    } catch { /* skip a corrupt entry — durability must never break boot */ }
+  }
+  return ids;
+}
+
 // ---- Server-authoritative realtime (e.g. Smash Karts) ----
 
 export function isRealtimeRoom(roomId) {

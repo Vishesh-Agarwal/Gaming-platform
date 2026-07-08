@@ -35,6 +35,25 @@ export function publicLobby(lobby) {
 export function getLobby(lobbyId) {
   return lobbies.get(lobbyId);
 }
+
+// ---- Durability: serialize/rehydrate lobbies ----
+
+// Lobbies are entirely plain data (no function refs), so export is a shallow
+// copy of each lobby object.
+export function exportLobbies() {
+  return [...lobbies.values()].map((l) => ({ ...l }));
+}
+
+export function importLobbies(arr) {
+  for (const lobby of arr || []) {
+    try {
+      if (!lobby || !lobby.id) continue;
+      lobbies.set(lobby.id, lobby);
+      if (lobby.code) byCode.set(lobby.code, lobby.id);
+      for (const m of lobby.members || []) userLobby.set(m.id, lobby.id);
+    } catch { /* skip a corrupt lobby */ }
+  }
+}
 export function getLobbyForUser(userId) {
   const id = userLobby.get(userId);
   return id ? lobbies.get(id) : null;

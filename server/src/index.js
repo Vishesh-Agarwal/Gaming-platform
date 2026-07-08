@@ -20,6 +20,9 @@ import { levelForXp } from './progression.js';
 import { getDailyChallenges, utcDay } from './challenges.js';
 import { unlocksForLevel } from './unlocks.js';
 import { closeDb } from './db.js';
+import { rehydrate, snapshotNow, startSnapshotter, stopSnapshotter } from './persistence.js';
+import { resumeBots } from './socketHandlers.js';
+import { armTurnClock } from './turnclock.js';
 import config from './config.js';
 import rateLimit from 'express-rate-limit';
 
@@ -112,6 +115,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   server.on('request', createApp(io));
   initSockets(io);
 
+  // Restore any live turn-based games/lobbies persisted before the last stop.
+  const { roomIds } = rehydrate();
+  for (const id of roomIds) armTurnClock(io, id);
+  resumeBots(io, roomIds);
+  startSnapshotter();
+  if (roomIds.length) console.log(`[server] rehydrated ${roomIds.length} live game(s)`);
+
   server.listen(PORT, () => {
     console.log(`[server] listening on http://localhost:${PORT}`);
     console.log(`[server] env=${config.nodeEnv} cors=${config.isProd ? config.corsOrigin.join(',') : '(any — dev)'}`);
@@ -120,6 +130,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const shutdown = (signal) => {
     console.log(`[server] ${signal} received — shutting down`);
     server.close(() => {
+      try { stopSnapshotter(); snapshotNow(); } catch (e) { console.error('[server] final snapshot failed:', e); }
       try { closeDb(); } catch { /* already closed */ }
       process.exit(0);
     });

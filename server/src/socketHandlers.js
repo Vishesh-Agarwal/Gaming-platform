@@ -91,6 +91,14 @@ function scheduleBotTurn(io, roomId) {
   }, 650);
 }
 
+// After a boot-time rehydrate, nudge any room whose current turn belongs to a
+// bot so play resumes without waiting for the turn clock to expire.
+export function resumeBots(io, roomIds) {
+  for (const id of roomIds || []) {
+    if (isBotTurn(id)) scheduleBotTurn(io, id);
+  }
+}
+
 export function initSockets(io) {
   // Push per-player progression summaries (XP, level, achievements, challenge
   // progress) to their sockets right after a match records.

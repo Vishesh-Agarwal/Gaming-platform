@@ -225,7 +225,7 @@ export function exportRooms() {
   const out = [];
   for (const room of rooms.values()) {
     if (room.status !== 'playing') continue;
-    if (typeof room.game.step === 'function') continue; // realtime — skip
+    if (isRealtimeGame(room.game)) continue; // realtime — skip
     out.push({
       id: room.id,
       gameId: room.gameId,
@@ -266,8 +266,11 @@ export function importRooms(arr) {
         options: entry.options || null,
         status: 'playing',
         result: entry.result || null,
-        turnEndsAt: entry.turnEndsAt || null,
+        turnEndsAt: null,
       };
+      // Never restore the snapshot's wall-clock deadline: after downtime it is
+      // stale and would time the current player out at boot. Grant a fresh turn.
+      armTurnDeadline(room);
       rooms.set(room.id, room);
       for (const p of room.players) if (!p.user.bot) userRooms.set(p.user.id, room.id);
       ids.push(room.id);
@@ -278,9 +281,16 @@ export function importRooms(arr) {
 
 // ---- Server-authoritative realtime (e.g. Smash Karts) ----
 
+// One definition of "realtime": the game declares it (Ghost Rider relays state
+// client-side with no server sim) or it runs a server-side sim loop (Karts).
+// Sim-specific paths (stepRoom, dropFromRealtime) still guard on room.sim.
+function isRealtimeGame(game) {
+  return game.type === 'realtime' || typeof game.step === 'function';
+}
+
 export function isRealtimeRoom(roomId) {
   const room = rooms.get(roomId);
-  return !!room && typeof room.game.step === 'function';
+  return !!room && isRealtimeGame(room.game);
 }
 
 // Buffer a player's latest input for the next tick.
@@ -440,6 +450,16 @@ export function hasTurnClock(roomId) {
 export function getTurnEndsAt(roomId) {
   const room = rooms.get(roomId);
   return room && room.status === 'playing' ? (room.turnEndsAt || null) : null;
+}
+
+// Restamp the current turn's deadline from now (e.g. when play resumes after a
+// disconnect grace hold). Returns the new deadline, or null if the room is not
+// an in-play timed game.
+export function refreshTurnDeadline(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing') return null;
+  armTurnDeadline(room);
+  return room.turnEndsAt;
 }
 
 // The current player's turn expired: ask the game to auto-resolve it, then snapshot

@@ -441,11 +441,14 @@ function handleLeave(io, userId) {
   const rid = getRoomIdForUser(userId);
   if (rid && isRealtimeRoom(rid)) {
     const res = dropFromRealtime(userId);
-    if (res.ended) {
-      stopMatch(res.roomId);
-      for (const pid of res.players) emitToUser(io, pid, 'game:over', { room: res.rooms?.get(pid) || res.room });
+    if (res.handled) {
+      if (res.ended) {
+        stopMatch(res.roomId);
+        for (const pid of res.players) emitToUser(io, pid, 'game:over', { room: res.rooms?.get(pid) || res.room });
+      }
+      return;
     }
-    return;
+    // Realtime-typed but no server sim (Ghost Rider): resolve by forfeit below.
   }
   endGameByForfeit(io, userId);
 }

@@ -34,3 +34,13 @@ test('skribble plays landscape on mobile with canvas and chat side by side', () 
   assert.match(css, /\.landscape-game-page \.skrib \{/);
   assert.match(css, /\.landscape-game-page \.skrib-chat-log/);
 });
+
+test('drawing never starts a native selection drag (page auto-scroll while stroking)', () => {
+  // Without preventDefault, mousedown on the canvas starts a text-selection
+  // drag; holding the stroke past the canvas edge then auto-scrolls the page.
+  assert.match(skribble, /const startStroke = \(event\) => \{\s*if \(!canDraw\) return;[\s\S]{0,220}?event\.preventDefault\(\);[\s\S]{0,120}?setPointerCapture/);
+  // Sibling drag surfaces (pool stick, karts controls) pair touch-action with
+  // user-select — the skribble canvas needs both too.
+  assert.match(css, /\.skrib-canvas\s*\{[^}]*touch-action:\s*none/);
+  assert.match(css, /\.skrib-canvas\s*\{[^}]*user-select:\s*none/);
+});

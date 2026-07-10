@@ -98,6 +98,9 @@ export default function Skribble({ room, youAreIndex, onMove }) {
 
   const startStroke = (event) => {
     if (!canDraw) return;
+    // Block the native selection drag: without this, holding a stroke past the
+    // canvas edge makes the browser auto-scroll the page to extend a selection.
+    event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     drawing.current = true;
     lastFlushAt.current = performance.now();

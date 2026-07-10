@@ -133,12 +133,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const shutdown = (signal) => {
     console.log(`[server] ${signal} received — shutting down`);
-    server.close(() => {
-      try { stopSnapshotter(); snapshotNow(); } catch (e) { console.error('[server] final snapshot failed:', e); }
+    // Snapshot synchronously FIRST: the disconnect handlers that fire while
+    // sockets close mutate room/lobby state, and with the snapshotter stopped
+    // those mutations must not outrun (or replace) the final write.
+    try { stopSnapshotter(); snapshotNow(); } catch (e) { console.error('[server] final snapshot failed:', e); }
+    // io.close also closes the http server; bare server.close never completes
+    // while websockets hold their connections open.
+    io.close(() => {
       try { closeDb(); } catch { /* already closed */ }
       process.exit(0);
     });
-    // hard-stop if connections don't drain in 10s
+    // hard-stop if connections don't drain in 10s (snapshot is already safe)
     setTimeout(() => process.exit(0), 10_000).unref();
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));

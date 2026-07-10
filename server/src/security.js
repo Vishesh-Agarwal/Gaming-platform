@@ -20,7 +20,7 @@ export function createBucketLimiter({ capacity, refillPerSec }) {
 // spam/DoS. Unlisted events are unlimited.
 const LIMITS = {
   'chat:send':     { capacity: 8,  refillPerSec: 1 },   // ~1 msg/s, burst 8
-  'game:move':     { capacity: 12, refillPerSec: 4 },   // fast turn play OK
+  'game:move':     { capacity: 30, refillPerSec: 16 },  // turn play + skribble stroke stream (~14/s)
   'game:invite':   { capacity: 5,  refillPerSec: 0.2 }, // 1 invite / 5s
   'lobby:create':  { capacity: 4,  refillPerSec: 0.1 }, // 1 lobby / 10s
   'game:rt:input': { capacity: 60, refillPerSec: 40 },  // 30–40 Hz input stream

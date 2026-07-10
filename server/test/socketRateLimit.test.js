@@ -31,3 +31,14 @@ test('refill never exceeds capacity', () => {
   assert.equal(lim.allow('k', 1, t + 100_000), true);
   assert.equal(lim.allow('k', 1, t + 100_000), false);
 });
+
+test('game:move sustains a continuous skribble drawing stream', async () => {
+  const { allowSocketEvent } = await import('../src/security.js');
+  // Skribble flushes a stroke segment every ~70ms while the pen is down
+  // (Skribble.jsx STREAM_MS) — a long uninterrupted line must never trip
+  // the flood limit and tear holes in the drawing.
+  const t0 = 42_000_000;
+  for (let i = 0; i < Math.ceil(5000 / 70); i += 1) {
+    assert.equal(allowSocketEvent(9911001, 'game:move', t0 + i * 70), true, `segment ${i} dropped`);
+  }
+});

@@ -54,6 +54,7 @@ import {
   getLobbyForUser,
   publicLobby,
   listPublicLobbies,
+  exportLobbies,
 } from './lobbies.js';
 
 // Allow-list of in-game reaction emojis (keeps the relay from carrying arbitrary text).
@@ -102,6 +103,36 @@ function scheduleBotTurn(io, roomId) {
 export function resumeBots(io, roomIds) {
   for (const id of roomIds || []) {
     if (isBotTurn(id)) scheduleBotTurn(io, id);
+  }
+}
+
+// After a boot-time rehydrate every player starts disconnected. Give each
+// offline human the same grace window a live disconnect gets — reconnect
+// cancels it, expiry forfeits — so a rehydrated room (untimed games
+// especially) can never outlive its players as an unfinishable zombie.
+export function scheduleOfflineForfeits(io, roomIds) {
+  for (const rid of roomIds || []) {
+    for (const pid of getRoomPlayerIds(rid)) {
+      if (!isOnline(pid) && !hasPending(pid)) {
+        scheduleForfeit(pid, config.reconnectGraceMs, () => handleLeave(io, pid));
+      }
+    }
+  }
+}
+
+// Rehydrated lobbies may hold members who never came back (their disconnect
+// fired while the server was down). Sweep them so quickPlay doesn't seat new
+// players with ghosts; whoever remains sees the updated roster.
+export function evictOfflineLobbyMembers(io) {
+  for (const lobby of exportLobbies()) {
+    for (const m of lobby.members) {
+      if (isOnline(m.id)) continue;
+      const res = leaveLobby(m.id);
+      if (!res.closed && res.lobby) {
+        const data = publicLobby(res.lobby);
+        for (const rest of res.lobby.members) emitToUser(io, rest.id, 'lobby:update', { lobby: data });
+      }
+    }
   }
 }
 

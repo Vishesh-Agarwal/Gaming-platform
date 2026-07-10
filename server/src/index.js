@@ -21,7 +21,7 @@ import { getDailyChallenges, utcDay } from './challenges.js';
 import { unlocksForLevel } from './unlocks.js';
 import { closeDb } from './db.js';
 import { rehydrate, snapshotNow, startSnapshotter, stopSnapshotter } from './persistence.js';
-import { resumeBots } from './socketHandlers.js';
+import { resumeBots, scheduleOfflineForfeits, evictOfflineLobbyMembers } from './socketHandlers.js';
 import { armTurnClock } from './turnclock.js';
 import config from './config.js';
 import rateLimit from 'express-rate-limit';
@@ -119,6 +119,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { roomIds } = rehydrate();
   for (const id of roomIds) armTurnClock(io, id);
   resumeBots(io, roomIds);
+  // Everyone is offline at boot: start their reconnect grace windows, and give
+  // lobby members the same window before sweeping ghosts out of matchmaking.
+  scheduleOfflineForfeits(io, roomIds);
+  setTimeout(() => evictOfflineLobbyMembers(io), config.reconnectGraceMs).unref();
   startSnapshotter();
   if (roomIds.length) console.log(`[server] rehydrated ${roomIds.length} live game(s)`);
 

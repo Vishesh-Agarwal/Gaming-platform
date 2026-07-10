@@ -419,6 +419,14 @@ export function isBotTurn(roomId) {
   return room.players.some((p) => p.index === turn && p.user.bot);
 }
 
+export function getCurrentPlayerId(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.status !== 'playing') return null;
+  const turn = room.state?.turn ?? room.state?.current; // ludo names its active seat `current`
+  const player = room.players.find((p) => p.index === turn);
+  return player ? player.user.id : null;
+}
+
 export function makeBotMove(roomId) {
   const room = rooms.get(roomId);
   if (!room || room.status !== 'playing') return null;

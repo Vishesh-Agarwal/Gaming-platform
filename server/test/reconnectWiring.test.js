@@ -23,6 +23,6 @@ test('socketHandlers notifies opponents and resumes on reconnect', () => {
   assert.match(handlers, /'game:peer'/);
   assert.match(handlers, /status: 'left'/);
   assert.match(handlers, /status: 'back'/);
-  // resume path re-emits game:start to the reconnecting socket
-  assert.match(handlers, /socket\.emit\('game:start'/);
+  // resume path re-sends game:start to just the reconnecting player
+  assert.match(handlers, /sendGameStart\(io, resumeRoom, me\.id\)/);
 });

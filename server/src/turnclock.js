@@ -2,7 +2,8 @@
 // Unlike the realtime engine there's no tick loop — each turn schedules a single
 // timer to its deadline. When it fires, the room's game auto-resolves the turn
 // (rooms.applyTimeout), the new state is broadcast, and the next turn is re-armed.
-import { applyTimeout, getTurnEndsAt } from './rooms.js';
+import { applyTimeout, getTurnEndsAt, getCurrentPlayerId } from './rooms.js';
+import { hasPending } from './reconnect.js';
 import { emitToUser } from './presence.js';
 
 const clocks = new Map(); // roomId -> timeout id
@@ -20,6 +21,11 @@ export function armTurnClock(io, roomId) {
   const delay = Math.max(0, endsAt - Date.now());
   const id = setTimeout(() => {
     clocks.delete(roomId);
+    // Hold while the mover is inside a reconnect grace window: never auto-play
+    // for a disconnected player. Either the grace forfeit ends the room, or the
+    // reconnect grants a fresh deadline and re-arms this clock.
+    const pid = getCurrentPlayerId(roomId);
+    if (pid != null && hasPending(pid)) return;
     const out = applyTimeout(roomId);
     if (!out) return;
     for (const pid of out.players) emitToUser(io, pid, 'game:state', { room: out.rooms?.get(pid) || out.room });

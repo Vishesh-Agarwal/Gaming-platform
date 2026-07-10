@@ -11,7 +11,7 @@ import {
 } from './presence.js';
 import { areFriends, saveMessage } from './db.js';
 import { allowSocketEvent } from './security.js';
-import { scheduleForfeit, cancelForfeit } from './reconnect.js';
+import { scheduleForfeit, cancelForfeit, hasPending, pendingUntil } from './reconnect.js';
 import config from './config.js';
 import {
   createInvite,
@@ -36,6 +36,8 @@ import {
   makeBotMove,
   requestUndo,
   acceptUndo,
+  getCurrentPlayerId,
+  refreshTurnDeadline,
 } from './rooms.js';
 import { startMatch, stopMatch } from './realtime.js';
 import { setProgressionNotifier } from './progression.js';
@@ -58,11 +60,15 @@ import {
 const GAME_EMOTES = ['👍', '😂', '😮', '😢', '🔥', '🎉', '😎', '💀', '❤️', '🤝'];
 const botTimers = new Set();
 
-// Human user ids in a (public) room other than `meId` — the opponents to notify
-// about a disconnect/reconnect. Bots and the player themself are excluded.
-function otherHumans(room, meId) {
-  if (!room) return [];
-  return room.players.filter((p) => !p.bot && p.id !== meId).map((p) => p.id);
+// The one place a game reaches a client's screen: each player gets their own
+// room view plus the seat they occupy. Invite accept, lobby start, rematch, and
+// reconnect resume all go through here (resume passes onlyUserId to target just
+// the returning player).
+function sendGameStart(io, room, onlyUserId) {
+  for (const p of room.players) {
+    if (onlyUserId !== undefined && p.id !== onlyUserId) continue;
+    emitToUser(io, p.id, 'game:start', { room: getRoomForUser(room.id, p.id) || room, youAreIndex: p.index });
+  }
 }
 
 function emitRoomState(io, result, roomId) {
@@ -120,21 +126,35 @@ export function initSockets(io) {
 
     // Reconnection: cancel a pending grace-forfeit, tell opponents the player is
     // back, and resume them straight into their active game.
-    if (cancelForfeit(me.id)) {
-      const backRid = getRoomIdForUser(me.id);
-      const backRoom = backRid ? getRoomForUser(backRid, me.id) : null;
-      for (const pid of otherHumans(backRoom, me.id)) {
-        emitToUser(io, pid, 'game:peer', { roomId: backRid, userId: me.id, username: me.username, status: 'back' });
+    const activeRid = getRoomIdForUser(me.id);
+    if (cancelForfeit(me.id) && activeRid) {
+      for (const pid of getRoomPlayerIds(activeRid)) {
+        if (pid === me.id) continue;
+        emitToUser(io, pid, 'game:peer', { roomId: activeRid, userId: me.id, username: me.username, status: 'back' });
+      }
+      // The turn clock held while they were away (see turnclock.js). If it's
+      // their move, grant a fresh deadline — the snapshot one already expired —
+      // and restart the clock. Everyone gets the re-stamped state.
+      if (getCurrentPlayerId(activeRid) === me.id && refreshTurnDeadline(activeRid)) {
+        for (const pid of getRoomPlayerIds(activeRid)) {
+          emitToUser(io, pid, 'game:state', { room: getRoomForUser(activeRid, pid) });
+        }
+        armTurnClock(io, activeRid);
       }
     }
-    const resumeRid = getRoomIdForUser(me.id);
-    if (resumeRid) {
-      const resumeRoom = getRoomForUser(resumeRid, me.id);
+    if (activeRid) {
+      const resumeRoom = getRoomForUser(activeRid, me.id);
       if (resumeRoom?.status === 'playing') {
-        const seat = resumeRoom.players.find((p) => p.id === me.id)?.index;
-        socket.emit('game:start', { room: resumeRoom, youAreIndex: seat });
-      } else if (resumeRoom?.status === 'over') {
-        socket.emit('game:over', { room: resumeRoom });
+        sendGameStart(io, resumeRoom, me.id);
+        // A refreshed page lost its banners: re-show the grace notice for any
+        // opponent who is still mid-disconnect, with the time actually left.
+        for (const p of resumeRoom.players) {
+          if (p.id === me.id || !hasPending(p.id)) continue;
+          socket.emit('game:peer', {
+            roomId: activeRid, userId: p.id, username: p.username,
+            status: 'left', graceMs: Math.max(0, pendingUntil(p.id) - Date.now()),
+          });
+        }
       }
     }
 
@@ -185,9 +205,7 @@ export function initSockets(io) {
       const { room, error } = acceptInvite(inviteId, me.id);
       if (error) return ack?.({ error });
       // Tell both players the game has started.
-      for (const p of room.players) {
-        emitToUser(io, p.id, 'game:start', { room: getRoomForUser(room.id, p.id) || room, youAreIndex: p.index });
-      }
+      sendGameStart(io, room);
       // Let the inviter know their invite was accepted (clears pending UI).
       if (invite) emitToUser(io, invite.from.id, 'game:invite:resolved', { inviteId });
       // Kick off the server tick loop for realtime games.
@@ -289,9 +307,7 @@ export function initSockets(io) {
       if (res.error) return ack?.({ error: res.error });
       const { room, error } = createRoom(res.gameId, res.options, res.userIds);
       if (error) return ack?.({ error });
-      for (const p of room.players) {
-        emitToUser(io, p.id, 'game:start', { room: getRoomForUser(room.id, p.id) || room, youAreIndex: p.index });
-      }
+      sendGameStart(io, room);
       if (isRealtimeRoom(room.id)) startMatch(io, room.id);
       else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
       scheduleBotTurn(io, room.id);
@@ -369,9 +385,7 @@ export function initSockets(io) {
         clearRematch(offerId);
         const { room, error: createErr } = createRoom(offer.gameId, offer.options, eligible);
         if (createErr) return ack?.({ error: createErr });
-        for (const p of room.players) {
-          emitToUser(io, p.id, 'game:start', { room: getRoomForUser(room.id, p.id) || room, youAreIndex: p.index });
-        }
+        sendGameStart(io, room);
         if (isRealtimeRoom(room.id)) startMatch(io, room.id);
         else if (hasTurnClock(room.id)) armTurnClock(io, room.id);
         scheduleBotTurn(io, room.id);
@@ -414,8 +428,8 @@ export function initSockets(io) {
       const rid = getRoomIdForUser(me.id);
       if (rid && !isRealtimeRoom(rid)) {
         // Turn-based game: hold a grace window instead of forfeiting now.
-        const room = getRoomForUser(rid, me.id);
-        for (const pid of otherHumans(room, me.id)) {
+        for (const pid of getRoomPlayerIds(rid)) {
+          if (pid === me.id) continue;
           emitToUser(io, pid, 'game:peer', {
             roomId: rid, userId: me.id, username: me.username,
             status: 'left', graceMs: config.reconnectGraceMs,

@@ -86,7 +86,10 @@ const MODES = [
 
 const PICK_TIMEOUT_MS = 20000;
 const DRAW_TIMEOUT_MS = 90000;
-const MAX_STROKES = 600;
+// The client flushes a stroke segment roughly every 70ms of continuous
+// drawing (Skribble.jsx STREAM_MS), so a full 90s turn draws ~1300 segments.
+// Cap comfortably above that so a whole turn's lines are never trimmed away.
+const MAX_STROKES = 2000;
 const MAX_POINTS = 160;
 const COLORS = new Set(['#f1ece5', '#18151c', '#f2b049', '#3fc7ad', '#e8806a', '#e85f70', '#5fbf86', '#5b8cff']);
 

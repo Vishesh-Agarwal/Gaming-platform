@@ -183,3 +183,15 @@ test('room snapshots are tailored per player for hidden words', () => {
   assert.equal(moved.rooms.get(b.id).state.word, null);
   assert.equal(moved.rooms.get(b.id).state.choices.length, 3);
 });
+
+test('a full drawing turn of nonstop strokes never loses its earliest lines', () => {
+  // The client streams ~14 segments/sec; a 90s turn can produce ~1300. The
+  // stroke cap must hold a whole turn so drawings don't erase themselves.
+  let state = skribble.createInitialState({ seed: 7 }, 2);
+  state = skribble.applyMove(state, 0, { type: 'chooseWord', word: state.secret.choices[0] }).state;
+  const seg = [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }];
+  for (let i = 0; i < 1300; i += 1) {
+    state = skribble.applyMove(state, 0, { type: 'stroke', points: seg }).state;
+  }
+  assert.equal(state.strokes.length, 1300, 'every segment of the turn is retained');
+});
